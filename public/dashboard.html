@@ -873,7 +873,7 @@ function renderProducts() {
                 <p class="text-xs text-white/40 font-mono">${p.sku}</p>
                 <p class="text-sm text-green-400 font-bold mt-2">Rp ${fmt(p.price)}</p>
                 <div class="flex gap-2 mt-3 pt-3 border-t border-darkborder">
-                    <button onclick='openProductModal(${safeP})' class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
+                    <button onclick="editProduct(${p.id})" class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-pen text-[9px]"></i> Edit
                     </button>
                     <a href="product.html?id=${p.id}" target="_blank" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-xs">
@@ -894,8 +894,18 @@ async function deleteProduct(id, name) {
     catch(e) { toast('Gagal: '+e.message, true); }
 }
 
+async function editProduct(id) {
+    try {
+        const product = await apiFetch(`/api/products/${id}`);
+        openProductModal(product);
+    } catch(e) {
+        toast('Gagal memuat produk: ' + e.message, true);
+    }
+}
+
 // ─── WIZARD ──────────────────────────────────────────────────────────────────
 let currentStep = 1;
+let currentEditingProduct = null;
 
 function goToStep(n) {
     if (n === 2) {
@@ -1095,6 +1105,27 @@ function generatePhotoSlots(colors, types) {
             grid.appendChild(div);
         });
     });
+
+    // ── Pre-fill existing photos when editing ─────────────────────────────────
+    if (currentEditingProduct && currentEditingProduct.variants) {
+        currentEditingProduct.variants.forEach(variant => {
+            const vType = (variant.variant_type === null || variant.variant_type === undefined) ? 'null' : variant.variant_type;
+            (variant.photos || []).forEach((photoUrl, idx) => {
+                if (!photoUrl || idx >= NUM_PHOTOS) return;
+                const key = `${variant.color}_${vType}_${idx + 1}`;
+                const previewEl = document.getElementById(`preview-${key}`);
+                const placeholderEl = document.getElementById(`placeholder-${key}`);
+                const urlInput = document.getElementById(`url-${key}`);
+                if (previewEl) {
+                    previewEl.classList.remove('hidden');
+                    const imgEl = previewEl.querySelector('img');
+                    if (imgEl) imgEl.src = photoUrl;
+                    if (placeholderEl) placeholderEl.classList.add('hidden');
+                    if (urlInput) urlInput.value = photoUrl;
+                }
+            });
+        });
+    }
 }
 
 function previewPhoto(input, key) {
@@ -1110,6 +1141,7 @@ function previewPhoto(input, key) {
 }
 
 function openProductModal(product = null) {
+    currentEditingProduct = product;  // Store so generatePhotoSlots can pre-fill photos
     document.getElementById('product-form').reset();
     document.getElementById('pf-id').value = product ? product.id : '';
     document.getElementById('pf-sku').value = product ? product.sku : '';
