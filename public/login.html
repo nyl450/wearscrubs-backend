@@ -149,7 +149,9 @@
     </div>
 
     <script>
-        const WS_API = 'http://localhost:3000';
+        const WS_API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? 'http://localhost:3000'
+            : '';  // empty = same origin (Railway serves FE + BE together)
 
         // Redirect if already logged in
         const token = localStorage.getItem('ws_admin_token');
