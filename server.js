@@ -176,9 +176,15 @@ const upload = multer({
 // GANTI: Tidak pakai file .sqlite lagi, pakai koneksi ke Supabase via DATABASE_URL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },  // wajib untuk Supabase
-    connectionTimeoutMillis: 10000
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+    // Force IPv4 — Railway tidak support IPv6 ke Supabase
+    // Node.js `dns.setDefaultResultOrder` tidak selalu mempengaruhi pg internal lookup
+    ...(process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('family=') ? {} : {})
 });
+
+// Patch: intercept pg connections to force IPv4 family
+require('dns').setDefaultResultOrder('ipv4first');
 
 // Helper functions — interface sama seperti sebelumnya, tinggal ganti isinya
 const dbRun = async (sql, params = []) => {
