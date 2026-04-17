@@ -78,6 +78,9 @@
             <i class="fa-solid fa-bag-shopping w-4 text-xs"></i> Pesanan
             <span id="orders-badge" class="hidden ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
         </button>
+        <button onclick="showModule('report')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="report">
+            <i class="fa-solid fa-chart-bar w-4 text-xs"></i> Laporan
+        </button>
     </nav>
     <!-- Settings (Admin only) -->
     <div id="sidebar-settings-wrap" class="p-3 border-t border-darkborder">
@@ -221,6 +224,101 @@
             </div>
         </div>
         <div id="orders-list" class="space-y-3"></div>
+    </div>
+
+    <!-- ═══ LAPORAN / REPORT ════════════════════════════════════════════════ -->
+    <div id="module-report" class="hidden p-6 space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 class="text-xl font-bold">Laporan Penjualan</h2>
+            <button onclick="exportReportCSV()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold transition-all">
+                <i class="fa-solid fa-download text-[10px]"></i> Export CSV
+            </button>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-4 flex flex-wrap gap-3 items-center">
+            <!-- Type Toggle -->
+            <div class="flex gap-1 bg-black/30 rounded-xl p-1">
+                <button id="rep-btn-monthly" onclick="setReportType('monthly')"
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-black">Per Bulan</button>
+                <button id="rep-btn-daily" onclick="setReportType('daily')"
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-white/50 hover:text-white">Per Hari</button>
+            </div>
+            <!-- Year -->
+            <div class="flex items-center gap-2">
+                <label class="text-[10px] text-white/40 uppercase tracking-wider font-bold">Tahun</label>
+                <select id="rep-year" onchange="loadReport()"
+                    class="bg-black/30 border border-white/10 text-white text-xs rounded-xl px-3 py-2 cursor-pointer outline-none w-24"></select>
+            </div>
+            <!-- Month (only for daily) -->
+            <div id="rep-month-wrap" class="hidden flex items-center gap-2">
+                <label class="text-[10px] text-white/40 uppercase tracking-wider font-bold">Bulan</label>
+                <select id="rep-month" onchange="loadReport()"
+                    class="bg-black/30 border border-white/10 text-white text-xs rounded-xl px-3 py-2 cursor-pointer outline-none w-36">
+                    <option value="1">Januari</option><option value="2">Februari</option>
+                    <option value="3">Maret</option><option value="4">April</option>
+                    <option value="5">Mei</option><option value="6">Juni</option>
+                    <option value="7">Juli</option><option value="8">Agustus</option>
+                    <option value="9">September</option><option value="10">Oktober</option>
+                    <option value="11">November</option><option value="12">Desember</option>
+                </select>
+            </div>
+            <div id="rep-loading" class="hidden ml-auto"><i class="fa-solid fa-spinner fa-spin text-white/40"></i></div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Total Order</p>
+                <p id="rep-stat-total" class="text-3xl font-bold">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Semua status</p>
+            </div>
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Pendapatan</p>
+                <p id="rep-stat-revenue" class="text-xl font-bold text-green-400">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Order terbayar</p>
+            </div>
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Dibatalkan</p>
+                <p id="rep-stat-cancelled" class="text-3xl font-bold text-red-400">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Order cancelled</p>
+            </div>
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Rata-rata Order</p>
+                <p id="rep-stat-avg" class="text-xl font-bold text-indigo-400">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Per transaksi</p>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6">
+            <p id="rep-chart-title" class="text-xs font-bold text-white/40 uppercase tracking-wider mb-4">Grafik Pendapatan</p>
+            <div class="relative h-56">
+                <canvas id="rep-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-darkborder flex items-center justify-between">
+                <p class="text-xs font-bold text-white/60 uppercase tracking-wider">Detail</p>
+                <p id="rep-table-subtitle" class="text-[10px] text-white/30"></p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-darkborder">
+                            <th class="px-6 py-3 text-left text-[10px] font-bold text-white/40 uppercase tracking-wider">Periode</th>
+                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Total Order</th>
+                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Order Dibayar</th>
+                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Dibatalkan</th>
+                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Pendapatan</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rep-table-body" class="divide-y divide-darkborder"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
@@ -750,7 +848,144 @@ function showModule(name) {
     if (name === 'popular')   loadPopular();
     if (name === 'orders')    loadOrders();
     if (name === 'settings')  loadSettings();
+    if (name === 'report')    initReport();
 }
+
+// ─── REPORT ──────────────────────────────────────────────────────────────────
+let repType = 'monthly';
+let repChart = null;
+let repData = null;
+const MONTH_NAMES = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+function initReport() {
+    // Populate year dropdown
+    const yearSel = document.getElementById('rep-year');
+    if (!yearSel.options.length) {
+        const now = new Date().getFullYear();
+        for (let y = now; y >= now - 3; y--) {
+            const opt = document.createElement('option');
+            opt.value = y; opt.textContent = y;
+            yearSel.appendChild(opt);
+        }
+    }
+    // Set current month
+    const monthSel = document.getElementById('rep-month');
+    if (monthSel) monthSel.value = new Date().getMonth() + 1;
+    loadReport();
+}
+
+function setReportType(type) {
+    repType = type;
+    document.getElementById('rep-btn-monthly').className =
+        'px-4 py-1.5 rounded-lg text-xs font-bold transition-all ' +
+        (type === 'monthly' ? 'bg-white text-black' : 'text-white/50 hover:text-white');
+    document.getElementById('rep-btn-daily').className =
+        'px-4 py-1.5 rounded-lg text-xs font-bold transition-all ' +
+        (type === 'daily' ? 'bg-white text-black' : 'text-white/50 hover:text-white');
+    const mw = document.getElementById('rep-month-wrap');
+    if (type === 'daily') mw.classList.remove('hidden'); else mw.classList.add('hidden');
+    loadReport();
+}
+
+async function loadReport() {
+    const year  = document.getElementById('rep-year')?.value || new Date().getFullYear();
+    const month = document.getElementById('rep-month')?.value || (new Date().getMonth() + 1);
+    document.getElementById('rep-loading').classList.remove('hidden');
+    try {
+        const url = `/api/orders/report?type=${repType}&year=${year}${repType === 'daily' ? '&month=' + month : ''}`;
+        repData = await apiFetch(url);
+        const s = repData.summary;
+        // Summary cards
+        document.getElementById('rep-stat-total').textContent = s.total_orders || 0;
+        document.getElementById('rep-stat-revenue').textContent = 'Rp ' + fmt(s.total_revenue || 0);
+        document.getElementById('rep-stat-cancelled').textContent = s.cancelled_orders || 0;
+        document.getElementById('rep-stat-avg').textContent = 'Rp ' + fmt(Math.round(s.avg_order_value || 0));
+        // Subtitle
+        document.getElementById('rep-chart-title').textContent =
+            repType === 'monthly' ? `Grafik Pendapatan Tahun ${year}` : `Grafik Pendapatan ${MONTH_NAMES[month]} ${year}`;
+        document.getElementById('rep-table-subtitle').textContent =
+            repType === 'monthly' ? `${repData.rows.length} bulan dari ${year}` : `${repData.rows.length} hari aktif — ${MONTH_NAMES[month]} ${year}`;
+        // Chart
+        renderRepChart(repData.rows, year, month);
+        // Table
+        renderRepTable(repData.rows, year, month);
+    } catch(e) {
+        console.error('Report error:', e);
+    } finally {
+        document.getElementById('rep-loading').classList.add('hidden');
+    }
+}
+
+function renderRepChart(rows, year, month) {
+    const ctx = document.getElementById('rep-chart').getContext('2d');
+    if (repChart) { repChart.destroy(); repChart = null; }
+    // Build labels & data for all periods (fill gaps with 0)
+    const maxPeriod = repType === 'monthly' ? 12 : new Date(year, month, 0).getDate();
+    const revenueMap = {}; rows.forEach(r => { revenueMap[r.period] = Number(r.total_revenue || 0); });
+    const labels = [], data = [];
+    for (let i = 1; i <= maxPeriod; i++) {
+        labels.push(repType === 'monthly' ? MONTH_NAMES[i] : i);
+        data.push(revenueMap[i] || 0);
+    }
+    repChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Pendapatan (Rp)',
+                data,
+                backgroundColor: 'rgba(99,102,241,0.6)',
+                borderColor: 'rgba(99,102,241,0.9)',
+                borderWidth: 1.5,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 10 } } },
+                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 10 },
+                    callback: v => 'Rp ' + (v >= 1000000 ? (v/1000000).toFixed(1) + 'jt' : (v >= 1000 ? (v/1000).toFixed(0) + 'rb' : v)) } }
+            }
+        }
+    });
+}
+
+function renderRepTable(rows, year, month) {
+    const tbody = document.getElementById('rep-table-body');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-white/20 text-sm">Tidak ada data untuk periode ini</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const label = repType === 'monthly' ? MONTH_NAMES[r.period] + ' ' + year : r.period + ' ' + MONTH_NAMES[month] + ' ' + year;
+        return `<tr class="hover:bg-white/2 transition-colors">
+            <td class="px-6 py-3 font-semibold">${label}</td>
+            <td class="px-6 py-3 text-right text-white/70">${r.total_orders}</td>
+            <td class="px-6 py-3 text-right text-green-400">${r.paid_orders}</td>
+            <td class="px-6 py-3 text-right text-red-400">${r.cancelled_orders}</td>
+            <td class="px-6 py-3 text-right font-semibold">Rp ${fmt(r.total_revenue || 0)}</td>
+        </tr>`;
+    }).join('');
+}
+
+function exportReportCSV() {
+    if (!repData || !repData.rows.length) { toast('Tidak ada data untuk diekspor', true); return; }
+    const year = document.getElementById('rep-year')?.value;
+    const month = document.getElementById('rep-month')?.value;
+    const header = 'Periode,Total Order,Order Dibayar,Dibatalkan,Pendapatan (Rp)\n';
+    const lines = repData.rows.map(r => {
+        const label = repType === 'monthly' ? MONTH_NAMES[r.period] + ' ' + year : r.period + ' ' + MONTH_NAMES[month] + ' ' + year;
+        return [label, r.total_orders, r.paid_orders, r.cancelled_orders, r.total_revenue || 0].join(',');
+    });
+    const blob = new Blob([header + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `laporan-wearscrubs-${repType}-${year}${repType === 'daily' ? '-' + month : ''}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+}
+
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
 async function loadOverview() {

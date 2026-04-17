@@ -1001,6 +1001,65 @@ app.get('/api/orders/stats', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/orders/report?type=monthly&year=2026
+// GET /api/orders/report?type=daily&year=2026&month=4
+app.get('/api/orders/report', requireAuth(['admin']), async (req, res) => {
+    try {
+        const { type = 'monthly', year, month } = req.query;
+        const y = parseInt(year) || new Date().getFullYear();
+
+        let rows;
+        if (type === 'daily') {
+            const m = parseInt(month) || (new Date().getMonth() + 1);
+            // Daily aggregation for a specific month
+            rows = await dbAll(`
+                SELECT
+                    EXTRACT(DAY FROM created_at)::int AS period,
+                    COUNT(*) AS total_orders,
+                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS total_revenue,
+                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS confirmed_revenue,
+                    COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_orders,
+                    COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders
+                FROM orders
+                WHERE EXTRACT(YEAR FROM created_at) = $1
+                  AND EXTRACT(MONTH FROM created_at) = $2
+                GROUP BY period
+                ORDER BY period ASC
+            `, [y, m]);
+        } else {
+            // Monthly aggregation for a year
+            rows = await dbAll(`
+                SELECT
+                    EXTRACT(MONTH FROM created_at)::int AS period,
+                    COUNT(*) AS total_orders,
+                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS total_revenue,
+                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS confirmed_revenue,
+                    COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_orders,
+                    COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders
+                FROM orders
+                WHERE EXTRACT(YEAR FROM created_at) = $1
+                GROUP BY period
+                ORDER BY period ASC
+            `, [y]);
+        }
+
+        // Summary totals
+        const summary = await dbGet(`
+            SELECT
+                COUNT(*) AS total_orders,
+                COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS total_revenue,
+                COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_orders,
+                COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders,
+                COALESCE(AVG(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS avg_order_value
+            FROM orders
+            WHERE EXTRACT(YEAR FROM created_at) = $1
+            ${type === 'daily' ? 'AND EXTRACT(MONTH FROM created_at) = $2' : ''}
+        `, type === 'daily' ? [y, parseInt(month) || (new Date().getMonth() + 1)] : [y]);
+
+        res.json({ type, year: y, month: type === 'daily' ? (parseInt(month) || new Date().getMonth() + 1) : null, rows, summary });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── CITIES & SHIPPING ──────────────────────────────────────────────────────────
 
 // GET /api/cities — Daftar kota Indonesia
