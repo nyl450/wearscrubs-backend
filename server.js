@@ -778,10 +778,12 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
         const selTypes  = safeJSON(types,  []);
         const selSizes  = safeJSON(sizes,  []); // ← FIX: was missing, caused "selSizes is not defined"
 
-        // ── Photo upload: handle up to 3 photos per color-type slot (matching POST logic) ──
+        // ── Photo upload: handle up to 3 photos per color-type slot ───────────
         const NUM_PHOTOS = 3;
         for (const color of selColors) {
             for (const type of selTypes) {
+                // Collect all new photos for this color+type slot first
+                const newPhotos = [];
                 for (let i = 1; i <= NUM_PHOTOS; i++) {
                     const mapKey = `${color}_${type}_${i}`;
                     let photoUrl = req.body[`photo_url_${mapKey}`] || null;
@@ -792,7 +794,7 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
                         );
                         if (file) photoUrl = await uploadToSupabase(file.buffer, file.originalname, 'products');
                     }
-                    // Fallback: legacy key format (color_type without slot index)
+                    // Fallback: legacy key format (slot 1 only)
                     if (!photoUrl && i === 1) {
                         const legacyKey = `${color}_${type}`;
                         photoUrl = req.body[`photo_url_${legacyKey}`] || null;
@@ -803,20 +805,27 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
                             if (legacyFile) photoUrl = await uploadToSupabase(legacyFile.buffer, legacyFile.originalname, 'products');
                         }
                     }
-                    if (photoUrl) {
-                        // Try upsert, fall back to plain update if no unique constraint
+                    if (photoUrl) newPhotos.push(photoUrl);
+                }
+
+                // If new photos uploaded → delete OLD rows first, then insert fresh ones
+                // This removes stale local-path photos that would be broken on Railway
+                if (newPhotos.length > 0) {
+                    const dbType = type === 'null' ? null : type;
+                    await dbRun(
+                        `DELETE FROM product_variants
+                         WHERE product_id = $1 AND color = $2 AND variant_type IS NOT DISTINCT FROM $3`,
+                        [req.params.id, color, dbType]
+                    );
+                    for (const photoUrl of newPhotos) {
                         await dbRun(
                             `INSERT INTO product_variants (product_id, color, variant_type, photo_url)
-                             VALUES ($1,$2,$3,$4)
-                             ON CONFLICT(product_id, color, variant_type) DO UPDATE SET photo_url = EXCLUDED.photo_url`,
+                             VALUES ($1,$2,$3,$4)`,
                             [req.params.id, color, type, photoUrl]
-                        ).catch(() => dbRun(
-                            `UPDATE product_variants SET photo_url = $1
-                             WHERE product_id = $2 AND color = $3 AND variant_type = $4`,
-                            [photoUrl, req.params.id, color, type]
-                        ));
+                        );
                     }
                 }
+                // If no new photos → leave existing rows untouched (preserve old photos)
             }
         }
 
