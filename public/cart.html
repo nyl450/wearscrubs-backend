@@ -1,0 +1,156 @@
+﻿<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keranjang Belanja | WearScrubs</title>
+    <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } } }</script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://wearscrubs-production.up.railway.app">
+</head>
+<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
+
+<!-- Header -->
+<header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10">
+    <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+        <a href="index.html">
+            <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-8 w-auto block dark:hidden">
+            <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-8 w-auto hidden dark:block">
+        </a>
+        <h1 class="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Keranjang Belanja</h1>
+        <a href="scrub-top.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Lanjut Belanja</a>
+    </div>
+</header>
+
+<main class="container mx-auto px-6 py-12 max-w-5xl">
+    <div id="cart-content" class="flex flex-col lg:flex-row gap-8">
+        <!-- Left: Cart Items -->
+        <div class="flex-1">
+            <h2 class="text-xl font-bold mb-6">Item Dipilih (<span id="cart-total-count">0</span>)</h2>
+            <div id="cart-items" class="space-y-4"></div>
+        </div>
+        <!-- Right: Summary -->
+        <aside class="w-full lg:w-80 shrink-0">
+            <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 sticky top-24 shadow-sm">
+                <h3 class="font-bold text-lg mb-5">Ringkasan Pesanan</h3>
+                <div class="space-y-3 mb-6">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500 dark:text-white/50">Subtotal</span>
+                        <span id="subtotal-display" class="font-medium">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500 dark:text-white/50">Ongkos Kirim</span>
+                        <span class="text-xs text-gray-400 italic">Dihitung saat checkout</span>
+                    </div>
+                    <div class="border-t border-gray-100 dark:border-white/10 pt-3 flex justify-between font-bold">
+                        <span>Total</span>
+                        <span id="total-display" class="text-lg">Rp 0</span>
+                    </div>
+                </div>
+                <a id="checkout-btn" href="checkout.html" class="w-full flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold hover:bg-gray-700 dark:hover:bg-gray-200 transition-all text-sm">
+                    Lanjut ke Checkout <i class="fa-solid fa-arrow-right-long"></i>
+                </a>
+                <p class="text-center text-xs text-gray-400 mt-4">Pembayaran via Transfer Bank BCA</p>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-cart" class="hidden flex-col items-center justify-center py-24 text-center">
+        <i class="fa-solid fa-cart-shopping text-6xl text-gray-200 dark:text-white/10 mb-6"></i>
+        <h2 class="text-2xl font-bold mb-3">Keranjang masih kosong</h2>
+        <p class="text-gray-500 dark:text-white/40 mb-8">Tambahkan produk favorit Anda ke keranjang.</p>
+        <a href="scrub-top.html" class="bg-gray-900 dark:bg-white text-white dark:text-black px-8 py-3 rounded-xl font-bold hover:opacity-80 transition text-sm">Mulai Belanja</a>
+    </div>
+</main>
+
+<script src="catalog.js"></script>
+<script>
+const COLOR_HEX = {
+    'black':'#000000','beige':'#d7c5a9','olive':'#696250',
+    'charcoal-grey':'#5f5051','light-grey':'#898391','maroon':'#6c1b22',
+    'purple':'#a4b4e8','blush':'#f0c6bb','turquoise':'#40e0d0','white':'#f0f0f0'
+};
+
+function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+
+function renderCart() {
+    const cart = Cart.get();
+    const itemsEl = document.getElementById('cart-items');
+    const emptyEl = document.getElementById('empty-cart');
+    const contentEl = document.getElementById('cart-content');
+    const countEl = document.getElementById('cart-total-count');
+
+    if (cart.length === 0) {
+        contentEl.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        emptyEl.classList.add('flex');
+        return;
+    }
+
+    contentEl.classList.remove('hidden');
+    emptyEl.classList.add('hidden');
+    emptyEl.classList.remove('flex');
+    countEl.textContent = cart.reduce((s, i) => s + i.quantity, 0);
+
+    let subtotal = 0;
+    itemsEl.innerHTML = cart.map((item, idx) => {
+        subtotal += item.price * item.quantity;
+        const photoUrl = item.photo ? (item.photo.startsWith('/uploads/') ? WS_API + item.photo : item.photo) : '';
+        const hex = COLOR_HEX[item.color] || '#ccc';
+        return `
+        <div class="flex gap-4 p-4 bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm">
+            <div class="w-20 h-24 rounded-xl overflow-hidden bg-gray-100 dark:bg-darkbg shrink-0">
+                <img src="${photoUrl}" alt="${item.name}" class="w-full h-full object-cover object-top" onerror="this.src='images/logo/logo%20ws%20black%20250x55.png'; this.classList.add('object-contain','p-2');">
+            </div>
+            <div class="flex-1 min-w-0">
+                <h4 class="font-bold text-sm leading-snug mb-1">${item.name}</h4>
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <span class="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-white/10 rounded font-bold uppercase tracking-widest text-gray-500 dark:text-white/40">${item.size}</span>
+                    <span class="w-3.5 h-3.5 rounded-full border border-white/20" style="background:${hex}" title="${item.color}"></span>
+                    <span class="text-xs text-gray-500 dark:text-white/40 capitalize">${item.color.replace(/-/g,' ')}</span>
+                    ${item.type && item.type !== 'null' ? `<span class="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded font-bold uppercase tracking-widest ml-1">${item.type}</span>` : ''}
+                </div>
+                <p class="text-sm font-bold text-gray-900 dark:text-white">${fmt(item.price)}</p>
+            </div>
+            <div class="flex flex-col items-end justify-between shrink-0">
+                <button onclick="removeItem(${idx})" class="text-gray-300 dark:text-white/20 hover:text-red-500 transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                <div class="flex items-center gap-2">
+                    <button onclick="changeQty(${idx}, -1)" class="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white hover:bg-gray-900 hover:text-white dark:hover:bg-white dark:hover:text-black transition text-xs font-bold">−</button>
+                    <span class="text-sm font-bold w-5 text-center">${item.quantity}</span>
+                    <button onclick="changeQty(${idx}, 1)" class="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white hover:bg-gray-900 hover:text-white dark:hover:bg-white dark:hover:text-black transition text-xs font-bold">+</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('subtotal-display').textContent = fmt(subtotal);
+    document.getElementById('total-display').textContent = fmt(subtotal);
+}
+
+function removeItem(idx) {
+    const cart = Cart.get();
+    cart.splice(idx, 1);
+    Cart.save(cart);
+    renderCart();
+}
+
+function changeQty(idx, delta) {
+    const cart = Cart.get();
+    cart[idx].quantity = Math.max(1, cart[idx].quantity + delta);
+    Cart.save(cart);
+    renderCart();
+}
+
+renderCart();
+</script>
+<script src="main.js"></script>
+</body>
+</html>

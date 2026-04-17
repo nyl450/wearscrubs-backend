@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <link rel="alternate" hreflang="id" href="payments-shipping-en.html" />
+    <link rel="alternate" hreflang="en" href="payments-shipping-en.html" />
+    <meta charset="UTF-8">
+    <link rel="canonical" href="https://wearscrubs.id/payments-shipping-en.html">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Informasi lengkap tentang payment methods and shipping WearScrubs — transfer bank, QRIS, COD, dan pengiriman J&T Express ke seluruh Indonesia.">
+    <title>Pembayaran & Pengiriman | WearScrubs</title>
+    <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://wearscrubs-production.up.railway.app"></head>
+<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10 transition-colors duration-300">
+        <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+            <nav class="hidden md:flex items-center space-x-8 flex-1">
+                <div class="group relative py-4 -my-4 flex items-center cursor-default">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors flex items-center">Shop All <i class="fa-solid fa-chevron-down ml-2 text-[10px]"></i></span>
+                    <div class="absolute left-0 top-full mt-0 hidden group-hover:flex flex-col bg-white dark:bg-darkcard shadow-xl border border-gray-100 dark:border-white/10 rounded-xl overflow-hidden w-48 z-50">
+                        <a href="scrub-top-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Scrub Tops</a>
+                        <a href="scrub-pants-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Scrub Pants</a>
+                        <a href="scrub-caps-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Scrub Caps</a>
+                    </div>
+                </div>
+                <a href="about-us-en.html" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors">Our Story</a>
+                <a href="contact-en.html" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors">Contact Us</a>
+                <div class="flex items-center ml-2 md:ml-6 border-l border-gray-300 dark:border-white/20 pl-4 md:pl-6 h-6">
+                    <a href="payments-shipping-en.html" data-lang-id class="text-sm font-bold text-black dark:text-white">ID</a>
+                    <span class="mx-2 text-gray-300 dark:text-gray-600">/</span>
+                    <a href="payments-shipping-en.html" data-lang-en class="text-sm font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors">EN</a>
+                </div>
+            </nav>
+            <div class="flex-shrink-0">
+                <a href="index-en.html" class="flex items-center justify-center">
+                    <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs Logo" class="h-8 md:h-10 w-auto object-contain block dark:hidden">
+                    <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs Logo" class="h-8 md:h-10 w-auto object-contain hidden dark:block">
+                </a>
+            </div>
+            <div class="hidden md:flex items-center justify-end space-x-6 flex-1 text-sm">
+                <button id="theme-toggle" data-theme-toggle class="hidden lg:flex items-center bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
+                    <span id="theme-text" data-theme-text class="text-[10px] mr-2 text-gray-500 dark:text-gray-400 font-bold">DARK MODE</span>
+                    <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative"><div id="theme-thumb" data-theme-thumb class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4"></div></div>
+                </button>
+            </div>
+            <button id="mobile-menu-btn" class="md:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300" aria-label="Open menu">
+                <i id="hamburger-icon" class="fa-solid fa-bars text-xl"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Mobile Drawer Overlay -->
+    <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
+    <!-- Mobile Drawer -->
+    <div id="mobile-drawer" class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-white/10">
+            <a href="index-en.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-7 w-auto block dark:hidden"></a>
+            <a href="index-en.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-7 w-auto hidden dark:block"></a>
+            <button id="mobile-close-btn" class="text-gray-500 hover:text-black dark:hover:text-white transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+        </div>
+        <nav class="flex-1 overflow-y-auto px-8 py-8 space-y-0">
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mb-4">Collections</p>
+            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Scrub Tops</a>
+            <a href="scrub-pants-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Scrub Pants</a>
+            <a href="scrub-caps-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Scrub Caps</a>
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">More</p>
+            <a href="about-us-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Our Story</a>
+            <a href="contact-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Contact Us</a>
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Bahasa</p>
+            <div class="flex gap-3">
+                <a href="payments-shipping-en.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
+                <a href="payments-shipping-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
+            </div>
+        </nav>
+        <div class="px-8 py-6 border-t border-gray-100 dark:border-white/10">
+            <button id="theme-toggle-mobile" data-theme-toggle class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
+                <span id="theme-text-mobile" data-theme-text class="text-[10px] text-gray-500 dark:text-gray-400 font-bold">DARK MODE</span>
+                <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative"><div id="theme-thumb-mobile" data-theme-thumb class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4"></div></div>
+            </button>
+        </div>
+    </div>
+
+    <main class="min-h-screen bg-gray-50 dark:bg-darkbg py-20 transition-colors">
+        <div class="container mx-auto px-6 max-w-4xl">
+
+            <!-- Page Header -->
+            <div class="text-center mb-16">
+                <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-500 dark:text-white/60 mb-3">Information</p>
+                <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-4 tracking-tight">Payment &amp; Shipping</h1>
+                <p class="text-gray-500 dark:text-gray-400 text-sm max-w-lg mx-auto">Everything you need to know about how to pay and how your order gets to you.</p>
+            </div>
+
+            <!-- Payment Methods Section -->
+            <section class="mb-16">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-10 h-10 rounded-2xl bg-gray-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                        <i class="fa-solid fa-credit-card text-white dark:text-black text-sm"></i>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-gray-900 dark:text-white">Payment Methods</h2>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-5">
+                    <!-- Bank Transfer -->
+                    <div class="bg-white dark:bg-darkcard rounded-2xl p-6 border border-gray-100 dark:border-white/5 shadow-sm">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                                <i class="fa-solid fa-building-columns text-blue-600 dark:text-blue-400 text-sm"></i>
+                            </div>
+                            <h3 class="font-bold text-gray-900 dark:text-white">Bank Transfer</h3>
+                        </div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">We accept bank transfers to the following accounts:</p>
+                        <div class="space-y-3">
+                            <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 flex justify-between items-center">
+                                <div>
+                                    <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">BCA</p>
+                                    <p class="font-bold text-gray-900 dark:text-white text-lg tracking-widest">1234567890</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">acc. WearScrubs Indonesia</p>
+                                </div>
+                                <button onclick="copyToClipboard('1234567890')" class="text-gray-400 hover:text-gray-900 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
+                                    <i class="fa-regular fa-copy text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">After transfer, send proof of payment via WhatsApp to <strong class="text-gray-700 dark:text-white">+62 878-8717-2220</strong></p>
+                    </div>
+
+                    <!-- QRIS & E-Wallet -->
+                    <div class="bg-white dark:bg-darkcard rounded-2xl p-6 border border-gray-100 dark:border-white/5 shadow-sm">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
+                                <i class="fa-solid fa-qrcode text-purple-600 dark:text-purple-400 text-sm"></i>
+                            </div>
+                            <h3 class="font-bold text-gray-900 dark:text-white">QRIS / E-Wallet</h3>
+                        </div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Pay by scanning the QRIS code from any e-wallet app:</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold px-3 py-1.5 rounded-full">GoPay</span>
+                            <span class="bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold px-3 py-1.5 rounded-full">OVO</span>
+                            <span class="bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold px-3 py-1.5 rounded-full">Dana</span>
+                            <span class="bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold px-3 py-1.5 rounded-full">ShopeePay</span>
+                            <span class="bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold px-3 py-1.5 rounded-full">LinkAja</span>
+                            <span class="bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold px-3 py-1.5 rounded-full">i.Saku</span>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                            <div class="w-24 h-24 bg-gray-200 dark:bg-white/10 rounded-xl mx-auto flex items-center justify-center mb-2">
+                                <i class="fa-solid fa-qrcode text-4xl text-gray-400 dark:text-white/40"></i>
+                            </div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">QRIS available at our store directly or contact us to get the QRIS code</p>
+                        </div>
+                    </div>
+                    <!-- WhatsApp Order -->
+                    <div class="bg-white dark:bg-darkcard rounded-2xl p-6 border border-gray-100 dark:border-white/5 shadow-sm">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-9 h-9 rounded-xl bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+                                <i class="fa-brands fa-whatsapp text-green-600 dark:text-green-400 text-sm"></i>
+                            </div>
+                            <h3 class="font-bold text-gray-900 dark:text-white">Order via WhatsApp</h3>
+                        </div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">For custom orders, logo embroidery, or bulk purchases, contact us directly:</p>
+                        <a href="https://wa.me/6287887172220" target="_blank"
+                            class="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-bold text-sm transition-colors w-full">
+                            <i class="fa-brands fa-whatsapp text-lg"></i>
+                            Chat with Admin on WhatsApp
+                        </a>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center">Jam respons: Senin–Sabtu, 08.00–17.00 WIB</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shipping Section -->
+            <section class="mb-16">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-10 h-10 rounded-2xl bg-gray-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                        <i class="fa-solid fa-truck text-white dark:text-black text-sm"></i>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-gray-900 dark:text-white">Shipping Information</h2>
+                </div>
+
+                <!-- J&T Info -->
+                <div class="bg-white dark:bg-darkcard rounded-2xl p-6 border border-gray-100 dark:border-white/5 shadow-sm mb-6">
+                    <div class="flex items-center gap-4 mb-5">
+                        <div class="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center flex-shrink-0">
+                            <i class="fa-solid fa-truck-fast text-red-500 dark:text-red-400 text-2xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-gray-900 dark:text-white text-lg">Official Shipping Partners</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Official WearScrubs shipping partner across Indonesia</p>
+                        </div>
+                    </div>
+                    <div class="grid md:grid-cols-3 gap-4">
+                        <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                            <i class="fa-solid fa-clock text-gray-400 dark:text-white/40 text-xl mb-2 block"></i>
+                            <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Processing Time</p>
+                            <p class="font-bold text-gray-900 dark:text-white">1–2 Hari Kerja</p>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                            <i class="fa-solid fa-map-marker-alt text-gray-400 dark:text-white/40 text-xl mb-2 block"></i>
+                            <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Coverage</p>
+                            <p class="font-bold text-gray-900 dark:text-white">500+ Cities</p>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                            <i class="fa-solid fa-box-open text-gray-400 dark:text-white/40 text-xl mb-2 block"></i>
+                            <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Min. Weight</p>
+                            <p class="font-bold text-gray-900 dark:text-white">1 kg (rounded)</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 grid md:grid-cols-2 gap-3">
+                        <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 flex items-center gap-3">
+                            <span class="text-2xl">🛵</span>
+                            <div>
+                                <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Jakarta Area (DKI)</p>
+                                <p class="font-bold text-gray-900 dark:text-white text-sm">J&T Regular</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Est. 1-2 business days</p>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-white/5 rounded-xl p-4 flex items-center gap-3">
+                            <span class="text-2xl">✈️</span>
+                            <div>
+                                <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Outside Jakarta</p>
+                                <p class="font-bold text-gray-900 dark:text-white text-sm">Lion Parcel Regular</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Est. 2-5 business days</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shipping Time Table -->
+                <div class="bg-white dark:bg-darkcard rounded-2xl p-6 border border-gray-100 dark:border-white/5 shadow-sm mb-6">
+                    <h3 class="font-bold text-gray-900 dark:text-white mb-4">Estimated Delivery Time</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-200 dark:border-white/10 text-[11px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400">
+                                    <th class="text-left pb-3">Destination</th>
+                                    <th class="text-left pb-3">Example Cities</th>
+                                    <th class="text-left pb-3">Est. Arrival</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-white/5">
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Greater Jakarta</td><td class="py-3 text-gray-600 dark:text-gray-400">Jakarta, Depok, Bekasi, Tangerang</td><td class="py-3"><span class="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold px-2 py-1 rounded-full">1–2 hari</span></td></tr>
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Java</td><td class="py-3 text-gray-600 dark:text-gray-400">Bandung, Surabaya, Semarang, Yogyakarta</td><td class="py-3"><span class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-1 rounded-full">2–3 hari</span></td></tr>
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Sumatra</td><td class="py-3 text-gray-600 dark:text-gray-400">Medan, Palembang, Pekanbaru, Batam</td><td class="py-3"><span class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-1 rounded-full">3–5 hari</span></td></tr>
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Kalimantan</td><td class="py-3 text-gray-600 dark:text-gray-400">Balikpapan, Banjarmasin, Pontianak</td><td class="py-3"><span class="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-2 py-1 rounded-full">4–6 hari</span></td></tr>
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Sulawesi</td><td class="py-3 text-gray-600 dark:text-gray-400">Makassar, Manado, Palu</td><td class="py-3"><span class="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-2 py-1 rounded-full">4–7 hari</span></td></tr>
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Bali &amp; NTB/NTT</td><td class="py-3 text-gray-600 dark:text-gray-400">Denpasar, Mataram, Kupang</td><td class="py-3"><span class="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold px-2 py-1 rounded-full">3–5 hari</span></td></tr>
+                                <tr><td class="py-3 font-medium text-gray-900 dark:text-white">Papua &amp; Maluku</td><td class="py-3 text-gray-600 dark:text-gray-400">Jayapura, Sorong, Ambon</td><td class="py-3"><span class="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-bold px-2 py-1 rounded-full">7–14 hari</span></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-4">* Estimasi belum termasuk waktu proses pesanan (1–2 hari). Waktu aktual dapat bervariasi tergantung kondisi di lapangan.</p>
+                </div>
+            </section>
+
+            <!-- Order Process Section -->
+            <section class="mb-16">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-10 h-10 rounded-2xl bg-gray-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                        <i class="fa-solid fa-list-check text-white dark:text-black text-sm"></i>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-gray-900 dark:text-white">Order Process Flow</h2>
+                </div>
+                <div class="relative">
+                    <div class="absolute left-5 top-0 bottom-0 w-px bg-gray-200 dark:bg-white/10 hidden md:block"></div>
+                    <div class="space-y-6">
+                        <div class="flex gap-4 md:gap-8">
+                            <div class="w-10 h-10 rounded-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold text-sm flex items-center justify-center flex-shrink-0 relative z-10">1</div>
+                            <div class="bg-white dark:bg-darkcard rounded-2xl p-5 border border-gray-100 dark:border-white/5 flex-1">
+                                <h4 class="font-bold text-gray-900 dark:text-white mb-1">Pesan</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Select product, size, and color. Add to cart and checkout by filling in your shipping details.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 md:gap-8">
+                            <div class="w-10 h-10 rounded-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold text-sm flex items-center justify-center flex-shrink-0 relative z-10">2</div>
+                            <div class="bg-white dark:bg-darkcard rounded-2xl p-5 border border-gray-100 dark:border-white/5 flex-1">
+                                <h4 class="font-bold text-gray-900 dark:text-white mb-1">Bayar</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Make payment via BCA bank transfer or QRIS. Payment is confirmed after admin verification.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 md:gap-8">
+                            <div class="w-10 h-10 rounded-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold text-sm flex items-center justify-center flex-shrink-0 relative z-10">3</div>
+                            <div class="bg-white dark:bg-darkcard rounded-2xl p-5 border border-gray-100 dark:border-white/5 flex-1">
+                                <h4 class="font-bold text-gray-900 dark:text-white mb-1">Packaged</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Your order is packed safely and neatly. You will receive a WhatsApp notification with the tracking number.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 md:gap-8">
+                            <div class="w-10 h-10 rounded-full bg-green-600 text-white font-bold text-sm flex items-center justify-center flex-shrink-0 relative z-10">✓</div>
+                            <div class="bg-white dark:bg-darkcard rounded-2xl p-5 border border-gray-100 dark:border-white/5 flex-1">
+                                <h4 class="font-bold text-gray-900 dark:text-white mb-1">Received</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Package arrives at your address. Check the package condition before signing. Contact us if there are any issues.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 dark:bg-black/40 pt-16 pb-8 border-t border-gray-200 dark:border-white/5 transition-colors duration-300">
+        <div class="container mx-auto px-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+                <div>
+                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Scrub Catalog</h4>
+                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                        <li><a href="scrub-top-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Tops</a></li>
+                        <li><a href="scrub-pants-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Pants</a></li>
+                        <li><a href="scrub-caps-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Caps</a></li>
+                        <li><a href="gown-en.html" class="hover:text-black dark:hover:text-white transition">Gowns</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Services</h4>
+                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                        <li><a href="shipping-en.html" class="hover:text-black dark:hover:text-white transition">Shipping &amp; Returns</a></li>
+                        <li><a href="payments-shipping-en.html" class="hover:text-black dark:hover:text-white transition font-semibold text-gray-900 dark:text-white">Payment &amp; Shipping</a></li>
+                        <li><a href="ukuran-en.html" class="hover:text-black dark:hover:text-white transition">Size Guide</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Company</h4>
+                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                        <li><a href="about-us-en.html" class="hover:text-black dark:hover:text-white transition">Our Story</a></li>
+                        <li><a href="karir-en.html" class="hover:text-black dark:hover:text-white transition">Careers</a></li>
+                        <li><a href="contact-en.html" class="hover:text-black dark:hover:text-white transition">Contact Us</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Follow Us</h4>
+                    <div class="flex space-x-4">
+                        <a href="https://www.instagram.com/wearscrubs.id/" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-gray-600 dark:text-white hover:bg-blue-600 hover:text-white transition-colors"><i class="fa-brands fa-instagram"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
+                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400">&copy; 2026 WearScrubs. All Rights Reserved.</p>
+                <div class="flex space-x-6">
+                    <a href="#" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Privacy</a>
+                    <a href="#" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Terms</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.createElement('div');
+                toast.textContent = 'Account number copied!';
+                toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-bold px-5 py-3 rounded-full shadow-xl z-50 transition-all';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 2000);
+            });
+        }
+    </script>
+    <script src="main.js"></script>
+</body>
+</html>

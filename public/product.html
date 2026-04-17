@@ -1,0 +1,878 @@
+﻿<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <link rel="canonical" href="https://wearscrubs.id/product.html">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">Detail Produk | WearScrubs</title>
+    <meta name="description" id="page-desc" content="Lihat detail produk scrub medis premium WearScrubs. Pilih warna, tipe, dan ukuran favoritmu.">
+    <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
+        .size-btn { width: 44px; height: 36px; border-radius: 4px; border: 1px solid; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; display:flex; align-items:center; justify-content:center; transition: all 0.15s; }
+        .size-btn { border-color: #e5e7eb; color: #6b7280; }
+        .dark .size-btn { border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.5); }
+        .size-btn:hover { border-color: #111827; color: #111827; }
+        .dark .size-btn:hover { border-color: white; color: white; }
+        .size-btn.active { background: #111827; color: #fff; border-color: #111827; }
+        .dark .size-btn.active { background: white; color: black; border-color: white; }
+        .color-dot.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #111827; transform: scale(1.15); }
+        .dark .color-dot.active { box-shadow: 0 0 0 2px #1c1c1c, 0 0 0 4px white; }
+        .type-btn { padding: 0.45rem 1rem; border-radius: 4px; border: 1px solid; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; transition: all 0.15s; border-color: #e5e7eb; color: #374151; }
+        .dark .type-btn { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }
+        .type-btn.active { background: #111827; color: white; border-color: #111827; }
+        .dark .type-btn.active { background: white; color: black; border-color: white; }
+        /* Motif box — for Gown Ber Design patterns */
+        .motif-box { padding: 0.35rem 0.75rem; border-radius: 8px; border: 1.5px solid; font-size: 11px; font-weight: 700; transition: all 0.15s; cursor: pointer; border-color: #e5e7eb; color: #6b7280; background: transparent; }
+        .dark .motif-box { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.5); }
+        .motif-box:hover { border-color: #111827; color: #111827; }
+        .dark .motif-box:hover { border-color: white; color: white; }
+        .motif-box.active { background: #111827; color: #fff; border-color: #111827; }
+        .dark .motif-box.active { background: white; color: black; border-color: white; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-up { animation: fadeUp 0.4s ease forwards; }
+        #main-product-image { transition: opacity 0.3s ease; }
+        #img-container { background: #ffffff; }
+        .dark #img-container { background: #1c1c1c; }
+        #img-prev, #img-next { display: none; }
+        #img-prev.visible, #img-next.visible { display: flex; }
+    </style>
+</head>
+<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
+
+<!-- â•â• HEADER (same as catalog pages) â•â• -->
+<header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10 transition-colors duration-300">
+    <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+
+        <!-- Nav Left -->
+        <nav class="hidden md:flex items-center space-x-8 flex-1">
+            <div class="group relative py-4 -my-4 flex items-center cursor-default">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors flex items-center">
+                    <span data-id="Belanja Semua" data-en="Shop All">Belanja Semua</span> <i class="fa-solid fa-chevron-down ml-2 text-[10px]"></i>
+                </span>
+                <div class="absolute left-0 top-full mt-0 hidden group-hover:flex flex-col bg-white dark:bg-darkcard shadow-xl border border-gray-100 dark:border-white/10 rounded-xl overflow-hidden w-48 z-50">
+                    <a href="scrub-top.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Atasan Scrub" data-en="Scrub Tops">Atasan Scrub</a>
+                    <a href="scrub-pants.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Celana Scrub" data-en="Scrub Pants">Celana Scrub</a>
+                    <a href="scrub-caps.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Topi Scrub" data-en="Scrub Caps">Topi Scrub</a>
+                        <a href="gown.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Gown</a>
+                </div>
+            </div>
+            <a href="about-us.html" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors" data-id="Cerita Kami" data-en="Our Story">Cerita Kami</a>
+            <a href="contact.html" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors" data-id="Hubungi Kami" data-en="Contact Us">Hubungi Kami</a>
+            <div class="flex items-center ml-6 border-l border-gray-300 dark:border-white/20 pl-6 h-6">
+                <a href="javascript:void(0)" onclick="setLang('id', true)" id="lang-id" class="text-sm font-bold text-black dark:text-white">ID</a>
+                <span class="mx-2 text-gray-300 dark:text-gray-600">/</span>
+                <a href="javascript:void(0)" onclick="setLang('en', true)" id="lang-en" class="text-sm font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors">EN</a>
+            </div>
+        </nav>
+
+        <!-- Logo Center -->
+        <div class="flex-shrink-0">
+            <a href="index.html" class="flex items-center justify-center">
+                <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs Logo" class="h-8 md:h-10 w-auto object-contain block dark:hidden">
+                <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs Logo" class="h-8 md:h-10 w-auto object-contain hidden dark:block">
+            </a>
+        </div>
+
+        <!-- Nav Right -->
+        <div class="hidden md:flex items-center justify-end space-x-6 flex-1 text-sm">
+            <button id="theme-toggle" data-theme-toggle class="hidden lg:flex items-center bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
+                <span id="theme-text" data-theme-text class="text-[10px] mr-2 text-gray-500 dark:text-gray-400 font-bold group-hover:text-black dark:group-hover:text-white transition-colors">MODE GELAP</span>
+                <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative transition-colors">
+                    <div id="theme-thumb" data-theme-thumb class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4"></div>
+                </div>
+            </button>
+            
+            <a href="cart.html" class="cart-btn text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white flex items-center transition-colors">
+                <span class="mr-2 uppercase text-[12px] tracking-widest font-medium" data-id="Keranjang" data-en="Cart">Keranjang</span>
+                <span class="cart-count bg-black text-white dark:bg-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full transition-colors">0</span>
+            </a>
+        </div>
+
+        <!-- Hamburger -->
+        <button id="mobile-menu-btn" class="md:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors" aria-label="Buka menu">
+            <i id="hamburger-icon" class="fa-solid fa-bars text-xl"></i>
+        </button>
+    </div>
+</header>
+
+<!-- Mobile Overlay -->
+<div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
+
+<!-- Mobile Drawer -->
+<div id="mobile-drawer" class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
+    <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-white/10">
+        <a href="index.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-7 w-auto block dark:hidden"></a>
+        <a href="index.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-7 w-auto hidden dark:block"></a>
+        <button id="mobile-close-btn" class="text-gray-500 hover:text-black dark:hover:text-white transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <nav class="flex-1 overflow-y-auto px-8 py-8 space-y-0">
+        <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mb-4" data-id="Koleksi" data-en="Collection">Koleksi</p>
+        <a href="scrub-top.html" class="flex items-center py-3 border-b border-gray-100 dark:border-white/5 text-sm font-medium text-gray-800 dark:text-white" data-id="Atasan Scrub" data-en="Scrub Tops">Atasan Scrub</a>
+        <a href="scrub-pants.html" class="flex items-center py-3 border-b border-gray-100 dark:border-white/5 text-sm font-medium text-gray-800 dark:text-white" data-id="Celana Scrub" data-en="Scrub Pants">Celana Scrub</a>
+        <a href="scrub-caps.html" class="flex items-center py-3 border-b border-gray-100 dark:border-white/5 text-sm font-medium text-gray-800 dark:text-white" data-id="Topi Scrub" data-en="Scrub Caps">Topi Scrub</a>
+        <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4" data-id="Lainnya" data-en="More">Lainnya</p>
+        <a href="about-us.html" class="flex items-center py-3 border-b border-gray-100 dark:border-white/5 text-sm font-medium text-gray-800 dark:text-white" data-id="Cerita Kami" data-en="Our Story">Cerita Kami</a>
+        <a href="contact.html" class="flex items-center py-3 border-b border-gray-100 dark:border-white/5 text-sm font-medium text-gray-800 dark:text-white" data-id="Hubungi Kami" data-en="Contact Us">Hubungi Kami</a>
+        <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4" data-id="Keranjang" data-en="Cart">Keranjang</p>
+        <a href="cart.html" class="cart-btn w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
+            <div class="flex items-center"><i class="fa-solid fa-bag-shopping mr-3 text-gray-400"></i> <span data-id="Keranjang Belanja" data-en="Shopping Cart">Keranjang Belanja</span></div>
+            <span class="cart-count bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
+        </a>
+    </nav>
+    <div class="px-8 py-6 border-t border-gray-100 dark:border-white/10">
+        <button id="theme-toggle-mobile" data-theme-toggle class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
+            <span id="theme-text-mobile" data-theme-text class="text-[10px] text-gray-500 dark:text-gray-400 font-bold">MODE GELAP</span>
+            <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative transition-colors">
+                <div id="theme-thumb-mobile" data-theme-thumb class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4"></div>
+            </div>
+        </button>
+    </div>
+</div>
+
+<!-- â•â• MAIN CONTENT â•â• -->
+<main class="container mx-auto px-6 pt-10 pb-20 max-w-7xl">
+
+    <!-- Breadcrumb -->
+    <div id="breadcrumb" class="flex items-center gap-2 text-[10px] uppercase tracking-widest text-gray-400 dark:text-white/40 mb-8 fade-up">
+        <a href="index.html" class="hover:text-black dark:hover:text-white transition">Home</a>
+        <span>/</span>
+        <a id="breadcrumb-cat" href="#" class="hover:text-black dark:hover:text-white transition">Kategori</a>
+        <span>/</span>
+        <span id="breadcrumb-name" class="text-gray-900 dark:text-white">Produk</span>
+    </div>
+
+    <!-- Product Grid -->
+    <div id="product-section" class="grid-cols-1 lg:grid-cols-2 gap-10 xl:gap-16 fade-up" style="display:none">
+
+        <!-- LEFT: Image -->
+        <div class="space-y-3">
+            <!-- Main image — dark mode bg #1c1c1c (CSS), light mode #fff (CSS) -->
+            <div id="img-container" class="relative w-full overflow-hidden rounded-sm" style="min-height:300px;">
+
+                <img id="main-product-image" src="" alt=""
+                    class="w-full h-auto object-contain block transition-opacity duration-300"
+                    onerror="this.src='images/logo/logo%20ws%20black%20250x55.png'; this.style.padding='4rem';">
+
+                <!-- Prev / Next arrows -->
+                <button id="img-prev" onclick="navigatePhoto(-1)"
+                    class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center
+                           bg-black/30 hover:bg-black/60 rounded-full backdrop-blur-sm transition-all z-10
+                           text-white text-base">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <button id="img-next" onclick="navigatePhoto(1)"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center
+                           bg-black/30 hover:bg-black/60 rounded-full backdrop-blur-sm transition-all z-10
+                           text-white text-base">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+
+                <!-- Photo index dots -->
+                <div id="img-dots" class="hidden absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5"></div>
+            </div>
+
+            <!-- Thumbnails: exactly 3 equal columns -->
+            <div id="image-thumbnails" class="grid grid-cols-3 gap-2"></div>
+        </div>
+
+        <!-- RIGHT: Product Info -->
+        <div>
+            <div class="lg:sticky lg:top-24 space-y-5">
+
+                <!-- Name, Price, Category -->
+                <div class="pb-5 border-b border-gray-100 dark:border-white/10 space-y-1">
+                    <div class="flex items-center gap-3 mb-1">
+                        <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-400 dark:text-white/40" id="product-category-label">Atasan Scrub</p>
+                        <span id="popular-badge" class="hidden text-[9px] font-bold tracking-[0.15em] uppercase text-amber-500 border border-amber-500/30 px-2 py-0.5 rounded-sm">★ Popular</span>
+                    </div>
+                    <h1 id="product-name" class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight">—</h1>
+                    <p id="product-price" class="text-lg font-semibold text-gray-700 dark:text-white/70 mt-1">Rp 0</p>
+                    <p id="product-short-desc" class="text-sm text-gray-500 dark:text-white/50 leading-relaxed mt-2">—</p>
+                </div>
+
+                <!-- Type Selection -->
+                <div id="type-section" class="hidden space-y-2">
+                    <label id="lbl-model" class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-500 dark:text-white/40" data-id="Model" data-en="Style">Model</label>
+                    <div id="type-container" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <!-- Color / Motif Selection -->
+                <div id="color-section" class="space-y-2">
+                    <div class="flex items-center gap-3">
+                        <label id="lbl-color" class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-500 dark:text-white/40" data-id="Warna" data-en="Color">Warna</label>
+                        <span id="selected-color-label" class="text-xs font-semibold text-gray-900 dark:text-white">—</span>
+                    </div>
+                    <div id="color-container" class="flex flex-wrap gap-2.5"></div>
+                </div>
+
+                <!-- Size Selection -->
+                <div id="size-section" class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <label id="lbl-size" class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-500 dark:text-white/40" data-id="Ukuran" data-en="Size">Ukuran</label>
+                            <span id="selected-size-label" class="text-xs font-semibold text-gray-900 dark:text-white"></span>
+                        </div>
+                        <a href="ukuran.html" class="text-[10px] underline text-gray-400 hover:text-black dark:hover:text-white transition" data-id="Panduan Ukuran" data-en="Size Guide">Panduan Ukuran</a>
+                    </div>
+                    <div id="size-container" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <!-- Stock Info -->
+                <div id="stock-info" class="hidden py-2.5 px-3 rounded-sm bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center gap-2.5">
+                    <span id="stock-dot" class="w-2 h-2 rounded-full flex-shrink-0"></span>
+                    <span id="stock-text" class="text-xs font-medium text-gray-600 dark:text-white/60"></span>
+                </div>
+
+                <!-- Bordir Section — hanya untuk Atasan Scrub (tops) -->
+                <div id="bordir-section" class="hidden space-y-2 pt-1">
+                    <div class="border border-purple-200 dark:border-purple-500/30 rounded-xl p-4 bg-purple-50/50 dark:bg-purple-900/10">
+                        <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-purple-700 dark:text-purple-300 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-needle text-[12px]"></i> <span data-id="Bordir (Opsional)" data-en="Embroidery (Optional)">Bordir (Opsional)</span>
+                        </p>
+                        <div class="space-y-2.5">
+                            <label class="flex items-center justify-between cursor-pointer group">
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="bordir-nama-cb" class="w-4 h-4 accent-purple-600 cursor-pointer"
+                                        onchange="updateBordirPrice()">
+                                    <div>
+                                        <span class="text-sm font-medium text-gray-800 dark:text-white" data-id="Bordir Nama" data-en="Name Embroidery">Bordir Nama</span>
+                                        <p class="text-[10px] text-gray-500 dark:text-white/40" data-id="Nama yang Anda pilih disulam di baju" data-en="Your chosen name will be embroidered on the garment">Nama yang Anda pilih disulam di baju</p>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold text-purple-700 dark:text-purple-300">+Rp 20.000</span>
+                            </label>
+                            <label class="flex items-center justify-between cursor-pointer group">
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="bordir-logo-cb" class="w-4 h-4 accent-blue-600 cursor-pointer"
+                                        onchange="updateBordirPrice()">
+                                    <div>
+                                        <span class="text-sm font-medium text-gray-800 dark:text-white" data-id="Bordir Logo" data-en="Logo Embroidery">Bordir Logo</span>
+                                        <p class="text-[10px] text-gray-500 dark:text-white/40" data-id="Logo instansi/RS disulam di baju" data-en="Your hospital/institution logo embroidered on the garment">Logo instansi/RS disulam di baju</p>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold text-blue-700 dark:text-blue-300">+Rp 30.000</span>
+                            </label>
+                        </div>
+                        <div id="bordir-price-info" class="hidden mt-3 pt-3 border-t border-purple-200 dark:border-purple-500/20 text-xs text-purple-700 dark:text-purple-300 font-medium">
+                            <span data-id="Detail &amp; nama bordir diisi saat checkout" data-en="Embroidery details filled in at checkout">Detail &amp; nama bordir diisi saat checkout</span>
+                        </div>
+                        <!-- Estimasi selalu tampil di bordir section -->
+                        <div class="mt-3 pt-3 border-t border-purple-200 dark:border-purple-500/15 flex items-center gap-2 text-[10px] text-gray-500 dark:text-white/30">
+                            <i class="fa-regular fa-clock text-purple-400"></i>
+                            <span data-id="Estimasi proses bordir: ±1 minggu setelah konfirmasi pembayaran" data-en="Embroidery processing time: ±1 week after payment confirmation">Estimasi proses bordir: <strong class="text-purple-600 dark:text-purple-300">±1 minggu</strong> setelah konfirmasi pembayaran</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add to Cart -->
+                <div class="space-y-2 pt-1">
+                    <button id="add-to-cart-btn" disabled
+                        class="w-full h-12 bg-gray-900 dark:bg-white text-white dark:text-black font-bold text-xs tracking-widest uppercase rounded-sm flex items-center justify-center gap-3 transition-all hover:bg-gray-700 dark:hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <span id="cart-btn-text">Pilih Variasi</span>
+                        <i class="fa-solid fa-plus text-[9px]"></i>
+                    </button>
+                    <a href="cart.html" class="w-full h-10 flex items-center justify-center gap-2 border border-gray-200 dark:border-white/10 rounded-sm text-xs font-medium text-gray-600 dark:text-white/50 hover:border-gray-900 hover:text-gray-900 dark:hover:border-white dark:hover:text-white transition-all tracking-wider uppercase">
+                        <i class="fa-solid fa-bag-shopping text-[10px]"></i> <span data-id="Lihat Keranjang" data-en="View Cart">Lihat Keranjang</span>
+                    </a>
+                </div>
+
+                <!-- Accordion -->
+                <div class="border-t border-gray-100 dark:border-white/10 space-y-0 pt-1">
+                    <details class="group py-4 border-b border-gray-100 dark:border-white/10" open>
+                        <summary class="flex justify-between items-center cursor-pointer list-none">
+                            <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-700 dark:text-white/70" data-id="Detail Produk" data-en="Product Details">Detail Produk</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 group-open:rotate-180 transition-transform"></i>
+                        </summary>
+                        <div id="product-long-desc" class="pt-3 text-sm text-gray-500 dark:text-white/50 leading-relaxed space-y-2"></div>
+                    </details>
+                    <details class="group py-4 border-b border-gray-100 dark:border-white/10">
+                        <summary class="flex justify-between items-center cursor-pointer list-none">
+                            <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-700 dark:text-white/70" data-id="Material &amp; Perawatan" data-en="Material &amp; Care">Material &amp; Perawatan</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 group-open:rotate-180 transition-transform"></i>
+                        </summary>
+                        <div class="pt-3 text-sm text-gray-500 dark:text-white/50 leading-relaxed">
+                            <ul class="list-disc list-inside space-y-1.5">
+                                <li><span data-id="Polyester &amp; Spandex" data-en="Polyester &amp; Spandex">Polyester &amp; Spandex</span></li>
+                                <li><span data-id="Anti-Microbial (HeiQ Tech) &amp; Liquid Repellent (Dymatic Tech)" data-en="Anti-Microbial (HeiQ Tech) &amp; Liquid Repellent (Dymatic Tech)">Anti-Microbial (HeiQ Tech) &amp; Liquid Repellent (Dymatic Tech)</span></li>
+                                <li><span data-id="Flexible 2-Way Stretch Fabric" data-en="Flexible 2-Way Stretch Fabric">4-Way Stretch — nyaman bergerak</span></li>
+                                </ul>
+                        </div>
+                    </details>
+                    <details class="group py-4">
+                        <summary class="flex justify-between items-center cursor-pointer list-none">
+                            <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-700 dark:text-white/70" data-id="Pengiriman" data-en="Shipping">Pengiriman</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 group-open:rotate-180 transition-transform"></i>
+                        </summary>
+                        <div class="pt-3 text-sm text-gray-500 dark:text-white/50 leading-relaxed">
+                            <ul class="list-disc list-inside space-y-1.5">
+                                <li><span data-id="Pengiriman ke seluruh Indonesia" data-en="Nationwide shipping across Indonesia">Pengiriman ke seluruh Indonesia</span></li>
+                                <li><span data-id="Estimasi 2–5 hari kerja" data-en="Estimated 2–5 business days">Estimasi 2–5 hari kerja</span></li>
+        
+                                <li><a href="shipping.html" class="underline hover:text-black dark:hover:text-white transition" data-id="Kebijakan Retur →" data-en="Return Policy →">Kebijakan Retur →</a></li>
+                            </ul>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Related Products -->
+    <section class="mt-16 space-y-6">
+        <h2 class="text-base font-bold tracking-widest uppercase text-gray-900 dark:text-white" data-id="Produk Terkait" data-en="Related Products">Produk Terkait</h2>
+        <div id="related-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+    </section>
+</main>
+
+<!-- â•â• FOOTER â•â• -->
+<footer class="bg-gray-50 dark:bg-black/40 pt-16 pb-8 border-t border-gray-200 dark:border-white/5 transition-colors duration-300">
+    <div class="container mx-auto px-6">
+        <div class="flex flex-col lg:flex-row justify-between items-center border-b border-gray-200 dark:border-white/10 pb-12 mb-12 gap-10">
+            <div class="w-full lg:w-1/2">
+                <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-2" data-id="Dapatkan Berita Terbaru Kami" data-en="Get Our Latest News">Dapatkan Berita Terbaru Kami</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md" data-id="Berlangganan buletin kami untuk penawaran eksklusif, produk terbaru, dan info medis terkini." data-en="Subscribe to our newsletter for exclusive offers, new products, and the latest medical updates.">Berlangganan buletin kami untuk penawaran eksklusif, produk terbaru, dan info medis terkini.</p>
+                <form class="flex w-full max-w-md shadow-sm" onsubmit="return false;">
+                    <input type="email" id="newsletter-email" data-id-placeholder="Alamat email Anda" data-en-placeholder="Your email address" placeholder="Alamat email Anda" class="flex-1 bg-white dark:bg-darkcard border border-gray-300 dark:border-white/20 rounded-l-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors">
+                    <button type="submit" class="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:opacity-80 transition-colors" data-id="Daftar" data-en="Subscribe">Daftar</button>
+                </form>
+            </div>
+            <div class="w-full lg:w-1/2 flex flex-col lg:items-end">
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">Mitra Resmi</h3>
+                <div class="flex flex-wrap gap-6 items-center">
+                    <img src="images/heiq dymatic.png" alt="HeiQ Dymatic" class="h-8 md:h-10 object-contain opacity-70 hover:opacity-100 transition-opacity">
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+            <div>
+                <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Katalog Scrub" data-en="Scrub Catalog">Katalog Scrub</h4>
+                <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                    <li><a href="scrub-top.html" class="hover:text-black dark:hover:text-white transition" data-id="Atasan Scrub" data-en="Scrub Tops">Atasan Scrub</a></li>
+                    <li><a href="scrub-pants.html" class="hover:text-black dark:hover:text-white transition" data-id="Celana Scrub" data-en="Scrub Pants">Celana Scrub</a></li>
+                    <li><a href="scrub-caps.html" class="hover:text-black dark:hover:text-white transition" data-id="Topi Scrub" data-en="Scrub Caps">Topi Scrub</a></li>
+                        <li><a href="gown.html" class="hover:text-black dark:hover:text-white transition">Gown</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Layanan" data-en="Services">Layanan</h4>
+                <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                    <li><a href="shipping.html" class="hover:text-black dark:hover:text-white transition" data-id="Pengiriman &amp; Retur" data-en="Shipping &amp; Returns">Pengiriman &amp; Retur</a></li>
+                    <li><a href="payments-shipping.html" class="hover:text-black dark:hover:text-white transition" data-id="Pembayaran &amp; Pengiriman" data-en="Payment &amp; Shipping">Pembayaran &amp; Pengiriman</a></li>
+                    <li><a href="ukuran.html" class="hover:text-black dark:hover:text-white transition" data-id="Panduan Ukuran" data-en="Size Guide">Panduan Ukuran</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Perusahaan" data-en="Company">Perusahaan</h4>
+                <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                    <li><a href="about-us.html" class="hover:text-black dark:hover:text-white transition" data-id="Cerita Kami" data-en="Our Story">Cerita Kami</a></li>
+                    <li><a href="karir.html" class="hover:text-black dark:hover:text-white transition" data-id="Karir" data-en="Careers">Karir</a></li>
+                    <li><a href="contact.html" class="hover:text-black dark:hover:text-white transition" data-id="Hubungi Kami" data-en="Contact Us">Hubungi Kami</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Ikuti Kami" data-en="Follow Us">Ikuti Kami</h4>
+                <div class="flex space-x-4">
+                    <a href="https://www.instagram.com/wearscrubs.id/" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-gray-600 dark:text-white hover:bg-pink-600 hover:text-white dark:hover:bg-pink-600 transition-colors"><i class="fa-brands fa-instagram"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
+            <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400" data-id="Â© 2026 WearScrubs. Hak Cipta Dilindungi." data-en="Â© 2026 WearScrubs. All Rights Reserved.">Â© 2026 WearScrubs. Hak Cipta Dilindungi.</p>
+            <div class="flex space-x-6">
+                <a href="#" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition" data-id="Privasi" data-en="Privacy">Privasi</a>
+                <a href="#" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition" data-id="Syarat" data-en="Terms">Syarat</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<!-- Toast -->
+<div id="product-toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[999] hidden">
+    <div class="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-4 min-w-[280px]">
+        <div class="w-8 h-8 rounded-full bg-white/10 dark:bg-black/10 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-check text-green-400 dark:text-green-600 text-xs"></i>
+        </div>
+        <div>
+            <p id="toast-added-text" class="text-sm font-bold" data-id="Ditambahkan ke Keranjang!" data-en="Added to Cart!">Ditambahkan ke Keranjang!</p>
+            <a href="cart.html" class="text-[10px] text-white/60 dark:text-black/60 hover:text-white dark:hover:text-black transition font-bold uppercase tracking-widest" data-id="Lihat Keranjang →" data-en="View Cart →">Lihat Keranjang →</a>
+        </div>
+    </div>
+</div>
+
+<script src="catalog.js"></script>
+<script>
+    // WS_API is declared in catalog.js (loaded above)
+
+    let currentProduct = null;
+    let selectedColor = null;
+    let selectedType = null;
+    let selectedSize = null;
+
+    const CAT_LABELS    = { tops: 'Atasan Scrub', pants: 'Celana Scrub', caps: 'Topi Scrub', gown: 'Gown Medis' };
+    const CAT_LABELS_EN = { tops: 'Scrub Tops',   pants: 'Scrub Pants',  caps: 'Scrub Caps', gown: 'Medical Gown' };
+    const CAT_PAGES     = { tops: 'scrub-top.html',    pants: 'scrub-pants.html',    caps: 'scrub-caps.html',    gown: 'gown.html' };
+    const CAT_PAGES_EN  = { tops: 'scrub-top-en.html', pants: 'scrub-pants-en.html', caps: 'scrub-caps-en.html', gown: 'gown-en.html' };
+
+    // â”€â”€ Translation strings for all JS-generated UI text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const LANG_P = {
+        id: {
+            selectType:   'Pilih Tipe',
+            selectColor:  'Pilih Warna',
+            selectSize:   'Pilih Ukuran',
+            addToCart:    'Tambah ke Keranjang',
+            outOfStock:   'Stok Habis',
+            available:    'Tersedia',
+            unit:         'unit',
+            bordirInfo:   'per baju · detail diisi saat checkout',
+            mitra:        'Mitra Resmi',
+        },
+        en: {
+            selectType:   'Select Style',
+            selectColor:  'Select Color',
+            selectSize:   'Select Size',
+            addToCart:    'Add to Cart',
+            outOfStock:   'Out of Stock',
+            available:    'Available',
+            unit:         'units',
+            bordirInfo:   'per item · details filled in at checkout',
+            mitra:        'Official Partner',
+        }
+    };
+
+    function getCurrentLang() { return localStorage.getItem('ws_lang') || 'id'; }
+    function T() { return LANG_P[getCurrentLang()] || LANG_P.id; }
+
+    function renderDescriptions(p) {
+        const lang = getCurrentLang();
+        const isEn = lang === 'en';
+        const shortDesc = isEn ? (p.short_description_en || p.short_description || '') : (p.short_description || '');
+        const longDesc  = isEn ? (p.long_description_en  || p.long_description  || '') : (p.long_description  || '');
+        document.getElementById('product-short-desc').textContent = shortDesc;
+        document.getElementById('product-long-desc').innerHTML = longDesc.split('\n').filter(Boolean).map(t => `<p>${t}</p>`).join('');
+    }
+
+    async function init() {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        if (!id) { window.location.href = 'index.html'; return; }
+
+        try {
+            const res = await fetch(`${WS_API}/api/products/${id}`);
+            if (!res.ok) throw new Error('Produk tidak ditemukan');
+            currentProduct = await res.json();
+            renderProduct();
+            loadRelated();
+        } catch (err) {
+            document.getElementById('breadcrumb-name').textContent = 'Produk tidak ditemukan';
+            console.error(err);
+        }
+    }
+
+    function renderProduct() {
+        const p = currentProduct;
+        const lang = getCurrentLang();
+        const isEn = lang === 'en';
+        document.title = `${p.name} | WearScrubs`;
+        document.getElementById('page-title').textContent = `${p.name} | WearScrubs`;
+
+        const catLabel = (isEn ? CAT_LABELS_EN : CAT_LABELS)[p.category] || p.category;
+        const catPage  = (isEn ? CAT_PAGES_EN  : CAT_PAGES)[p.category]  || 'scrub-top.html';
+        document.getElementById('product-category-label').textContent = catLabel;
+        document.getElementById('breadcrumb-cat').textContent = catLabel;
+        document.getElementById('breadcrumb-cat').href = catPage;
+        document.getElementById('breadcrumb-name').textContent = p.name;
+        document.getElementById('product-name').textContent = p.name;
+        document.getElementById('product-price').textContent = p.price_formatted;
+
+        // Render descriptions in current language (with fallback to ID)
+        renderDescriptions(p);
+
+        // Show/hide bordir section for tops only
+        const bordirSection = document.getElementById('bordir-section');
+        if (p.category === 'tops') {
+            bordirSection.classList.remove('hidden');
+        } else {
+            bordirSection.classList.add('hidden');
+            document.getElementById('bordir-nama-cb').checked = false;
+            document.getElementById('bordir-logo-cb').checked = false;
+        }
+
+        if (p.is_popular) document.getElementById('popular-badge').classList.remove('hidden');
+
+        // Initial photo
+        const photoUrl = p.main_photo ? resolvePhoto(p.main_photo) : 'images/logo/logo%20ws%20white%20250x55.png';
+        document.getElementById('main-product-image').src = photoUrl;
+
+        // Render Types
+        if (p.types && p.types.length > 0 && p.types[0] !== 'null') {
+            document.getElementById('type-section').classList.remove('hidden');
+            document.getElementById('type-container').innerHTML = p.types.map(t => `
+                <button onclick="selectType('${t}')" data-val="${t}"
+                    class="type-btn px-5 py-2.5 rounded-xl border border-gray-200 dark:border-white/15 text-xs font-bold uppercase tracking-wider transition-all hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-white/70">
+                    ${typeLabel(t)}
+                </button>`).join('');
+            selectType(p.types[0]);
+        } else {
+            document.getElementById('type-section').classList.add('hidden');
+            selectedType = 'null';
+        }
+
+        // Motif IDs — same list as catalog.js/dashboard.html
+        const MOTIF_IDS = new Set(['sea-world','balloon','princess','fruits','numbers','fairies',
+            'baby-tooth-grey','baby-tooth-maroon','brush-tooth','cars','circus','tooth-doodle']);
+
+        // Render Colors or Motif boxes
+        const allAreMotifs = p.colors.length > 0 && p.colors.every(c => MOTIF_IDS.has(c));
+        // Update label: Warna vs Desain — use getCurrentLang() (isId was never defined in this scope)
+        const _lang = getCurrentLang();
+        const lblColor = document.getElementById('lbl-color');
+        if (allAreMotifs) {
+            lblColor.textContent = _lang !== 'en' ? 'Desain' : 'Design';
+            lblColor.dataset.id = 'Desain'; lblColor.dataset.en = 'Design';
+        } else {
+            lblColor.textContent = _lang !== 'en' ? 'Warna' : 'Color';
+            lblColor.dataset.id = 'Warna'; lblColor.dataset.en = 'Color';
+        }
+        document.getElementById('color-container').innerHTML = p.colors.map(c => {
+            const label = p.color_label_map[c] || c;
+            const isMotif = MOTIF_IDS.has(c);
+            if (isMotif) {
+                return `<button onclick="selectColor('${c}')" data-val="${c}" title="${label}"
+                    class="motif-box">${label}</button>`;
+            }
+            const hex = p.color_hex_map[c] || '#ccc';
+            return `<button onclick="selectColor('${c}')" data-val="${c}" title="${label}"
+                class="color-dot w-9 h-9 rounded-full border-2 border-transparent transition-all p-0.5">
+                <span class="w-full h-full rounded-full block" style="background:${hex}"></span>
+            </button>`;
+        }).join('');
+        if (p.colors.length > 0) selectColor(p.colors[0]);
+
+        // Render Sizes — compact buttons via .size-btn CSS class
+        document.getElementById('size-container').innerHTML = p.sizes.map(s =>
+            `<button onclick="selectSize('${s}')" data-val="${s}" class="size-btn">${s}</button>`
+        ).join('');
+
+
+        document.getElementById('product-section').style.display = 'grid';
+
+        updateCartBtn();
+    }
+
+    function typeLabel(t) {
+        const map = { pendek: 'Lengan Pendek', panjang: 'Lengan Panjang', straight: 'Straight Cut', jogger: 'Jogger Style' };
+        return map[t] || t.charAt(0).toUpperCase() + t.slice(1);
+    }
+
+    function resolvePhoto(url) {
+        if (!url) return '';
+        if (url.startsWith('/uploads/')) return WS_API + url;
+        return url; // local path like images/Minna LS Black/1.png
+    }
+
+    function selectType(t) {
+        selectedType = t;
+        document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.val === t));
+        // Update price if product has price_by_type
+        if (currentProduct.price_by_type && currentProduct.price_by_type[t]) {
+            const price = currentProduct.price_by_type[t];
+            document.getElementById('product-price').textContent = 'Rp ' + Number(price).toLocaleString('id-ID');
+        }
+        updateMainImage();
+        checkStock();
+    }
+
+    function selectColor(c) {
+        selectedColor = c;
+        const label = currentProduct.color_label_map[c] || c;
+        document.getElementById('selected-color-label').textContent = label;
+        // Toggle active on both color-dot (circles) and motif-box (text boxes)
+        document.querySelectorAll('.color-dot, .motif-box').forEach(b => b.classList.toggle('active', b.dataset.val === c));
+        updateMainImage();
+        checkStock();
+    }
+
+    function selectSize(s) {
+        selectedSize = s;
+        document.getElementById('selected-size-label').textContent = s;
+        document.querySelectorAll('.size-btn').forEach(b => b.classList.toggle('active', b.dataset.val === s));
+        checkStock();
+    }
+
+    // â”€â”€â”€ Photo gallery state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    let currentPhotos = [];  // URLs resolved
+    let currentPhotoIdx = 0;
+
+    function setGallery(photos) {
+        currentPhotos = photos.map(p => resolvePhoto(p));
+        currentPhotoIdx = 0;
+        renderGallery();
+    }
+
+    function renderGallery() {
+        const mainImg = document.getElementById('main-product-image');
+        const prev    = document.getElementById('img-prev');
+        const next    = document.getElementById('img-next');
+        const dots    = document.getElementById('img-dots');
+        const thumbs  = document.getElementById('image-thumbnails');
+
+        if (currentPhotos.length === 0) {
+            thumbs.innerHTML = '';
+            prev.classList.remove('visible'); next.classList.remove('visible');
+            dots.classList.add('hidden');
+            return;
+        }
+
+        mainImg.src = currentPhotos[currentPhotoIdx];
+
+        // Arrows — show only if more than 1 photo
+        if (currentPhotos.length > 1) {
+            prev.classList.add('visible'); next.classList.add('visible');
+        } else {
+            prev.classList.remove('visible'); next.classList.remove('visible');
+        }
+
+        // Dots
+        if (currentPhotos.length > 1) {
+            dots.classList.remove('hidden');
+            dots.innerHTML = currentPhotos.map((_, i) =>
+                `<span class="block w-1.5 h-1.5 rounded-full transition-all ${
+                    i === currentPhotoIdx ? 'bg-white scale-110' : 'bg-white/40'
+                }"></span>`
+            ).join('');
+        } else {
+            dots.classList.add('hidden');
+        }
+
+        // Thumbnails — exactly 3 equal cells, 1:1 aspect-ratio, white bg
+        if (currentPhotos.length <= 1) {
+            thumbs.innerHTML = '';
+            return;
+        }
+        thumbs.innerHTML = currentPhotos.map((url, idx) => `
+            <button onclick="setPhotoIdx(${idx})" class="block w-full overflow-hidden rounded-sm border-2 ${
+                idx === currentPhotoIdx ? 'border-gray-800 dark:border-white' : 'border-gray-200 dark:border-white/10'
+            } hover:border-gray-400 dark:hover:border-white/30 transition-all" style="aspect-ratio:1/1;">
+                <img src="${url}" alt="Foto ${idx+1}"
+                    class="w-full h-full object-contain"
+                    style="background:#fff"
+                    onerror="this.parentElement.style.display='none'">
+            </button>`
+        ).join('');
+    }
+
+    function setPhotoIdx(idx) {
+        currentPhotoIdx = idx;
+        renderGallery();
+    }
+
+    function navigatePhoto(dir) {
+        if (currentPhotos.length === 0) return;
+        currentPhotoIdx = (currentPhotoIdx + dir + currentPhotos.length) % currentPhotos.length;
+        renderGallery();
+    }
+
+    // Keep setMainPhoto as alias for backward compat (used nowhere else now)
+    function setMainPhoto(url) {
+        const idx = currentPhotos.indexOf(url);
+        if (idx >= 0) setPhotoIdx(idx);
+    }
+
+    function updateMainImage() {
+        if (!selectedColor || !selectedType) return;
+        const variant = currentProduct.variants.find(
+            v => v.color === selectedColor && v.variant_type === selectedType
+        );
+        const photos = variant
+            ? (variant.photos && variant.photos.length > 0
+                ? variant.photos
+                : (variant.photo_url ? [variant.photo_url] : []))
+            : [];
+        setGallery(photos);
+    }
+
+    async function checkStock() {
+        updateCartBtn();
+        if (!selectedColor || !selectedType || !selectedSize) {
+            document.getElementById('stock-info').classList.add('hidden');
+            return;
+        }
+        try {
+            const res = await fetch(`${WS_API}/api/inventory/${currentProduct.id}/check?color=${selectedColor}&size=${selectedSize}&type=${selectedType}`);
+            const data = await res.json();
+            const stock = data.available;
+            const wrap = document.getElementById('stock-info');
+            wrap.classList.remove('hidden');
+            document.getElementById('stock-dot').className = stock > 0
+                ? 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'
+                : 'w-2 h-2 rounded-full bg-red-500';
+            const t = T();
+            document.getElementById('stock-text').textContent = stock > 0 ? `${t.available}: ${stock} ${t.unit}` : t.outOfStock;
+            const btn = document.getElementById('add-to-cart-btn');
+            if (stock > 0) {
+                btn.disabled = false;
+                document.getElementById('cart-btn-text').textContent = t.addToCart;
+            } else {
+                btn.disabled = true;
+                document.getElementById('cart-btn-text').textContent = t.outOfStock;
+            }
+        } catch (err) { console.error(err); }
+    }
+
+    function updateCartBtn() {
+        const btn = document.getElementById('add-to-cart-btn');
+        const txt = document.getElementById('cart-btn-text');
+        const typeOk = selectedType !== null;
+        const t = T();
+        if (!typeOk) { btn.disabled = true; txt.textContent = t.selectType; return; }
+        if (!selectedColor) { btn.disabled = true; txt.textContent = t.selectColor; return; }
+        if (!selectedSize) { btn.disabled = true; txt.textContent = t.selectSize; return; }
+        btn.disabled = false;
+        txt.textContent = t.addToCart;
+    }
+
+    // â”€â”€â”€ Bordir price live update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    function updateBordirPrice() {
+        const nama = document.getElementById('bordir-nama-cb').checked;
+        const logo = document.getElementById('bordir-logo-cb').checked;
+        const extra = (nama ? 20000 : 0) + (logo ? 30000 : 0);
+        const infoEl = document.getElementById('bordir-price-info');
+        if (extra > 0) {
+            infoEl.classList.remove('hidden');
+            infoEl.innerHTML = `+Rp ${extra.toLocaleString('id-ID')} ${T().bordirInfo}`;
+        } else {
+            infoEl.classList.add('hidden');
+        }
+    }
+
+    document.getElementById('add-to-cart-btn').addEventListener('click', () => {
+        if (!currentProduct || !selectedColor || !selectedSize || selectedType === null) return;
+        const bordirNama = currentProduct.category === 'tops' && document.getElementById('bordir-nama-cb').checked;
+        const bordirLogo = currentProduct.category === 'tops' && document.getElementById('bordir-logo-cb').checked;
+        const item = {
+            product_id: currentProduct.id,
+            name: currentProduct.name,
+            category: currentProduct.category,
+            price: currentProduct.price,
+            price_formatted: currentProduct.price_formatted,
+            color: selectedColor,
+            type: selectedType,
+            size: selectedSize,
+            photo: document.getElementById('main-product-image').src,
+            quantity: 1,
+            bordir_nama: bordirNama,
+            bordir_logo: bordirLogo
+        };
+        let cart = JSON.parse(localStorage.getItem('ws_cart') || '[]');
+        // Bordir options make items distinct — same shirt with different bordir = separate line
+        const existing = cart.find(i =>
+            i.product_id === item.product_id &&
+            i.color === item.color &&
+            i.type === item.type &&
+            i.size === item.size &&
+            !!i.bordir_nama === bordirNama &&
+            !!i.bordir_logo === bordirLogo
+        );
+        if (existing) existing.quantity++;
+        else cart.push(item);
+        localStorage.setItem('ws_cart', JSON.stringify(cart));
+
+        // Update all cart badges
+        document.querySelectorAll('.cart-count').forEach(el => {
+            el.textContent = cart.reduce((s, i) => s + i.quantity, 0);
+        });
+        showToast();
+    });
+
+
+    function showToast() {
+        const t = document.getElementById('product-toast');
+        t.classList.remove('hidden');
+        setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    async function loadRelated() {
+        try {
+            const res = await fetch(`${WS_API}/api/products?category=${currentProduct.category}`);
+            let items = await res.json();
+            items = items.filter(i => i.id !== currentProduct.id).slice(0, 4);
+            document.getElementById('related-grid').innerHTML = items.map(p => {
+                const photo = resolvePhoto(p.main_photo) || 'images/logo/logo%20ws%20white%20250x55.png';
+                return `<a href="product.html?id=${p.id}" class="group space-y-3">
+                    <div class="aspect-[3/4] bg-gray-100 dark:bg-darkcard rounded-2xl overflow-hidden">
+                        <img src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700" onerror="this.src='images/logo/logo%20ws%20white%20250x55.png'">
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-gray-900 dark:text-white">${p.name}</h4>
+                        <p class="text-xs text-gray-500 dark:text-white/40 mt-0.5">${p.price_formatted}</p>
+                    </div>
+                </a>`;
+            }).join('');
+        } catch (e) { console.error(e); }
+    }
+
+    // Language switcher — called when user clicks ID/EN or on page load
+    function setLang(lang, isUserChoice = false) {
+        const isId = lang === 'id';
+        document.getElementById('lang-id').className = `text-sm ${isId ? 'font-bold text-black dark:text-white' : 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors'}`;
+        document.getElementById('lang-en').className = `text-sm ${!isId ? 'font-bold text-black dark:text-white' : 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors'}`;
+        localStorage.setItem('ws_lang', lang);
+        if (isUserChoice) localStorage.setItem('ws_lang_set', 'true');
+
+        // â”€â”€ Swap all data-id/data-en elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        document.querySelectorAll('[data-id][data-en]').forEach(el => {
+            el.textContent = isId ? el.dataset.id : el.dataset.en;
+        });
+        // Swap placeholder attributes
+        document.querySelectorAll('[data-id-placeholder][data-en-placeholder]').forEach(el => {
+            el.placeholder = isId ? el.dataset.idPlaceholder : el.dataset.enPlaceholder;
+        });
+        // Swap Official Partner label
+        const mitraEl = document.querySelector('[data-id="Mitra Resmi"],[data-en="Official Partner"]');
+        if (mitraEl) mitraEl.textContent = isId ? 'Mitra Resmi' : 'Official Partner';
+
+        // â”€â”€ Update dark mode toggle text to match current language â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        const isDark = document.documentElement.classList.contains('dark');
+        document.querySelectorAll('[data-theme-text]').forEach(el => {
+            el.textContent = isDark
+                ? (isId ? 'MODE GELAP'  : 'DARK MODE')
+                : (isId ? 'MODE TERANG' : 'LIGHT MODE');
+        });
+
+        // Re-render product descriptions
+        if (currentProduct) renderDescriptions(currentProduct);
+        // Re-render UI that uses T() — button, stock info (if already selected)
+        if (currentProduct) {
+            updateCartBtn();
+            // Re-run bordir info if checked
+            if (document.getElementById('bordir-nama-cb') && 
+                (document.getElementById('bordir-nama-cb').checked || document.getElementById('bordir-logo-cb').checked)) {
+                updateBordirPrice();
+            }
+        }
+    }
+    // Apply saved language on load
+    const savedLang = localStorage.getItem('ws_lang') || 'id';
+    setLang(savedLang, false);
+
+
+    init();
+</script>
+<script>window._productPageActive = true;</script>
+<script src="main.js"></script>
+</body>
+</html>

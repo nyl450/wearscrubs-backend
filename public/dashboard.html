@@ -1,0 +1,2213 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WearScrubs — Admin Dashboard</title>
+    <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#0f0f0f', darkcard: '#1a1a1a', darkborder: 'rgba(255,255,255,0.07)' } } } }</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+        #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
+        .sidebar-btn.active { background: rgba(255,255,255,0.1); color: white; }
+        .status-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .photo-drop-zone { border: 2px dashed rgba(255,255,255,0.12); transition: all 0.2s; }
+        .photo-drop-zone:hover { border-color: rgba(99,102,241,0.6); background: rgba(99,102,241,0.05); }
+        input[type=text], input[type=number], textarea, select { background: #1a1a1a; border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 0.75rem; padding: 0.65rem 1rem; font-size: 0.875rem; width: 100%; outline: none; transition: all 0.2s; }
+        input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: rgba(99,102,241,0.7); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+        select option { background: #1a1a1a; }
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+        .pop-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
+        .pop-card.selected { border-color: rgba(99,102,241,0.7); background: rgba(99,102,241,0.08); }
+        .chart-tab-btn.active { background: white; color: black; }
+    </style>
+</head>
+<body class="bg-darkbg text-white min-h-screen">
+
+<!-- HEADER -->
+<header class="bg-darkcard border-b border-darkborder sticky top-0 z-50 h-16 flex items-center px-6">
+    <div class="flex items-center gap-3 flex-1">
+        <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto object-contain">
+        <span class="text-xs font-bold tracking-widest text-white/30 uppercase ml-2 hidden sm:block">Admin Portal</span>
+    </div>
+    <div class="flex items-center gap-4">
+        <div id="header-pending-badge" class="hidden items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-full">
+            <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+            <span id="header-pending-count" class="text-xs font-bold text-red-400">0 Pesanan Baru</span>
+        </div>
+        <a href="index.html" target="_blank" class="text-xs text-white/40 hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> <span class="hidden sm:inline">Lihat Website</span>
+        </a>
+        <div class="flex items-center gap-2 pl-4 border-l border-white/10">
+            <div class="text-right hidden sm:block">
+                <p id="admin-username" class="text-xs font-semibold text-white">Admin</p>
+                <p id="admin-role" class="text-[10px] font-bold uppercase tracking-wider text-yellow-400">admin</p>
+            </div>
+            <button onclick="doLogout()" title="Logout"
+                class="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all group">
+                <i class="fa-solid fa-right-from-bracket text-[11px] text-white/40 group-hover:text-red-400 transition-colors"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<div class="flex h-[calc(100vh-64px)]">
+
+<!-- SIDEBAR -->
+<aside class="w-52 bg-darkcard border-r border-darkborder flex flex-col shrink-0 overflow-y-auto">
+    <nav class="p-3 flex-1 space-y-0.5 pt-4">
+        <button onclick="showModule('overview')" class="sidebar-btn active w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="overview">
+            <i class="fa-solid fa-chart-line w-4 text-xs"></i> Overview
+        </button>
+        <button onclick="showModule('products')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="products">
+            <i class="fa-solid fa-box-open w-4 text-xs"></i> Produk
+        </button>
+        <button onclick="showModule('inventory')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="inventory">
+            <i class="fa-solid fa-warehouse w-4 text-xs"></i> Inventori
+        </button>
+        <button onclick="showModule('popular')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="popular">
+            <i class="fa-solid fa-star w-4 text-xs"></i> Popular
+        </button>
+        <button onclick="showModule('orders')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="orders">
+            <i class="fa-solid fa-bag-shopping w-4 text-xs"></i> Pesanan
+            <span id="orders-badge" class="hidden ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
+        </button>
+    </nav>
+    <!-- Settings (Admin only) -->
+    <div id="sidebar-settings-wrap" class="p-3 border-t border-darkborder">
+        <button onclick="showModule('settings')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left">
+            <i class="fa-solid fa-gear w-4 text-xs"></i> Pengaturan
+        </button>
+    </div>
+    <div class="px-4 pb-3"><p class="text-[9px] text-white/15 text-center">WearScrubs v3.0</p></div>
+</aside>
+
+<!-- MAIN -->
+<main class="flex-1 overflow-y-auto">
+
+    <!-- OVERVIEW -->
+    <div id="module-overview" class="p-6 space-y-6">
+        <h2 class="text-xl font-bold">Overview</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Total Produk</p>
+                <p id="stat-products" class="text-3xl font-bold">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Aktif di katalog</p>
+            </div>
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Order Selesai</p>
+                <p id="stat-done" class="text-3xl font-bold text-green-400">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Status: Done</p>
+            </div>
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Order Pending</p>
+                <p id="stat-pending" class="text-3xl font-bold text-yellow-400">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Menunggu konfirmasi</p>
+            </div>
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Total Pendapatan</p>
+                <p id="stat-revenue" class="text-2xl font-bold text-indigo-400">—</p>
+                <p class="text-[10px] text-white/30 mt-1">Order terbayar</p>
+            </div>
+        </div>
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-sm">Statistik</h3>
+                <div class="flex gap-2">
+                    <button onclick="switchChart('products')" data-tab="products" class="chart-tab-btn active text-[10px] font-bold px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Produk</button>
+                    <button onclick="switchChart('orders')" data-tab="orders" class="chart-tab-btn text-[10px] font-bold px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Orders</button>
+                    <button onclick="switchChart('revenue')" data-tab="revenue" class="chart-tab-btn text-[10px] font-bold px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Pendapatan</button>
+                </div>
+            </div>
+            <div class="relative h-52"><canvas id="main-chart"></canvas></div>
+        </div>
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center">
+                <h3 class="font-bold text-sm">Pesanan Terbaru</h3>
+                <button onclick="showModule('orders')" class="text-xs text-white/40 hover:text-white transition">Lihat Semua →</button>
+            </div>
+            <div id="recent-orders-table"></div>
+        </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div id="module-products" class="hidden p-6 space-y-4">
+        <div class="flex justify-between items-center">
+            <h2 class="text-xl font-bold">Manajemen Produk</h2>
+            <button onclick="openProductModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all">
+                <i class="fa-solid fa-plus"></i> Tambah Produk
+            </button>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <button onclick="filterProducts('all')" data-tab="all" class="prod-tab-btn active text-xs font-bold px-4 py-2 rounded-xl bg-white text-black">Semua</button>
+            <button onclick="filterProducts('tops')" data-tab="tops" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Atasan</button>
+            <button onclick="filterProducts('pants')" data-tab="pants" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Celana</button>
+            <button onclick="filterProducts('caps')" data-tab="caps" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Topi</button>
+            <button onclick="filterProducts('gown')" data-tab="gown" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Gown</button>
+        </div>
+        <div id="products-empty" class="hidden text-center py-16 text-white/30 text-sm">
+            <i class="fa-solid fa-box-open text-4xl mb-4 block opacity-20"></i>
+            Belum ada produk. Klik "Tambah Produk" untuk memulai.
+        </div>
+        <div id="products-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div id="module-inventory" class="hidden p-6 space-y-4">
+        <div class="flex justify-between items-center flex-wrap gap-4">
+            <h2 class="text-xl font-bold">Manajemen Inventori</h2>
+            <div class="flex gap-3 items-center">
+                <select id="inv-product-filter" onchange="loadInventory()" class="!w-48 !py-2">
+                    <option value="">Semua Produk</option>
+                </select>
+                <button onclick="saveInventory()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all">
+                    <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Semua
+                </button>
+            </div>
+        </div>
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-darkborder">
+                        <tr class="text-[10px] text-white/40 uppercase tracking-wider">
+                            <th class="px-5 py-3 text-left">Produk</th>
+                            <th class="px-5 py-3 text-left">Warna</th>
+                            <th class="px-5 py-3 text-left">Tipe</th>
+                            <th class="px-5 py-3 text-left">Size</th>
+                            <th class="px-5 py-3 text-center">Stok</th>
+                            <th class="px-5 py-3 text-center">Simpan</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-tbody" class="divide-y divide-darkborder"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- POPULAR -->
+    <div id="module-popular" class="hidden p-6 space-y-4">
+        <div class="flex justify-between items-center flex-wrap gap-4">
+            <div>
+                <h2 class="text-xl font-bold">Produk Popular</h2>
+                <p class="text-xs text-white/40 mt-1">Pilih maksimal 4 produk untuk ditampilkan di halaman utama.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="popular-count-label" class="text-xs text-white/40">0 / 4 dipilih</span>
+                <button onclick="savePopular()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all">
+                    <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan
+                </button>
+            </div>
+        </div>
+        <div id="popular-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+    </div>
+
+    <!-- ORDERS -->
+    <div id="module-orders" class="hidden p-6 space-y-4">
+        <div class="flex justify-between items-center flex-wrap gap-3">
+            <h2 class="text-xl font-bold">Manajemen Pesanan</h2>
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black">Semua</button>
+                <button onclick="filterOrders('pending')" data-tab="pending" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">Belum Bayar</button>
+                <button onclick="filterOrders('paid')" data-tab="paid" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">Dikonfirmasi</button>
+                <button onclick="filterOrders('bordir')" data-tab="bordir" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🧵 Bordir</button>
+                <button onclick="filterOrders('shipped')" data-tab="shipped" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">Dikirim</button>
+                <button onclick="filterOrders('cancelled')" data-tab="cancelled" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">❌ Dibatalkan</button>
+            </div>
+        </div>
+        <div id="orders-list" class="space-y-3"></div>
+    </div>
+
+    <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
+    <div id="module-settings" class="hidden p-6 space-y-8 max-w-4xl">
+        <h2 class="text-xl font-bold">Pengaturan</h2>
+
+        <!-- ── Ganti Password ──────────────────────────────────────────── -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
+            <div class="flex items-center gap-3 mb-1">
+                <div class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center">
+                    <i class="fa-solid fa-lock text-sm text-white/60"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base">Ganti Password</h3>
+                    <p class="text-xs text-white/40">Ubah password akun Anda saat ini</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Password Lama</label>
+                    <div class="relative">
+                        <input type="password" id="cp-old" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30" placeholder="••••••••">
+                        <button type="button" onclick="togglePw('cp-old',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"><i class="fa-solid fa-eye text-xs"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Password Baru</label>
+                    <div class="relative">
+                        <input type="password" id="cp-new" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30" placeholder="Min. 8 karakter">
+                        <button type="button" onclick="togglePw('cp-new',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"><i class="fa-solid fa-eye text-xs"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Konfirmasi Password</label>
+                    <div class="relative">
+                        <input type="password" id="cp-confirm" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30" placeholder="Ulangi password baru">
+                        <button type="button" onclick="togglePw('cp-confirm',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"><i class="fa-solid fa-eye text-xs"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="cp-error" class="hidden text-xs text-red-400 flex items-center gap-1.5"><i class="fa-solid fa-circle-exclamation"></i><span id="cp-error-text"></span></div>
+            <div class="flex justify-end">
+                <button onclick="changePassword()" class="px-6 py-2.5 rounded-xl bg-white text-black text-sm font-bold hover:bg-gray-200 transition-colors">
+                    <i class="fa-solid fa-save mr-2"></i>Simpan Password
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Manajemen User (Admin only) ────────────────────────────── -->
+        <div id="user-mgmt-section" class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center">
+                        <i class="fa-solid fa-users-gear text-sm text-white/60"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base">Manajemen Pengguna</h3>
+                        <p class="text-xs text-white/40">Kelola akun dan hak akses menu</p>
+                    </div>
+                </div>
+                <button onclick="openUserModal()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-gray-200 transition-colors">
+                    <i class="fa-solid fa-plus"></i> Tambah User
+                </button>
+            </div>
+
+            <!-- User Table -->
+            <div class="overflow-x-auto rounded-xl border border-white/5">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-white/5 text-[11px] font-bold uppercase tracking-widest text-white/30">
+                            <th class="text-left px-4 py-3">Username</th>
+                            <th class="text-left px-4 py-3">Role</th>
+                            <th class="text-left px-4 py-3">Akses Menu</th>
+                            <th class="text-left px-4 py-3">Status</th>
+                            <th class="text-left px-4 py-3">Dibuat</th>
+                            <th class="px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-table-body">
+                        <tr><td colspan="6" class="text-center py-8 text-white/30 text-sm">Memuat data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</main>
+</div>
+
+<!-- ═══ USER MODAL ════════════════════════════════════════════════════════════ -->
+<div id="user-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
+    <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
+            <h3 id="user-modal-title" class="font-bold text-base">Tambah Pengguna</h3>
+            <button onclick="closeUserModal()" class="text-white/40 hover:text-white transition"><i class="fa-solid fa-times text-lg"></i></button>
+        </div>
+        <div class="p-6 space-y-5">
+            <!-- Username -->
+            <div>
+                <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Username</label>
+                <input type="text" id="um-username" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30" placeholder="Masukkan username">
+            </div>
+            <!-- Password -->
+            <div id="um-pw-wrap">
+                <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Password <span id="um-pw-hint" class="normal-case tracking-normal font-normal text-white/30">(min. 8 karakter)</span></label>
+                <div class="relative">
+                    <input type="password" id="um-password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30" placeholder="••••••••">
+                    <button type="button" onclick="togglePw('um-password',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"><i class="fa-solid fa-eye text-xs"></i></button>
+                </div>
+                <p id="um-pw-edit-note" class="hidden text-xs text-white/30 mt-1">Kosongkan jika tidak ingin mengubah password</p>
+            </div>
+            <!-- Role -->
+            <div>
+                <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Role</label>
+                <select id="um-role" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white/30 appearance-none" onchange="updateMenuAccessByRole()">
+                    <option value="viewer" class="bg-darkcard">Viewer</option>
+                    <option value="manager" class="bg-darkcard">Manager</option>
+                    <option value="admin" class="bg-darkcard">Admin</option>
+                </select>
+                <div class="mt-2 text-xs text-white/30 space-y-0.5">
+                    <p><span class="text-yellow-400 font-semibold">Admin</span> — Akses penuh, kelola user</p>
+                    <p><span class="text-blue-400 font-semibold">Manager</span> — Tambah/edit produk, inventori, pesanan</p>
+                    <p><span class="text-gray-400 font-semibold">Viewer</span> — Hanya bisa melihat, tidak bisa edit</p>
+                </div>
+            </div>
+            <!-- Menu Access -->
+            <div id="um-menus-wrap">
+                <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Akses Menu <span class="normal-case tracking-normal font-normal text-white/30">(centang menu yang bisa diakses)</span></label>
+                <div class="space-y-2" id="um-menu-checkboxes">
+                    <!-- Generated by JS -->
+                </div>
+                <p class="text-xs text-white/25 mt-2 italic">* Admin mendapat akses ke semua menu secara otomatis</p>
+            </div>
+            <!-- Error -->
+            <div id="um-error" class="hidden flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
+                <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+                <span id="um-error-text"></span>
+            </div>
+        </div>
+        <div class="px-6 pb-6 flex gap-3 justify-end">
+            <button onclick="closeUserModal()" class="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors">Batal</button>
+            <button onclick="saveUser()" id="um-save-btn" class="px-6 py-2.5 rounded-xl bg-white text-black text-sm font-bold hover:bg-gray-200 transition-colors">
+                <span id="um-save-text">Simpan</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div id="product-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] hidden items-center justify-center p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
+    <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center">
+        <div>
+            <h3 id="modal-title" class="font-bold text-lg">Tambah Produk Baru</h3>
+            <div class="flex items-center gap-1.5 mt-1.5">
+                <span id="sd1" class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                <span id="sd2" class="w-2 h-2 rounded-full bg-white/10"></span>
+                <span id="sd3" class="w-2 h-2 rounded-full bg-white/10"></span>
+                <span id="step-label" class="text-[10px] text-white/30 ml-1">Langkah 1/3</span>
+            </div>
+        </div>
+        <button onclick="closeProductModal()" class="text-white/40 hover:text-white transition"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <form id="product-form" class="flex-1 overflow-y-auto">
+        <input type="hidden" id="pf-id">
+        <!-- STEP 1 -->
+        <div id="step-1" class="p-6 space-y-5">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">SKU *</label>
+                    <input type="text" id="pf-sku" placeholder="WS-TOP-MINNA" required>
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Nama Produk *</label>
+                    <input type="text" id="pf-name" placeholder="Minna" required>
+                </div>
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Kategori</label>
+                <select id="pf-category" onchange="handleCategoryChange()" class="w-full !py-3">
+                    <option value="tops">Atasan Scrub</option>
+                    <option value="pants">Celana Scrub</option>
+                    <option value="caps">Topi Scrub</option>
+                    <option value="gown">Gown</option>
+                </select>
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Deskripsi Singkat <span class="text-indigo-400">(ID)</span></label>
+                <input type="text" id="pf-short-desc" placeholder="Tagline singkat produk (Bahasa Indonesia)...">
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Deskripsi Lengkap <span class="text-indigo-400">(ID)</span></label>
+                <textarea id="pf-long-desc" rows="3" placeholder="Detail produk (Bahasa Indonesia)..."></textarea>
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Short Description <span class="text-emerald-400">(EN)</span></label>
+                <input type="text" id="pf-short-desc-en" placeholder="Product tagline (English)...">
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Long Description <span class="text-emerald-400">(EN)</span></label>
+                <textarea id="pf-long-desc-en" rows="3" placeholder="Product details (English)..."></textarea>
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Status</label>
+                <select id="pf-status" class="w-full !py-3">
+                    <option value="active">Active</option>
+                    <option value="draft">Draft</option>
+                    <option value="out_of_stock">Out of Stock</option>
+                </select>
+            </div>
+            <div class="flex justify-end pt-2 border-t border-white/8">
+                <button type="button" onclick="goToStep(2)" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-all">Lanjut: Variasi →</button>
+            </div>
+        </div>
+
+        <!-- STEP 2 -->
+        <div id="step-2" class="hidden p-6 space-y-6">
+
+            <!-- Atasan: Sub-Tipe + Harga per tipe -->
+            <div id="tops-variants-wrap" class="space-y-3">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Sub-Tipe / Lengan</label>
+                <p class="text-[10px] text-white/30">Centang tipe yang tersedia, lalu isi harga masing-masing di sebelah kanannya.</p>
+                <div class="space-y-2.5">
+                    <!-- Lengan Pendek -->
+                    <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-4 py-3">
+                        <input type="checkbox" name="pf-types" value="pendek" id="type-pendek" class="w-4 h-4 rounded accent-indigo-500 shrink-0" onchange="updateTypePriceFields()">
+                        <label for="type-pendek" class="text-sm font-medium text-white/70 cursor-pointer w-32 shrink-0">Lengan Pendek</label>
+                        <div class="flex items-center gap-2 flex-1">
+                            <span class="text-xs text-white/30 shrink-0">Rp</span>
+                            <input type="number" id="price-type-pendek" data-type="pendek" placeholder="260000" class="flex-1 !py-1.5 !text-sm" disabled>
+                        </div>
+                    </div>
+                    <!-- Lengan Panjang -->
+                    <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-4 py-3">
+                        <input type="checkbox" name="pf-types" value="panjang" id="type-panjang" class="w-4 h-4 rounded accent-indigo-500 shrink-0" onchange="updateTypePriceFields()">
+                        <label for="type-panjang" class="text-sm font-medium text-white/70 cursor-pointer w-32 shrink-0">Lengan Panjang</label>
+                        <div class="flex items-center gap-2 flex-1">
+                            <span class="text-xs text-white/30 shrink-0">Rp</span>
+                            <input type="number" id="price-type-panjang" data-type="panjang" placeholder="280000" class="flex-1 !py-1.5 !text-sm" disabled>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Celana: Sub-Tipe -->
+            <div id="pants-variants-wrap" class="hidden space-y-3">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Potongan</label>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-5 py-3.5">
+                        <input type="checkbox" name="pf-types" value="straight" id="type-straight" class="w-4.5 h-4.5 rounded accent-indigo-500">
+                        <label for="type-straight" class="text-sm font-semibold text-white/80 cursor-pointer">Straight Cut</label>
+                    </div>
+                    <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-5 py-3.5">
+                        <input type="checkbox" name="pf-types" value="jogger" id="type-jogger" class="w-4.5 h-4.5 rounded accent-indigo-500">
+                        <label for="type-jogger" class="text-sm font-semibold text-white/80 cursor-pointer">Jogger Style</label>
+                    </div>
+                </div>
+                <!-- Single price for pants/caps -->
+                <div class="flex items-center gap-3 mt-1">
+                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider shrink-0">Harga (Rp)</label>
+                    <input type="number" id="pf-price-single" placeholder="270000" class="flex-1 !py-1.5">
+                </div>
+            </div>
+
+            <!-- Caps: single price -->
+            <div id="caps-price-wrap" class="hidden space-y-1.5">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">Harga (Rp) *</label>
+                <input type="number" id="pf-price-caps" placeholder="120000">
+            </div>
+
+            <!-- Gown: sub-tipe Polos / Ber Design dengan harga per sub-tipe -->
+            <div id="gown-variants-wrap" class="hidden space-y-4">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Sub-Tipe Gown</label>
+                <p class="text-[10px] text-white/30">Centang sub-tipe yang tersedia, lalu isi harga masing-masing.</p>
+                <div class="space-y-2.5">
+                    <!-- Polos -->
+                    <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-4 py-3">
+                        <input type="checkbox" name="pf-types" value="polos" id="type-gown-polos" class="w-4 h-4 rounded accent-indigo-500 shrink-0" onchange="handleGownSubTypeChange()">
+                        <label for="type-gown-polos" class="text-sm font-medium text-white/70 cursor-pointer w-32 shrink-0">Polos</label>
+                        <div class="flex items-center gap-2 flex-1">
+                            <span class="text-xs text-white/30 shrink-0">Rp</span>
+                            <input type="number" id="price-type-polos" data-type="polos" placeholder="150000" class="flex-1 !py-1.5 !text-sm" disabled>
+                        </div>
+                    </div>
+                    <!-- Ber Design -->
+                    <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-4 py-3">
+                        <input type="checkbox" name="pf-types" value="ber-design" id="type-gown-design" class="w-4 h-4 rounded accent-indigo-500 shrink-0" onchange="handleGownSubTypeChange()">
+                        <label for="type-gown-design" class="text-sm font-medium text-white/70 cursor-pointer w-32 shrink-0">Ber Design</label>
+                        <div class="flex items-center gap-2 flex-1">
+                            <span class="text-xs text-white/30 shrink-0">Rp</span>
+                            <input type="number" id="price-type-ber-design" data-type="ber-design" placeholder="175000" class="flex-1 !py-1.5 !text-sm" disabled>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gown Warna (muncul kalau Polos aktif) -->
+                <div id="gown-color-section" class="hidden space-y-2.5 pt-2 border-t border-white/8">
+                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Warna Gown Polos</label>
+                    <div id="gown-color-btns" class="flex flex-wrap gap-3"></div>
+                </div>
+
+                <!-- Gown Motif (muncul kalau Ber Design aktif) -->
+                <div id="gown-motif-section" class="hidden space-y-2.5 pt-2 border-t border-white/8">
+                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Motif / Desain</label>
+                    <p class="text-[10px] text-white/30">Centang semua motif yang tersedia untuk produk ini.</p>
+                    <div id="gown-motif-btns" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+
+            <!-- Warna -->
+            <div class="space-y-3">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Warna Tersedia</label>
+                <div id="color-btns" class="flex flex-wrap gap-3.5"></div>
+            </div>
+
+            <!-- Ukuran -->
+            <div class="space-y-3">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Ukuran Tersedia</label>
+                <div id="size-btns" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="flex justify-between pt-2 border-t border-white/8">
+                <button type="button" onclick="goToStep(1)" class="text-white/40 hover:text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-all">← Kembali</button>
+                <button type="button" onclick="goToStep(3)" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-all">Lanjut: Foto →</button>
+            </div>
+        </div>
+        <!-- STEP 3 -->
+        <div id="step-3" class="hidden p-6 space-y-5">
+            <div class="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl">
+                <p class="text-xs text-indigo-300"><i class="fa-solid fa-circle-info mr-2"></i>Upload foto atau masukkan path foto lokal (contoh: <code class="bg-black/20 px-1 rounded">images/Minna LS Black/1.png</code>)</p>
+            </div>
+            <div id="photo-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            <div class="flex justify-between pt-2">
+                <button type="button" onclick="goToStep(2)" class="text-white/40 hover:text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all">← Kembali</button>
+                <button type="submit" id="save-btn" class="bg-green-600 hover:bg-green-500 text-white px-8 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-green-600/20">
+                    <i class="fa-solid fa-check-double mr-2"></i> Simpan & Publikasikan
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+</div>
+
+<!-- ORDER DETAIL MODAL -->
+<div id="order-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[999] hidden items-center justify-center p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto">
+    <div class="px-6 py-5 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
+        <div>
+            <p class="text-xs text-white/40 font-mono mb-0.5" id="order-modal-code">—</p>
+            <h3 class="font-bold text-lg" id="order-modal-name">Detail Pesanan</h3>
+        </div>
+        <button onclick="closeOrderModal()" class="text-white/40 hover:text-white transition"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <div id="order-modal-content" class="p-6 space-y-5"></div>
+</div>
+</div>
+
+<!-- PHOTO UPLOAD MODAL -->
+<div id="photo-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md">
+    <div class="px-6 py-5 border-b border-darkborder flex justify-between items-center">
+        <h3 id="photo-modal-title" class="font-bold">Upload Foto Bukti</h3>
+        <button onclick="closePhotoModal()" class="text-white/40 hover:text-white"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div class="p-6 space-y-4">
+        <div id="photo-preview-wrap" class="hidden">
+            <img id="photo-preview-img" src="" class="w-full rounded-xl max-h-48 object-cover mb-2">
+            <p id="photo-preview-name" class="text-[10px] text-white/40 text-center mb-3 truncate"></p>
+        </div>
+        <div id="photo-upload-zone" class="space-y-1">
+            <span class="text-xs text-white/50 uppercase tracking-wider font-bold">Foto Bukti *</span>
+            <div class="mt-2 border-2 border-dashed border-white/20 hover:border-white/40 rounded-xl p-6 text-center cursor-pointer transition"
+                 onclick="triggerPhotoInput()">
+                <i class="fa-solid fa-camera text-2xl text-white/30 mb-2 block"></i>
+                <p class="text-sm text-white/40">Klik untuk pilih foto</p>
+                <p class="text-[10px] text-white/30 mt-1">JPG, PNG, WEBP (maks 10MB)</p>
+            </div>
+        </div>
+        <button id="photo-change-btn" class="hidden text-xs text-white/40 hover:text-white/60 underline w-full text-center" onclick="resetPhotoUpload()">Ganti foto</button>
+        <input type="file" id="photo-file-input" accept="image/*" class="hidden" onchange="previewPhotoFile(this)">
+        <div id="photo-modal-extra"></div>
+        <div class="flex gap-3">
+            <button onclick="closePhotoModal()" class="flex-1 py-2.5 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5 transition">Batal</button>
+            <button id="photo-modal-submit" onclick="submitPhotoModal()" class="flex-1 py-2.5 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition">Konfirmasi</button>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-6 right-6 z-[9999] hidden">
+    <div class="bg-darkcard border border-darkborder px-5 py-3 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-3">
+        <i id="toast-icon" class="fa-solid fa-check-circle text-green-400"></i>
+        <span id="toast-msg"></span>
+    </div>
+</div>
+
+<script>
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3000'
+    : 'https://wearscrubs-production.up.railway.app';
+
+// ── Auth Guard ────────────────────────────────────────────────────────────────
+(function checkAuth() {
+    const token = localStorage.getItem('ws_admin_token');
+    if (!token) { window.location.replace('login.html'); return; }
+    // Verify token is still valid
+    fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(r => { if (!r.ok) { localStorage.removeItem('ws_admin_token'); window.location.replace('login.html'); } })
+        .catch(() => { /* allow offline */ });
+    // Show user info in sidebar
+    const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    const roleColors = { admin: 'text-yellow-400', manager: 'text-blue-400', viewer: 'text-gray-400' };
+    document.addEventListener('DOMContentLoaded', () => {
+        const nameEl = document.getElementById('admin-username');
+        const roleEl = document.getElementById('admin-role');
+        if (nameEl) nameEl.textContent = user.username || 'Admin';
+        if (roleEl) { roleEl.textContent = user.role || 'admin'; roleEl.className = `text-[10px] font-bold uppercase tracking-wider ${roleColors[user.role] || 'text-gray-400'}`; }
+    });
+})();
+
+function doLogout() {
+    localStorage.removeItem('ws_admin_token');
+    localStorage.removeItem('ws_admin_user');
+    window.location.replace('login.html');
+}
+
+const ALL_SIZES = { tops: ['S','M','L','XL','XXL'], pants: ['S','M','L','XL','XXL'], caps: ['S','L'], gown: ['M','XL','XXL'] };
+const ALL_COLORS = [
+    // Scrub colors
+    { id: 'black',        label: 'Black',        hex: '#000000' },
+    { id: 'beige',        label: 'Beige',        hex: '#d7c5a9' },
+    { id: 'olive',        label: 'Olive',        hex: '#696250' },
+    { id: 'charcoal-grey',label: 'Charcoal Grey',hex: '#5f5051' },
+    { id: 'light-grey',   label: 'Light Grey',   hex: '#898391' },
+    { id: 'maroon',       label: 'Maroon',       hex: '#6c1b22' },
+    { id: 'purple',       label: 'Purple',       hex: '#a4b4e8' },
+    { id: 'blush',        label: 'Blush',        hex: '#f0c6bb' },
+    { id: 'turquoise',    label: 'Turquoise',    hex: '#40e0d0' },
+    { id: 'white',        label: 'White',        hex: '#f0f0f0' },
+];
+const ALL_GOWN_COLORS = [
+    { id: 'navy',       label: 'Navy',       hex: '#1b2a6b' },
+    { id: 'tosca',      label: 'Tosca',      hex: '#00a693' },
+    { id: 'orange',     label: 'Orange',     hex: '#f97316' },
+    { id: 'blue',       label: 'Blue',       hex: '#3b82f6' },
+    { id: 'purple',     label: 'Purple',     hex: '#a4b4e8' },
+    { id: 'off-white',  label: 'Off White',  hex: '#f5f0e8' },
+    { id: 'grey',       label: 'Grey',       hex: '#9ca3af' },
+    { id: 'new-pink',   label: 'New Pink',   hex: '#f472b6' },
+    { id: 'green-mint', label: 'Green Mint', hex: '#6ee7b7' },
+    { id: 'baby-blue',  label: 'Baby Blue',  hex: '#93c5fd' },
+    { id: 'baby-pink',  label: 'Baby Pink',  hex: '#fbcfe8' },
+    { id: 'old-pink',   label: 'Old Pink',   hex: '#e8a0a0' },
+];
+const ALL_MOTIFS = [
+    { id: 'sea-world',         label: 'Sea World' },
+    { id: 'balloon',           label: 'Balloon' },
+    { id: 'princess',          label: 'Princess' },
+    { id: 'fruits',            label: 'Fruits' },
+    { id: 'numbers',           label: 'Numbers' },
+    { id: 'fairies',           label: 'Fairies' },
+    { id: 'baby-tooth-grey',   label: 'Baby Tooth Grey' },
+    { id: 'baby-tooth-maroon', label: 'Baby Tooth Maroon' },
+    { id: 'brush-tooth',       label: 'Brush Tooth' },
+    { id: 'cars',              label: 'Cars' },
+    { id: 'circus',            label: 'Circus' },
+    { id: 'tooth-doodle',      label: 'Tooth Doodle' },
+];
+const ORDER_STATUS_MAP = {
+    waiting_payment: { label: 'Menunggu Bayar', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' },
+    confirmed: { label: 'Terkonfirmasi', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
+    packed: { label: 'Dikemas', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+    shipped: { label: 'Dikirim', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
+    done: { label: 'Selesai', color: 'bg-gray-500/10 text-gray-400 border-gray-500/20' },
+    cancelled: { label: 'Dibatalkan', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+};
+
+let allProducts = [], inventoryEdits = {}, popularSelected = new Set();
+let currentOrderFilter = 'all', currentProductFilter = 'all';
+let mainChart = null, statsData = null;
+
+function toast(msg, isErr = false) {
+    const el = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    document.getElementById('toast-icon').className = `fa-solid ${isErr ? 'fa-triangle-exclamation text-red-400' : 'fa-check-circle text-green-400'}`;
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 3500);
+}
+function fmt(n) { return Number(n||0).toLocaleString('id-ID'); }
+function statusBadge(s) {
+    // Full implementation in renderOrders section below
+    const label = { waiting_payment:'⏳ Menunggu Bayar', confirmed:'✅ Dikonfirmasi', bordir:'🧵 Proses Bordir', packed:'📦 Dikemas', shipped:'🚚 Dikirim', done:'✔ Selesai', cancelled:'❌ Dibatalkan' };
+    const color = { waiting_payment:'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', confirmed:'bg-blue-500/10 text-blue-400 border-blue-500/20', bordir:'bg-purple-500/10 text-purple-300 border-purple-500/20', packed:'bg-teal-500/10 text-teal-400 border-teal-500/20', shipped:'bg-indigo-500/10 text-indigo-400 border-indigo-500/20', done:'bg-green-500/10 text-green-400 border-green-500/20', cancelled:'bg-red-500/10 text-red-400 border-red-500/20' };
+    return `<span class="status-badge border ${color[s]||'bg-white/5 text-white/50 border-white/10'}">${label[s]||s}</span>`;
+}
+function resolvePhoto(url) {
+    if (!url) return '';
+    return url.startsWith('/uploads/') ? API + url : url;
+}
+
+async function apiFetch(url, options = {}) {
+    const token = localStorage.getItem('ws_admin_token');
+    if (!options.headers) options.headers = {};
+    if (token) options.headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(API + url, options);
+    if (res.status === 401) { doLogout(); return; }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+        const txt = await res.text();
+        throw new Error(`Server error (${res.status}): ${txt.slice(0,200)}`);
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    return data;
+}
+
+function showModule(name) {
+    document.querySelectorAll('[id^="module-"]').forEach(el => el.classList.add('hidden'));
+    document.getElementById('module-' + name)?.classList.remove('hidden');
+    document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
+    const btn = [...document.querySelectorAll('.sidebar-btn')].find(b => b.getAttribute('onclick')?.includes(`'${name}'`));
+    if (btn) btn.classList.add('active');
+    if (name === 'overview')  loadOverview();
+    if (name === 'products')  loadProducts();
+    if (name === 'inventory') loadInventory();
+    if (name === 'popular')   loadPopular();
+    if (name === 'orders')    loadOrders();
+    if (name === 'settings')  loadSettings();
+}
+
+// ─── OVERVIEW ────────────────────────────────────────────────────────────────
+async function loadOverview() {
+    try {
+        statsData = await apiFetch('/api/stats/overview');
+        document.getElementById('stat-products').textContent = statsData.total_products;
+        document.getElementById('stat-done').textContent = statsData.done_orders;
+        document.getElementById('stat-pending').textContent = statsData.pending_orders;
+        document.getElementById('stat-revenue').textContent = 'Rp ' + fmt(statsData.total_revenue);
+        if (statsData.pending_orders > 0) {
+            document.getElementById('header-pending-badge').classList.remove('hidden');
+            document.getElementById('header-pending-badge').classList.add('flex');
+            document.getElementById('header-pending-count').textContent = statsData.pending_orders + ' Pesanan Baru';
+            document.getElementById('orders-badge').textContent = statsData.pending_orders;
+            document.getElementById('orders-badge').classList.remove('hidden');
+        }
+        switchChart('products');
+        loadRecentOrders();
+    } catch(e) { console.error('Overview error:', e); }
+}
+
+function switchChart(type) {
+    document.querySelectorAll('.chart-tab-btn').forEach(b => {
+        const active = b.dataset.tab === type;
+        b.classList.toggle('active', active);
+        b.classList.toggle('bg-white', active);
+        b.classList.toggle('text-black', active);
+        b.classList.toggle('bg-white/5', !active);
+    });
+    if (!statsData) return;
+    if (mainChart) mainChart.destroy();
+    let labels = [], data = [], color = '';
+    if (type === 'products') {
+        const bycat = statsData.by_category || [];
+        labels = bycat.map(c => ({ tops:'Atasan', pants:'Celana', caps:'Topi', gown:'Gown' }[c.category] || c.category));
+        data = bycat.map(c => c.count);
+        color = 'rgba(99,102,241,0.7)';
+    } else if (type === 'orders') {
+        labels = (statsData.monthly||[]).map(m => m.month);
+        data = (statsData.monthly||[]).map(m => m.orders);
+        color = 'rgba(34,197,94,0.7)';
+    } else {
+        labels = (statsData.monthly||[]).map(m => m.month);
+        data = (statsData.monthly||[]).map(m => m.revenue);
+        color = 'rgba(168,85,247,0.7)';
+    }
+    const ctx = document.getElementById('main-chart').getContext('2d');
+    mainChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 8, borderSkipped: false }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => type === 'revenue' ? 'Rp ' + fmt(ctx.parsed.y) : ctx.parsed.y } } },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } } },
+                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, callback: v => type === 'revenue' ? 'Rp '+fmt(v) : v } }
+            }
+        }
+    });
+}
+
+async function loadRecentOrders() {
+    try {
+        const orders = await apiFetch('/api/orders');
+        const recent = orders.slice(0,5);
+        const el = document.getElementById('recent-orders-table');
+        if (!recent.length) { el.innerHTML = '<p class="text-center text-xs text-white/30 py-8">Belum ada pesanan</p>'; return; }
+        el.innerHTML = `<table class="w-full text-xs"><thead><tr class="border-b border-darkborder text-white/30 uppercase tracking-wider">
+            <th class="px-5 py-3 text-left">Kode</th><th class="px-5 py-3 text-left">Pelanggan</th>
+            <th class="px-5 py-3 text-right">Total</th><th class="px-5 py-3 text-center">Status</th>
+        </tr></thead><tbody class="divide-y divide-darkborder">
+            ${recent.map(o => `<tr class="hover:bg-white/2 cursor-pointer" onclick="viewOrder(${o.id})">
+                <td class="px-5 py-3 font-mono text-white/50">${o.order_code}</td>
+                <td class="px-5 py-3 font-medium">${o.customer_name}</td>
+                <td class="px-5 py-3 text-right text-green-400 font-bold">Rp ${fmt(o.total_amount)}</td>
+                <td class="px-5 py-3 text-center">${statusBadge(o.order_status)}</td>
+            </tr>`).join('')}
+        </tbody></table>`;
+    } catch(e) {}
+}
+
+// ─── PRODUCTS ────────────────────────────────────────────────────────────────
+async function loadProducts() {
+    try { allProducts = await apiFetch('/api/products?status=all'); }
+    catch { allProducts = []; }
+    renderProducts();
+}
+
+function filterProducts(cat) {
+    currentProductFilter = cat;
+    document.querySelectorAll('.prod-tab-btn').forEach(b => {
+        const a = b.dataset.tab === cat;
+        b.className = `prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl ${a ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10'}`;
+    });
+    renderProducts();
+}
+
+function renderProducts() {
+    const list = currentProductFilter === 'all' ? allProducts : allProducts.filter(p => p.category === currentProductFilter);
+    const grid = document.getElementById('products-grid');
+    const empty = document.getElementById('products-empty');
+    if (!list.length) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    const catLabel = { tops:'Atasan', pants:'Celana', caps:'Topi', gown:'Gown' };
+    grid.innerHTML = list.map(p => {
+        const photo = resolvePhoto(p.main_photo);
+        const safeP = JSON.stringify(p).replace(/"/g, '&quot;');
+        return `<div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden group">
+            <div class="aspect-[4/3] bg-black/20 overflow-hidden relative">
+                <img src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                     onerror="this.src='images/logo/logo%20ws%20white%20250x55.png'; this.classList.add('object-contain','p-8','opacity-30')">
+                <div class="absolute top-3 left-3 flex gap-2">
+                    <span class="text-[9px] font-bold px-2 py-1 rounded-full ${p.status==='active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">${p.status}</span>
+                    ${p.is_popular ? '<span class="text-[9px] font-bold px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">⭐ Popular</span>' : ''}
+                </div>
+            </div>
+            <div class="p-4">
+                <p class="text-[9px] text-white/30 uppercase tracking-wider">${catLabel[p.category]||p.category}</p>
+                <h4 class="font-bold text-sm mt-0.5">${p.name}</h4>
+                <p class="text-xs text-white/40 font-mono">${p.sku}</p>
+                <p class="text-sm text-green-400 font-bold mt-2">Rp ${fmt(p.price)}</p>
+                <div class="flex gap-2 mt-3 pt-3 border-t border-darkborder">
+                    <button onclick='openProductModal(${safeP})' class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-pen text-[9px]"></i> Edit
+                    </button>
+                    <a href="product.html?id=${p.id}" target="_blank" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-xs">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    </a>
+                    <button onclick="deleteProduct(${p.id},'${p.name}')" class="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition text-xs">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function deleteProduct(id, name) {
+    if (!confirm(`Hapus produk "${name}"?`)) return;
+    try { await apiFetch(`/api/products/${id}`, { method:'DELETE' }); toast(`"${name}" dihapus`); loadProducts(); }
+    catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+// ─── WIZARD ──────────────────────────────────────────────────────────────────
+let currentStep = 1;
+
+function goToStep(n) {
+    if (n === 2) {
+        const sku = document.getElementById('pf-sku').value.trim();
+        const name = document.getElementById('pf-name').value.trim();
+        if (!sku || !name) return toast('Harap isi SKU dan Nama Produk', true);
+    }
+    if (n === 3) {
+        const cat = document.getElementById('pf-category').value;
+        const types = [...document.querySelectorAll('input[name="pf-types"]:checked')].map(i => i.value);
+        // SCOPED query: for non-gown use #color-btns only, for gown use separate gown containers
+        // This prevents motif buttons from gown (still in DOM) bleeding into non-gown products
+        const colors = cat !== 'gown'
+            ? [...document.querySelectorAll('#color-btns .color-toggle.selected')].map(i => i.dataset.color)
+            : [];
+        const sizes = [...document.querySelectorAll('.size-toggle.selected')].map(i => i.dataset.size);
+        if (cat !== 'caps' && cat !== 'gown' && types.length === 0) return toast('Pilih minimal 1 tipe variasi', true);
+        if (cat === 'gown' && types.length === 0) return toast('Pilih minimal 1 sub-tipe Gown (Polos atau Ber Design)', true);
+        // For gown, collect from gown-specific containers
+        const selectedGownColors = cat === 'gown' ? [
+            ...[...document.querySelectorAll('#gown-color-btns .color-toggle.selected')].map(i => i.dataset.color),
+            ...[...document.querySelectorAll('#gown-motif-btns .color-toggle.selected')].map(i => i.dataset.color)
+        ] : [];
+        if (cat !== 'gown' && !colors.length) return toast('Pilih minimal 1 warna', true);
+        if (cat === 'gown' && !selectedGownColors.length) return toast('Pilih minimal 1 warna atau motif untuk Gown', true);
+        if (!sizes.length) return toast('Pilih minimal 1 ukuran', true);
+        const finalColors = cat === 'gown' ? selectedGownColors : colors;
+        generatePhotoSlots(finalColors, cat === 'caps' ? ['null'] : types);
+    }
+    document.querySelectorAll('[id^="step-"]').forEach(s => s.classList.add('hidden'));
+    document.getElementById('step-'+n).classList.remove('hidden');
+    for (let i=1;i<=3;i++) {
+        document.getElementById('sd'+i).className = `w-2 h-2 rounded-full ${i===n ? 'bg-indigo-500' : (i<n ? 'bg-indigo-300/40' : 'bg-white/10')}`;
+    }
+    document.getElementById('step-label').textContent = `Langkah ${n}/3`;
+    currentStep = n;
+}
+
+function handleCategoryChange() {
+    const cat = document.getElementById('pf-category').value;
+    document.getElementById('tops-variants-wrap').classList.toggle('hidden', cat !== 'tops');
+    document.getElementById('pants-variants-wrap').classList.toggle('hidden', cat !== 'pants');
+    document.getElementById('caps-price-wrap')?.classList.toggle('hidden', cat !== 'caps');
+    document.getElementById('gown-variants-wrap')?.classList.toggle('hidden', cat !== 'gown');
+    // Reset all type checkboxes and price inputs
+    document.querySelectorAll('input[name="pf-types"]').forEach(i => {
+        i.checked = false;
+        const priceId = `price-type-${i.value}`;
+        const priceEl = document.getElementById(priceId);
+        if (priceEl) { priceEl.disabled = true; priceEl.value = ''; }
+    });
+    // Reset gown sub-sections
+    document.getElementById('gown-color-section')?.classList.add('hidden');
+    document.getElementById('gown-motif-section')?.classList.add('hidden');
+    // Build color/size buttons for scrub categories (not gown)
+    if (cat !== 'gown') {
+        buildColorBtns([]);
+        // CRITICAL: clear gown btn containers so their .color-toggle.selected buttons
+        // don't bleed into non-gown querySelectorAll('.color-toggle.selected') calls
+        const gcb = document.getElementById('gown-color-btns');
+        const gmb = document.getElementById('gown-motif-btns');
+        if (gcb) gcb.innerHTML = '';
+        if (gmb) gmb.innerHTML = '';
+    }
+    buildSizeBtns(cat, []);
+    // For gown: build color + motif button areas but keep hidden until sub-type is chosen
+    if (cat === 'gown') {
+        buildGownColorBtns([]);
+        buildGownMotifBtns([]);
+    }
+}
+
+function updateTypePriceFields() {
+    // Enable price input for checked types, disable for unchecked
+    document.querySelectorAll('input[name="pf-types"]').forEach(checkbox => {
+        const priceEl = document.getElementById(`price-type-${checkbox.value}`);
+        if (priceEl) {
+            priceEl.disabled = !checkbox.checked;
+            if (!checkbox.checked) priceEl.value = '';
+        }
+    });
+}
+
+function buildSizeBtns(cat, selected) {
+    const sizes = ALL_SIZES[cat] || ['S','M','L','XL','XXL'];
+    document.getElementById('size-btns').innerHTML = sizes.map(s =>
+        `<button type="button" onclick="toggleSize(this)" data-size="${s}"
+            class="size-toggle ${selected.includes(s)?'selected bg-white text-black border-white':'bg-transparent text-white/50 border-white/10'} w-12 h-12 rounded-xl border text-xs font-bold hover:border-indigo-500 hover:text-white transition-all">
+            ${s}</button>`
+    ).join('');
+}
+
+function buildColorBtns(selected) {
+    document.getElementById('color-btns').innerHTML = ALL_COLORS.map(c =>
+        `<button type="button" onclick="toggleColor(this)" data-color="${c.id}" title="${c.label}"
+            class="color-toggle ${selected.includes(c.id)?'selected ring-2 ring-white ring-offset-2 ring-offset-darkcard scale-110':''}
+            w-10 h-10 rounded-full border-2 border-transparent transition-all hover:scale-110"
+            style="background:${c.hex}"></button>`
+    ).join('');
+}
+
+function buildGownColorBtns(selected) {
+    const el = document.getElementById('gown-color-btns');
+    if (!el) return;
+    el.innerHTML = ALL_GOWN_COLORS.map(c =>
+        `<button type="button" onclick="toggleColorInEl(this)" data-color="${c.id}" title="${c.label}"
+            class="color-toggle ${selected.includes(c.id)?'selected ring-2 ring-white ring-offset-2 ring-offset-darkcard scale-110':''}
+            w-10 h-10 rounded-full border-2 border-transparent transition-all hover:scale-110"
+            style="background:${c.hex}" data-label="${c.label}"></button>`
+    ).join('');
+}
+
+function buildGownMotifBtns(selected) {
+    const el = document.getElementById('gown-motif-btns');
+    if (!el) return;
+    el.innerHTML = ALL_MOTIFS.map(m =>
+        `<button type="button" onclick="toggleColorInEl(this)" data-color="${m.id}" title="${m.label}"
+            class="color-toggle ${selected.includes(m.id)?'selected bg-indigo-600 text-white border-indigo-400':'bg-white/5 text-white/60 border-white/10'}
+            px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all hover:border-indigo-400 hover:text-white"
+            data-label="${m.label}">${m.label}</button>`
+    ).join('');
+}
+
+function toggleColorInEl(btn) {
+    btn.classList.toggle('selected');
+    const isSel = btn.classList.contains('selected');
+    const isMotif = !btn.style.background || btn.style.background === '';
+    if (isMotif) {
+        btn.className = `color-toggle ${isSel ? 'selected bg-indigo-600 text-white border-indigo-400' : 'bg-white/5 text-white/60 border-white/10'} px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all hover:border-indigo-400 hover:text-white`;
+    } else {
+        if (isSel) { btn.classList.add('ring-2','ring-white','ring-offset-2','ring-offset-darkcard','scale-110'); }
+        else { btn.classList.remove('ring-2','ring-white','ring-offset-2','ring-offset-darkcard','scale-110'); }
+    }
+}
+
+function handleGownSubTypeChange() {
+    const polosChecked = document.getElementById('type-gown-polos')?.checked;
+    const designChecked = document.getElementById('type-gown-design')?.checked;
+    const polPrice = document.getElementById('price-type-polos');
+    const desPrice = document.getElementById('price-type-ber-design');
+    if (polPrice) { polPrice.disabled = !polosChecked; if (!polosChecked) polPrice.value = ''; }
+    if (desPrice) { desPrice.disabled = !designChecked; if (!designChecked) desPrice.value = ''; }
+    const colorSection = document.getElementById('gown-color-section');
+    const motifSection = document.getElementById('gown-motif-section');
+    if (colorSection) colorSection.classList.toggle('hidden', !polosChecked);
+    if (motifSection) motifSection.classList.toggle('hidden', !designChecked);
+}
+
+function toggleSize(btn) {
+    btn.classList.toggle('selected');
+    const sel = btn.classList.contains('selected');
+    btn.className = `size-toggle ${sel ? 'selected bg-white text-black border-white' : 'bg-transparent text-white/50 border-white/10'} w-12 h-12 rounded-xl border text-xs font-bold hover:border-indigo-500 hover:text-white transition-all`;
+}
+
+function toggleColor(btn) {
+    btn.classList.toggle('selected');
+    const sel = btn.classList.contains('selected');
+    if (sel) { btn.classList.add('ring-2','ring-white','ring-offset-2','ring-offset-darkcard','scale-110'); }
+    else { btn.classList.remove('ring-2','ring-white','ring-offset-2','ring-offset-darkcard','scale-110'); }
+}
+
+function generatePhotoSlots(colors, types) {
+    const grid = document.getElementById('photo-grid');
+    grid.innerHTML = '';
+    const NUM_PHOTOS = 3;
+    colors.forEach(c => {
+        const cm = ALL_COLORS.find(x => x.id === c) || { label: c, hex: '#ccc' };
+        types.forEach(t => {
+            const typeLabel = t === 'null' ? '' : (' – ' + (t === 'pendek' ? 'Lengan Pendek' : t === 'panjang' ? 'Lengan Panjang' : t.charAt(0).toUpperCase()+t.slice(1)));
+            const label = `${cm.label}${typeLabel}`;
+            const div = document.createElement('div');
+            div.className = 'bg-white/3 border border-white/8 p-5 rounded-lg space-y-4';
+            // Header row
+            div.innerHTML = `
+                <div class="flex items-center gap-2.5 pb-3 border-b border-white/8">
+                    <span class="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0" style="background:${cm.hex}"></span>
+                    <span class="text-xs font-bold uppercase tracking-widest text-white/80">${label}</span>
+                    <span class="ml-auto text-[10px] text-white/30">Min. 3 foto</span>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    ${Array.from({length: NUM_PHOTOS}, (_, i) => {
+                        const key = `${c}_${t}_${i+1}`;
+                        return `<div class="space-y-2">
+                            <p class="text-[9px] text-white/30 uppercase tracking-wider text-center">Foto ${i+1}</p>
+                            <div class="photo-drop-zone rounded-md cursor-pointer relative flex flex-col items-center justify-center group" style="height:110px;" onclick="document.getElementById('file-${key}').click()">
+                                <input type="file" id="file-${key}" data-key="${key}" class="hidden" onchange="previewPhoto(this,'${key}')" accept="image/*">
+                                <div id="preview-${key}" class="absolute inset-0 hidden rounded-md overflow-hidden">
+                                    <img class="w-full h-full object-cover rounded-md">
+                                    <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><span class="text-[9px] font-bold">GANTI</span></div>
+                                </div>
+                                <div id="placeholder-${key}"><i class="fa-solid fa-camera text-lg text-white/20 mb-1 block text-center"></i><p class="text-[9px] text-white/30">Upload</p></div>
+                            </div>
+                            <input type="text" id="url-${key}" placeholder="images/.../${i+1}.png" class="!text-[10px] !py-1 w-full">
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            grid.appendChild(div);
+        });
+    });
+}
+
+function previewPhoto(input, key) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById(`preview-${key}`).classList.remove('hidden');
+            document.getElementById(`preview-${key}`).querySelector('img').src = e.target.result;
+            document.getElementById(`placeholder-${key}`).classList.add('hidden');
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function openProductModal(product = null) {
+    document.getElementById('product-form').reset();
+    document.getElementById('pf-id').value = product ? product.id : '';
+    document.getElementById('pf-sku').value = product ? product.sku : '';
+    document.getElementById('pf-name').value = product ? product.name : '';
+    document.getElementById('pf-short-desc').value = product ? (product.short_description||'') : '';
+    document.getElementById('pf-long-desc').value = product ? (product.long_description||'') : '';
+    document.getElementById('pf-short-desc-en').value = product ? (product.short_description_en||'') : '';
+    document.getElementById('pf-long-desc-en').value = product ? (product.long_description_en||'') : '';
+    document.getElementById('pf-status').value = product ? product.status : 'active';
+    const cat = product ? product.category : 'tops';
+    document.getElementById('pf-category').value = cat;
+    handleCategoryChange();
+
+    if (cat === 'gown') {
+        // For gown, split colors into actual colors vs motifs
+        const allColors = product ? (product.colors || []) : [];
+        const motifIds = new Set(ALL_MOTIFS.map(m => m.id));
+        const gownColorIds = allColors.filter(c => !motifIds.has(c));
+        const gownMotifIds = allColors.filter(c => motifIds.has(c));
+        buildGownColorBtns(gownColorIds);
+        buildGownMotifBtns(gownMotifIds);
+        // Restore sub-types and show respective sections
+        if (product && product.types) {
+            const hasPolos = product.types.includes('polos');
+            const hasDesign = product.types.includes('ber-design');
+            if (hasPolos) {
+                document.getElementById('type-gown-polos').checked = true;
+                document.getElementById('gown-color-section').classList.remove('hidden');
+                const el = document.getElementById('price-type-polos');
+                if (el && product.price_by_type?.polos) el.value = product.price_by_type.polos;
+                el && (el.disabled = false);
+            }
+            if (hasDesign) {
+                document.getElementById('type-gown-design').checked = true;
+                document.getElementById('gown-motif-section').classList.remove('hidden');
+                const el = document.getElementById('price-type-ber-design');
+                if (el && product.price_by_type?.['ber-design']) el.value = product.price_by_type['ber-design'];
+                el && (el.disabled = false);
+            }
+        }
+    } else {
+        buildColorBtns(product ? (product.colors||[]) : []);
+    }
+    buildSizeBtns(cat, product ? (product.sizes||[]) : []);
+
+    if (product && product.types && cat !== 'gown') {
+        document.querySelectorAll('input[name="pf-types"]').forEach(i => {
+            if (product.types.includes(i.value)) {
+                i.checked = true;
+                // Restore price-by-type when editing
+                const priceEl = document.getElementById(`price-type-${i.value}`);
+                if (priceEl && product.price_by_type && product.price_by_type[i.value]) {
+                    priceEl.value = product.price_by_type[i.value];
+                }
+            }
+        });
+        updateTypePriceFields();
+    }
+    // Restore single price for pants/caps when editing
+    if (product && cat !== 'tops' && cat !== 'gown') {
+        if (cat === 'caps') {
+            const capsEl = document.getElementById('pf-price-caps');
+            if (capsEl) capsEl.value = product.price || '';
+        } else if (cat === 'pants') {
+            const pantsEl = document.getElementById('pf-price-single');
+            if (pantsEl) pantsEl.value = product.price || '';
+        }
+    }
+    goToStep(1);
+    document.getElementById('modal-title').textContent = product ? 'Edit Produk' : 'Tambah Produk Baru';
+    document.getElementById('product-modal').classList.remove('hidden');
+    document.getElementById('product-modal').classList.add('flex');
+}
+
+function closeProductModal() {
+    document.getElementById('product-modal').classList.add('hidden');
+    document.getElementById('product-modal').classList.remove('flex');
+}
+
+document.getElementById('product-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const saveBtn = document.getElementById('save-btn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner spin mr-2"></i> Menyimpan...';
+    try {
+        const id = document.getElementById('pf-id').value;
+        const cat = document.getElementById('pf-category').value;
+        const sizes = [...document.querySelectorAll('.size-toggle.selected')].map(b => b.dataset.size);
+        // For gown, collect colors from gown-color-btns and motifs from gown-motif-btns
+        let colors;
+        if (cat === 'gown') {
+            const gownColors = [...document.querySelectorAll('#gown-color-btns .color-toggle.selected')].map(b => b.dataset.color);
+            const gownMotifs = [...document.querySelectorAll('#gown-motif-btns .color-toggle.selected')].map(b => b.dataset.color);
+            colors = [...gownColors, ...gownMotifs];
+        } else {
+            // SCOPED to #color-btns only — prevents gown motif buttons (still in DOM) from polluting non-gown submissions
+            colors = [...document.querySelectorAll('#color-btns .color-toggle.selected')].map(b => b.dataset.color);
+        }
+        const types = cat === 'caps' ? ['null'] : [...document.querySelectorAll('input[name="pf-types"]:checked')].map(i => i.value);
+        const fd = new FormData();
+        fd.append('sku', document.getElementById('pf-sku').value);
+        fd.append('name', document.getElementById('pf-name').value);
+        fd.append('category', cat);
+
+        // Build price_by_type for tops; use single price for others
+        let priceByType = null;
+        if ((cat === 'tops' || cat === 'gown') && types.length > 0) {
+            priceByType = {};
+            types.forEach(t => {
+                const el = document.getElementById(`price-type-${t}`);
+                if (el && el.value) priceByType[t] = parseInt(el.value);
+            });
+            const vals = Object.values(priceByType).filter(v => v > 0);
+            const basePrice = vals.length > 0 ? Math.min(...vals) : 0;
+            fd.append('price', basePrice);
+            fd.append('price_by_type', JSON.stringify(priceByType));
+        } else {
+            // Pick the correct price field based on category
+            let singlePrice = '0';
+            if (cat === 'pants') {
+                singlePrice = document.getElementById('pf-price-single')?.value || '0';
+            } else if (cat === 'caps') {
+                singlePrice = document.getElementById('pf-price-caps')?.value || '0';
+            }
+            fd.append('price', singlePrice);
+        }
+
+        fd.append('short_description', document.getElementById('pf-short-desc').value);
+        fd.append('long_description', document.getElementById('pf-long-desc').value);
+        fd.append('short_description_en', document.getElementById('pf-short-desc-en').value);
+        fd.append('long_description_en', document.getElementById('pf-long-desc-en').value);
+
+        fd.append('sizes', JSON.stringify(sizes));
+        fd.append('colors', JSON.stringify(colors));
+        fd.append('types', JSON.stringify(types));
+        fd.append('status', document.getElementById('pf-status').value);
+        fd.append('is_popular', '0');
+        const photoMap = {};
+        const NUM_PHOTOS = 3;
+        colors.forEach(color => {
+            types.forEach(type => {
+                for (let i = 1; i <= NUM_PHOTOS; i++) {
+                    const key = `${color}_${type}_${i}`;
+                    const fi = document.getElementById(`file-${key}`);
+                    const ui = document.getElementById(`url-${key}`);
+                    if (fi && fi.files[0]) { fd.append(`photo_${key}`, fi.files[0]); photoMap[key] = `photo_${key}`; }
+                    else if (ui && ui.value.trim()) fd.append(`photo_url_${key}`, ui.value.trim());
+                }
+            });
+        });
+        fd.append('photo_map', JSON.stringify(photoMap));
+        const url = id ? `/api/products/${id}` : '/api/products';
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(API + url, { method, body: fd });
+        const ct = res.headers.get('content-type') || '';
+        let data;
+        if (ct.includes('application/json')) { data = await res.json(); }
+        else { const txt = await res.text(); throw new Error('Server: ' + txt.slice(0,200)); }
+        if (!res.ok) throw new Error(data.error || 'Gagal');
+        toast(id ? 'Produk diperbarui ✅' : 'Produk ditambahkan ✅');
+        closeProductModal();
+        loadProducts();
+    } catch(err) { toast('Gagal: '+err.message, true); }
+    finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fa-solid fa-check-double mr-2"></i> Simpan & Publikasikan';
+    }
+});
+
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
+async function loadInventory() {
+    inventoryEdits = {};
+    try {
+        const products = await apiFetch('/api/products?status=all');
+        const sel = document.getElementById('inv-product-filter');
+        const curVal = sel.value;
+        sel.innerHTML = '<option value="">Semua Produk</option>' + products.map(p => `<option value="${p.id}" ${curVal==p.id?'selected':''}>${p.name}</option>`).join('');
+        const filterPid = sel.value;
+        const filtered = filterPid ? products.filter(p => p.id == filterPid) : products;
+        const tbody = document.getElementById('inventory-tbody');
+        let rows = '';
+        for (const p of filtered) {
+            const inv = await apiFetch('/api/inventory/'+p.id);
+            inv.forEach(item => {
+                const cm = ALL_COLORS.find(x => x.id === item.color) || ALL_GOWN_COLORS.find(x => x.id === item.color) || ALL_MOTIFS.find(x => x.id === item.color) || { label: item.color, hex:'#ccc' };
+                const key = `${item.product_id}__${item.size}__${item.color}__${item.variant_type}`;
+                rows += `<tr class="hover:bg-white/2">
+                    <td class="px-5 py-2.5"><div class="font-medium text-sm">${p.name}</div><div class="text-[9px] text-white/30 font-mono">${p.sku}</div></td>
+                    <td class="px-5 py-2.5"><div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full border border-white/10" style="background:${cm.hex}"></span><span class="text-xs">${cm.label}</span></div></td>
+                    <td class="px-5 py-2.5"><span class="text-xs text-white/40 uppercase">${item.variant_type!=='null'?item.variant_type:'—'}</span></td>
+                    <td class="px-5 py-2.5"><span class="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold">${item.size}</span></td>
+                    <td class="px-5 py-2.5 text-center">
+                        <input type="number" min="0" value="${item.stock}" id="inv-${key}"
+                            class="!w-16 !rounded-lg !py-1 !px-2 text-center text-xs mx-auto ${item.stock<5?'!border-red-400/50 !text-red-400':''}"
+                            onchange="inventoryEdits['${key}']={product_id:${item.product_id},size:'${item.size}',color:'${item.color}',variant_type:'${item.variant_type}',stock:parseInt(this.value)}">
+                    </td>
+                    <td class="px-5 py-2.5 text-center">
+                        <button onclick="saveOneStock(${item.product_id},'${item.size}','${item.color}','${item.variant_type}','inv-${key}')"
+                            class="text-[10px] px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 transition">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                        </button>
+                        ${item.stock<5?'<i class="fa-solid fa-triangle-exclamation text-red-400 text-[10px] ml-1" title="Stok menipis"></i>':''}
+                    </td>
+                </tr>`;
+            });
+        }
+        tbody.innerHTML = rows || '<tr><td colspan="6" class="px-5 py-10 text-center text-white/20 text-xs">Belum ada data inventori.</td></tr>';
+    } catch(e) { toast('Error: '+e.message, true); }
+}
+
+async function saveOneStock(product_id, size, color, variant_type, inputId) {
+    const stock = parseInt(document.getElementById(inputId).value);
+    try {
+        await apiFetch('/api/inventory/single', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({product_id,size,color,variant_type,stock}) });
+        toast('Stok diperbarui');
+    } catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+async function saveInventory() {
+    const updates = Object.values(inventoryEdits);
+    if (!updates.length) return toast('Tidak ada perubahan');
+    try {
+        await apiFetch('/api/inventory', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({updates}) });
+        toast('Semua stok diperbarui ✅');
+        inventoryEdits = {};
+        loadInventory();
+    } catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+// ─── POPULAR ──────────────────────────────────────────────────────────────────
+async function loadPopular() {
+    try {
+        const products = await apiFetch('/api/products?status=all');
+        popularSelected = new Set(products.filter(p => p.is_popular).map(p => p.id));
+        document.getElementById('popular-count-label').textContent = `${popularSelected.size} / 4 dipilih`;
+        const catLabel = { tops:'Atasan', pants:'Celana', caps:'Topi', gown:'Gown' };
+        document.getElementById('popular-grid').innerHTML = products.map(p => {
+            const photo = resolvePhoto(p.main_photo);
+            const isSel = popularSelected.has(p.id);
+            return `<div class="pop-card bg-darkcard border border-darkborder ${isSel?'selected':''}" onclick="togglePopular(${p.id},this)" id="pop-card-${p.id}">
+                <div class="aspect-[4/3] bg-black/20 overflow-hidden relative">
+                    <img src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top"
+                         onerror="this.src='images/logo/logo%20ws%20white%20250x55.png'; this.classList.add('object-contain','p-8','opacity-20')">
+                    <div id="pop-check-${p.id}" class="absolute top-2 right-2 w-6 h-6 rounded-full border-2 ${isSel?'bg-indigo-500 border-indigo-500':'border-white/30'} flex items-center justify-center transition-all">
+                        <i class="fa-solid fa-check text-[9px] ${isSel?'text-white':'text-transparent'}"></i>
+                    </div>
+                </div>
+                <div class="p-3">
+                    <p class="text-[9px] text-white/30 uppercase tracking-wider">${catLabel[p.category]||p.category}</p>
+                    <h4 class="font-bold text-sm mt-0.5">${p.name}</h4>
+                    <p class="text-xs text-green-400 mt-1 font-bold">Rp ${fmt(p.price)}</p>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) { toast('Error: '+e.message, true); }
+}
+
+function togglePopular(id, card) {
+    if (popularSelected.has(id)) {
+        popularSelected.delete(id);
+        card.classList.remove('selected');
+        const chk = document.getElementById('pop-check-'+id);
+        chk.className = 'absolute top-2 right-2 w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center transition-all';
+        chk.querySelector('i').className = 'fa-solid fa-check text-[9px] text-transparent';
+    } else {
+        if (popularSelected.size >= 4) { toast('Maksimal 4 produk popular', true); return; }
+        popularSelected.add(id);
+        card.classList.add('selected');
+        const chk = document.getElementById('pop-check-'+id);
+        chk.className = 'absolute top-2 right-2 w-6 h-6 rounded-full border-2 bg-indigo-500 border-indigo-500 flex items-center justify-center transition-all';
+        chk.querySelector('i').className = 'fa-solid fa-check text-[9px] text-white';
+    }
+    document.getElementById('popular-count-label').textContent = `${popularSelected.size} / 4 dipilih`;
+}
+
+async function savePopular() {
+    try {
+        await apiFetch('/api/products/popular', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: [...popularSelected] }) });
+        toast('Produk popular disimpan ✅');
+        loadProducts();
+    } catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+// ─── ORDERS ───────────────────────────────────────────────────────────────────
+let cachedOrders = [];
+async function loadOrders() {
+    try { cachedOrders = await apiFetch('/api/orders'); renderOrders(); }
+    catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+function filterOrders(filter) {
+    currentOrderFilter = filter;
+    document.querySelectorAll('.order-tab-btn').forEach(b => {
+        const a = b.dataset.tab === filter;
+        b.className = `order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl ${a ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10'}`;
+    });
+    renderOrders();
+}
+
+function renderOrders() {
+    const filtered = currentOrderFilter === 'all'      ? cachedOrders
+        : currentOrderFilter === 'pending'   ? cachedOrders.filter(o => o.payment_status==='pending')
+        : currentOrderFilter === 'paid'      ? cachedOrders.filter(o => o.payment_status==='paid')
+        : currentOrderFilter === 'bordir'    ? cachedOrders.filter(o => o.order_status==='bordir')
+        : currentOrderFilter === 'cancelled' ? cachedOrders.filter(o => o.order_status==='cancelled')
+        : cachedOrders.filter(o => o.order_status===currentOrderFilter);
+
+    const el = document.getElementById('orders-list');
+    if (!filtered.length) { el.innerHTML = '<div class="text-center py-12 text-white/30 text-sm">Tidak ada pesanan</div>'; return; }
+
+    const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    const isAdmin = user.role === 'admin';
+
+    el.innerHTML = filtered.map(o => {
+        const hasBordir = o.has_bordir_logo || o.has_bordir_nama;
+        const bordirBadge = hasBordir ? `<span class="status-badge border bg-purple-500/10 text-purple-300 border-purple-500/20">${o.has_bordir_logo ? '🎨' : ''}${o.has_bordir_nama ? '✏️' : ''} Bordir</span>` : '';
+        const logoBadge = o.has_bordir_logo && !o.bordir_logo_requested ? `<span class="status-badge border bg-red-500/10 text-red-400 border-red-500/20 animate-pulse">⚠️ Minta Logo</span>` : '';
+
+        return `
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 ${o.order_status==='cancelled' ? 'opacity-60': ''}">
+            <div class="flex justify-between flex-wrap gap-3">
+                <div>
+                    <p class="font-mono text-xs text-white/40 mb-1">${o.order_code}</p>
+                    <h4 class="font-bold">${o.customer_name}</h4>
+                    <p class="text-sm text-white/50">${o.customer_phone}</p>
+                    ${o.shipping_city ? `<p class="text-xs text-white/30 mt-0.5">📍 ${o.shipping_city} · ${o.shipping_courier||''}</p>` : ''}
+                </div>
+                <div class="text-right">
+                    <p class="text-green-400 font-bold text-lg">Rp ${fmt(o.total_amount)}</p>
+                    <p class="text-[10px] text-white/30">${new Date(o.created_at).toLocaleString('id-ID')}</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-3">
+                ${statusBadge(o.order_status)}
+                ${o.payment_status==='pending' ? '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">⏳ Belum Bayar</span>' : ''}
+                ${o.payment_status==='paid'    ? '<span class="status-badge border bg-green-500/10 text-green-400 border-green-500/20">✅ Lunas</span>' : ''}
+                ${bordirBadge}${logoBadge}
+            </div>
+            <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-darkborder">
+                <button onclick="viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">📋 Detail</button>
+                ${o.payment_status==='pending' && o.order_status!='cancelled' ? `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>` : ''}
+                ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Bordir Selesai</button>` : ''}
+                ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas</button>` : ''}
+                ${o.order_status==='packed' ? `<button onclick="updateOrderStatus(${o.id},'shipped')" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Kirim</button>` : ''}
+                ${o.order_status==='shipped' ? `<button onclick="updateOrderStatus(${o.id},'done')" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Selesai</button>` : ''}
+                ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20">❌ Batalkan</button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ── Status badge helper ────────────────────────────────────────────────────────
+function statusBadge(s) {
+    const map = {
+        waiting_payment: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+        confirmed:  'bg-blue-500/10 text-blue-400 border-blue-500/20',
+        bordir:     'bg-purple-500/10 text-purple-300 border-purple-500/20',
+        packed:     'bg-teal-500/10 text-teal-400 border-teal-500/20',
+        shipped:    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+        done:       'bg-green-500/10 text-green-400 border-green-500/20',
+        cancelled:  'bg-red-500/10 text-red-400 border-red-500/20',
+    };
+    const label = {
+        waiting_payment: '⏳ Menunggu Bayar',
+        confirmed: '✅ Dikonfirmasi',
+        bordir: '🧵 Proses Bordir',
+        packed: '📦 Dikemas',
+        shipped: '🚚 Dikirim',
+        done: '✔ Selesai',
+        cancelled: '❌ Dibatalkan',
+    };
+    return `<span class="status-badge border ${map[s]||'bg-white/5 text-white/50 border-white/10'}">${label[s]||s}</span>`;
+}
+
+// ── View Order Detail ──────────────────────────────────────────────────────────
+async function viewOrder(id) {
+    try {
+        const [o, photos] = await Promise.all([
+            apiFetch('/api/orders/' + id),
+            apiFetch('/api/orders/' + id + '/photos')
+        ]);
+
+        const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+        const isAdmin = user.role === 'admin';
+
+        document.getElementById('order-modal-code').textContent = o.order_code;
+        document.getElementById('order-modal-name').textContent = o.customer_name;
+
+        // Parse bordir details
+        let bordirDetails = [];
+        try { bordirDetails = o.embroidery_details ? JSON.parse(o.embroidery_details) : []; } catch(e){}
+
+        // ── Process flow timeline ────────────────────────────────────────────
+        const hasBordir = o.has_bordir_logo || o.has_bordir_nama;
+        const steps = hasBordir
+            ? ['waiting_payment','confirmed_pay','bordir','confirmed','packed','shipped','done']
+            : ['waiting_payment','confirmed_pay','confirmed','packed','shipped','done'];
+
+        const stepMeta = {
+            waiting_payment: { icon: '💳', label: 'Menunggu Bayar' },
+            confirmed_pay:   { icon: '✅', label: 'Bayar Dikonfirmasi' },
+            bordir:          { icon: '🧵', label: 'Proses Bordir', sub: 'Est. 1 minggu' },
+            confirmed:       { icon: '✔️', label: 'Siap Dikemas' },
+            packed:          { icon: '📦', label: 'Dikemas' },
+            shipped:         { icon: '🚚', label: 'Dikirim' },
+            done:            { icon: '🎉', label: 'Selesai' },
+        };
+
+        // Map current status to step index
+        const statusToStep = {
+            waiting_payment: 0,
+            bordir: hasBordir ? 2 : -1,
+            confirmed: hasBordir ? 3 : 2,
+            packed: hasBordir ? 4 : 3,
+            shipped: hasBordir ? 5 : 4,
+            done: hasBordir ? 6 : 5,
+            cancelled: -2,
+        };
+        // After payment confirmed → confirmed_pay step
+        const isPaid = o.payment_status === 'paid';
+        const currentStepIdx = o.order_status === 'cancelled' ? -2
+            : !isPaid ? 0
+            : statusToStep[o.order_status] ?? 1;
+
+        const timelineHTML = `
+        <div class="overflow-x-auto pb-1">
+        <div class="flex items-center gap-0 min-w-max">
+            ${steps.map((s, idx) => {
+                const meta = stepMeta[s];
+                const done = isPaid && (idx === 1) ? true : (idx <= currentStepIdx && currentStepIdx >= 0);
+                const active = (idx === currentStepIdx && currentStepIdx >= 0);
+                const cancelled = o.order_status === 'cancelled';
+                return `
+                <div class="flex items-center">
+                    <div class="flex flex-col items-center w-20">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center text-base font-bold border-2 transition-all
+                            ${cancelled ? 'border-red-500/40 bg-red-500/10 text-red-400'
+                            : active ? 'border-white bg-white text-black scale-110'
+                            : done ? 'border-green-500 bg-green-500/20 text-green-400'
+                            : 'border-white/10 bg-white/5 text-white/20'}">
+                            ${cancelled && idx === 0 ? '❌' : meta.icon}
+                        </div>
+                        <p class="text-[10px] text-center mt-1.5 leading-tight font-medium
+                            ${active ? 'text-white' : done ? 'text-green-400' : 'text-white/30'}">
+                            ${meta.label}
+                        </p>
+                        ${meta.sub && active ? `<p class="text-[9px] text-purple-300 text-center">${meta.sub}</p>` : ''}
+                    </div>
+                    ${idx < steps.length - 1 ? `<div class="w-6 h-0.5 mx-0.5 ${done ? 'bg-green-500/60' : 'bg-white/10'} flex-shrink-0"></div>` : ''}
+                </div>`;
+            }).join('')}
+            ${o.order_status === 'cancelled' ? `
+            <div class="flex items-center ml-2">
+                <div class="h-0.5 w-4 bg-red-500/30 flex-shrink-0"></div>
+                <div class="flex flex-col items-center w-20">
+                    <div class="w-9 h-9 rounded-full flex items-center justify-center text-base border-2 border-red-500 bg-red-500/20">❌</div>
+                    <p class="text-[10px] text-center mt-1.5 text-red-400 font-medium">Dibatalkan</p>
+                </div>
+            </div>` : ''}
+        </div>
+        </div>`;
+
+        // ── Items with product image ──────────────────────────────────────────
+        const itemsHTML = (o.items||[]).map(i => {
+            const imgSrc = i.photo ? (i.photo.startsWith('/uploads/') ? API + i.photo : i.photo) : '';
+            return `
+            <div class="flex items-start gap-3 py-3 border-b border-darkborder last:border-0">
+                ${imgSrc
+                    ? `<img src="${imgSrc}" class="w-14 h-16 rounded-lg object-cover object-top flex-shrink-0" onerror="this.style.display='none'">`
+                    : `<div class="w-14 h-16 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-shirt text-white/20"></i></div>`}
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-sm">${i.product_name}</p>
+                    <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}</p>
+                    <p class="text-xs text-white/30 mt-0.5">@Rp ${fmt(i.price)}/pcs</p>
+                </div>
+                <p class="text-green-400 font-bold text-sm shrink-0">Rp ${fmt(i.price*i.quantity)}</p>
+            </div>`;
+        }).join('');
+
+        // ── Bordir details ────────────────────────────────────────────────────
+        const waLink = `https://wa.me/${o.customer_phone?.replace(/^0/,'62')}`;
+        const bordirHTML = bordirDetails.length ? `
+        <div class="bg-purple-900/20 border border-purple-500/20 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs font-bold text-purple-300 uppercase tracking-wider">🧵 Detail Bordir</p>
+                ${o.has_bordir_logo ? `
+                <a href="${waLink}?text=${encodeURIComponent(`Halo ${o.customer_name}, pesanan #${o.order_code} Anda memiliki bordir logo. Mohon kirimkan file logo bordir Anda ke kami ya. Terima kasih! 🙏`)}"
+                   target="_blank" onclick="markLogoRequested(${o.id})"
+                   class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5
+                   ${o.bordir_logo_requested
+                       ? 'bg-green-500/10 text-green-300 border border-green-500/20'
+                       : 'bg-orange-500/20 text-orange-300 border border-orange-500/30 animate-pulse hover:bg-orange-500/30'}">
+                    <i class="fa-brands fa-whatsapp"></i>
+                    ${o.bordir_logo_requested ? '✓ Logo Sudah Diminta' : '⚠️ Minta Logo ke Customer'}
+                </a>` : ''}
+            </div>
+            ${bordirDetails.map(e => `
+            <div class="flex items-start gap-3 py-2.5 border-b border-purple-500/10 last:border-0">
+                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0
+                    ${e.type==='logo' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-200'}">
+                    ${e.type==='logo' ? '🎨 Logo' : '✏️ Nama'}
+                </span>
+                <div>
+                    <p class="text-[10px] text-white/40">${e.item_label}</p>
+                    <p class="text-sm font-semibold">${e.value}</p>
+                </div>
+            </div>`).join('')}
+            ${hasBordir ? `
+            <div class="mt-3 pt-3 border-t border-purple-500/15 flex items-center gap-2 text-[11px] text-purple-300/70">
+                <i class="fa-regular fa-clock"></i>
+                Estimasi proses bordir: <strong>1 minggu</strong> setelah konfirmasi bayar
+            </div>` : ''}
+        </div>` : '';
+
+        // ── Photos proof timeline ─────────────────────────────────────────────
+        const stepLabels = {
+            payment: '✅ Bukti Pembayaran',
+            bordir:  '🧵 Bukti Bordir Selesai',
+            pack:    '📦 Bukti Pengemasan',
+            refund:  '💰 Bukti Refund'
+        };
+        const photosHTML = photos.length ? `
+        <div>
+            <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">📸 Foto Bukti Proses</p>
+            <div class="grid grid-cols-2 gap-3">
+                ${photos.map(p => `
+                <div class="bg-white/5 rounded-xl overflow-hidden">
+                    <a href="${API}${p.photo_url}" target="_blank">
+                        <img src="${API}${p.photo_url}"
+                             class="w-full h-32 object-cover hover:scale-105 transition-transform cursor-zoom-in"
+                             onerror="this.parentElement.innerHTML='<div class=\\'p-4 text-center text-white/20 text-xs\\'>Foto tidak tersedia</div>'">
+                    </a>
+                    <div class="p-2.5">
+                        <p class="text-[10px] font-bold text-white/60">${stepLabels[p.step]||p.step}</p>
+                        ${p.note ? `<p class="text-[10px] text-white/30 mt-0.5">${p.note}</p>` : ''}
+                        <p class="text-[9px] text-white/20 mt-0.5">${new Date(p.created_at).toLocaleString('id-ID')}</p>
+                    </div>
+                </div>`).join('')}
+            </div>
+        </div>` : '';
+
+        // ── Cancel info ───────────────────────────────────────────────────────
+        const cancelHTML = o.order_status==='cancelled' ? `
+        <div class="bg-red-900/20 border border-red-500/20 rounded-xl p-4">
+            <p class="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">❌ Pesanan Dibatalkan</p>
+            <p class="text-sm">Dibatalkan oleh: <strong>${o.cancelled_by||'-'}</strong></p>
+            ${o.cancel_reason ? `<p class="text-sm text-white/50 mt-1">Alasan: ${o.cancel_reason}</p>` : ''}
+        </div>` : '';
+
+        // ── Action buttons (inside modal) ──────────────────────────────────────
+        const actionBtns = o.order_status === 'cancelled' ? '' : `
+        <div class="flex flex-wrap gap-2 pt-4 border-t border-darkborder">
+            ${o.payment_status==='pending' ? `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-circle"></i> Konfirmasi Bayar</button>` : ''}
+            ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-needle"></i> Bordir Selesai</button>` : ''}
+            ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas</button>` : ''}
+            ${o.order_status==='packed' ? `<button onclick="updateOrderStatus(${o.id},'shipped')" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Kirim</button>` : ''}
+            ${o.order_status==='shipped' ? `<button onclick="updateOrderStatus(${o.id},'done')" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Selesai</button>` : ''}
+            ${isAdmin && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
+        </div>`;
+
+        document.getElementById('order-modal-content').innerHTML = `
+        <!-- Info Customer -->
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="bg-white/5 rounded-xl p-3">
+                <p class="text-white/40 text-xs mb-1">Nama</p>
+                <p class="font-bold">${o.customer_name}</p>
+            </div>
+            <div class="bg-white/5 rounded-xl p-3">
+                <p class="text-white/40 text-xs mb-1">WhatsApp</p>
+                <a href="${waLink}" target="_blank" class="font-bold text-green-400 hover:text-green-300 flex items-center gap-1.5">
+                    <i class="fa-brands fa-whatsapp"></i> ${o.customer_phone}
+                </a>
+            </div>
+            <div class="col-span-2 bg-white/5 rounded-xl p-3">
+                <p class="text-white/40 text-xs mb-1">Alamat</p>
+                <p>${o.customer_address}</p>
+            </div>
+            ${o.shipping_city ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kota</p><p class="font-bold">${o.shipping_city}</p></div>` : ''}
+            ${o.shipping_courier ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kurir</p><p class="font-bold">${o.shipping_courier}</p></div>` : ''}
+            ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${o.notes}</p></div>` : ''}
+        </div>
+
+        <!-- Status Flow Timeline -->
+        <div>
+            <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">📊 Alur Proses</p>
+            ${timelineHTML}
+        </div>
+
+        <!-- Status Badges -->
+        <div class="flex flex-wrap gap-2">
+            ${statusBadge(o.order_status)}
+            ${o.payment_status==='paid' ? '<span class="status-badge border bg-green-500/10 text-green-400 border-green-500/20">✅ Lunas</span>' : '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">⏳ Belum Bayar</span>'}
+            ${hasBordir ? `<span class="status-badge border bg-purple-500/10 text-purple-300 border-purple-500/20">${o.has_bordir_logo ? '🎨' : ''}${o.has_bordir_nama ? '✏️' : ''} Bordir</span>` : ''}
+        </div>
+
+        <!-- Item Pesanan -->
+        <div>
+            <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">🛍️ Item Pesanan</p>
+            ${itemsHTML}
+            <div class="flex justify-between mt-3 text-sm text-white/50">
+                <span>Ongkir (${o.shipping_courier||'—'})</span>
+                <span>Rp ${fmt(o.shipping_cost||0)}</span>
+            </div>
+            <div class="flex justify-between mt-1 font-bold border-t border-darkborder pt-2">
+                <span>Total</span>
+                <span class="text-green-400 text-lg">Rp ${fmt(o.total_amount)}</span>
+            </div>
+        </div>
+
+        ${bordirHTML}
+        ${photosHTML}
+        ${cancelHTML}
+        ${actionBtns}`;
+
+        document.getElementById('order-modal').classList.remove('hidden');
+        document.getElementById('order-modal').classList.add('flex');
+    } catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+async function markLogoRequested(orderId) {
+    try {
+        await apiFetch(`/api/orders/${orderId}/request-logo`, { method: 'PUT' });
+        // Update local cache
+        const o = cachedOrders.find(x => x.id === orderId);
+        if (o) o.bordir_logo_requested = true;
+        toast('✅ Logo bordir sudah ditandai sebagai diminta');
+    } catch(e) { /* silent — WA link still works */ }
+}
+
+function closeOrderModal() {
+    document.getElementById('order-modal').classList.add('hidden');
+    document.getElementById('order-modal').classList.remove('flex');
+}
+
+// ── Photo Upload Modal ─────────────────────────────────────────────────────────
+let _photoModalAction = null; // { endpoint, method, fieldName, orderId }
+
+function openPhotoModal(title, action, extraHTML = '') {
+    _photoModalAction = action;
+    document.getElementById('photo-modal-title').textContent = title;
+    document.getElementById('photo-modal-extra').innerHTML = extraHTML;
+    document.getElementById('photo-file-input').value = '';
+    // Reset state: show upload zone, hide preview
+    document.getElementById('photo-preview-wrap').classList.add('hidden');
+    document.getElementById('photo-upload-zone').classList.remove('hidden');
+    document.getElementById('photo-change-btn').classList.add('hidden');
+    document.getElementById('photo-modal').classList.remove('hidden');
+    document.getElementById('photo-modal').classList.add('flex');
+}
+
+function closePhotoModal() {
+    document.getElementById('photo-modal').classList.add('hidden');
+    document.getElementById('photo-modal').classList.remove('flex');
+    _photoModalAction = null;
+}
+
+// Standalone trigger — NOT inside a <label> so only fires once
+function triggerPhotoInput() {
+    document.getElementById('photo-file-input').click();
+}
+
+function previewPhotoFile(input) {
+    if (!input.files[0]) return;
+    const file = input.files[0];
+    const url = URL.createObjectURL(file);
+    // Show preview
+    document.getElementById('photo-preview-img').src = url;
+    document.getElementById('photo-preview-name').textContent = file.name;
+    document.getElementById('photo-preview-wrap').classList.remove('hidden');
+    // Hide upload zone to prevent re-trigger (bounce-back fix)
+    document.getElementById('photo-upload-zone').classList.add('hidden');
+    document.getElementById('photo-change-btn').classList.remove('hidden');
+}
+
+function resetPhotoUpload() {
+    document.getElementById('photo-file-input').value = '';
+    document.getElementById('photo-preview-wrap').classList.add('hidden');
+    document.getElementById('photo-upload-zone').classList.remove('hidden');
+    document.getElementById('photo-change-btn').classList.add('hidden');
+}
+
+
+async function submitPhotoModal() {
+    if (!_photoModalAction) return;
+    const file = document.getElementById('photo-file-input').files[0];
+    if (!file) { toast('Pilih foto terlebih dahulu', true); return; }
+
+    const btn = document.getElementById('photo-modal-submit');
+    btn.disabled = true;
+    btn.textContent = 'Memproses...';
+
+    try {
+        const fd = new FormData();
+        fd.append(_photoModalAction.fieldName, file);
+        // Append any extra fields from inputs inside photo-modal-extra
+        document.getElementById('photo-modal-extra').querySelectorAll('input,textarea,select').forEach(el => {
+            if (el.name && el.value) fd.append(el.name, el.value);
+        });
+
+        const token = localStorage.getItem('ws_admin_token');
+        const res = await fetch(API + _photoModalAction.endpoint, {
+            method: _photoModalAction.method || 'PUT',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: fd
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal');
+
+        toast('✅ ' + (data.message || 'Berhasil'));
+        closePhotoModal();
+        closeOrderModal();
+        loadOrders();
+    } catch(e) {
+        toast('❌ ' + e.message, true);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Konfirmasi';
+    }
+}
+
+// ── Order Action Buttons ───────────────────────────────────────────────────────
+
+function openConfirmPayment(orderId) {
+    openPhotoModal(
+        '✅ Konfirmasi Pembayaran',
+        { endpoint: `/api/orders/${orderId}/confirm-payment`, method: 'PUT', fieldName: 'payment_proof' },
+        `<div>
+            <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan (opsional)</label>
+            <input name="note" type="text" placeholder="Nomor rekening asal, jumlah transfer..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+        </div>`
+    );
+}
+
+function openBordirDone(orderId) {
+    openPhotoModal(
+        '🧵 Bordir Selesai — Upload Foto',
+        { endpoint: `/api/orders/${orderId}/bordir-done`, method: 'PUT', fieldName: 'bordir_proof' },
+        `<div>
+            <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan</label>
+            <input name="note" type="text" placeholder="Contoh: bordir nama selesai, logo ok..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+        </div>`
+    );
+}
+
+function openPackOrder(orderId) {
+    openPhotoModal(
+        '📦 Kemas Pesanan — Upload Foto',
+        { endpoint: `/api/orders/${orderId}/pack`, method: 'PUT', fieldName: 'pack_proof' },
+        `<div>
+            <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan</label>
+            <input name="note" type="text" placeholder="Contoh: sudah dikemas rapi, siap kirim..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+        </div>`
+    );
+}
+
+function openCancelOrder(orderId) {
+    // Check if order is already paid — if so, refund proof required
+    const order = cachedOrders.find(o => o.id === orderId);
+    const isPaid = order && order.payment_status === 'paid';
+
+    openPhotoModal(
+        '❌ Batalkan Pesanan',
+        { endpoint: `/api/orders/${orderId}/cancel`, method: 'PUT', fieldName: 'refund_proof' },
+        `<div class="space-y-3">
+            <div class="bg-red-900/20 border border-red-500/20 rounded-xl p-3 text-xs text-red-300">
+                ${isPaid
+                    ? '⚠️ Pembayaran sudah dikonfirmasi. Upload foto bukti refund wajib dilampirkan.'
+                    : 'Pesanan belum dibayar. Foto bukti refund opsional.'}
+            </div>
+            <div>
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Alasan Pembatalan *</label>
+                <textarea name="cancel_reason" rows="2" required placeholder="Masukkan alasan pembatalan..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none resize-none"></textarea>
+            </div>
+        </div>`
+    );
+}
+
+async function updateOrderStatus(id, status) {
+    try {
+        await apiFetch(`/api/orders/${id}/status`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({order_status:status})});
+        toast('Status diperbarui');
+        loadOrders();
+    } catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+loadOverview();
+setInterval(async () => {
+    try {
+        const s = await apiFetch('/api/stats/overview');
+        if (s.pending_orders > 0) {
+            document.getElementById('header-pending-badge').classList.remove('hidden');
+            document.getElementById('header-pending-badge').classList.add('flex');
+            document.getElementById('header-pending-count').textContent = s.pending_orders + ' Pesanan Baru';
+            document.getElementById('orders-badge').textContent = s.pending_orders;
+            document.getElementById('orders-badge').classList.remove('hidden');
+        }
+    } catch(e) {}
+}, 60000);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SETTINGS — Change Password & User Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// All dashboard menus with labels + icons
+const MENU_DEFS = [
+    { key: 'overview',   label: 'Overview',   icon: 'fa-chart-line' },
+    { key: 'products',   label: 'Produk',     icon: 'fa-box-open' },
+    { key: 'inventory',  label: 'Inventori',  icon: 'fa-warehouse' },
+    { key: 'popular',    label: 'Popular',    icon: 'fa-star' },
+    { key: 'orders',     label: 'Pesanan',    icon: 'fa-bag-shopping' },
+];
+
+// ── Initialize sidebar visibility based on current user's allowed_menus ────────
+function initSidebar() {
+    const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    const isAdmin = user.role === 'admin';
+    const allowed = user.allowed_menus; // null = all menus
+
+    // Hide/show Settings button based on role
+    const settingsWrap = document.getElementById('sidebar-settings-wrap');
+    if (settingsWrap) settingsWrap.style.display = isAdmin ? '' : 'none';
+
+    // Show/hide user management section within Settings
+    const ugSec = document.getElementById('user-mgmt-section');
+    if (ugSec) ugSec.style.display = isAdmin ? '' : 'none';
+
+    if (!allowed) return; // null means all menus — no filtering needed
+
+    // Hide sidebar buttons not in allowed list
+    document.querySelectorAll('.sidebar-btn[data-menu]').forEach(btn => {
+        const menu = btn.getAttribute('data-menu');
+        if (menu && !allowed.includes(menu)) {
+            btn.style.display = 'none';
+        }
+    });
+}
+
+// ── Load Settings module (users table + sidebar init) ─────────────────────────
+async function loadSettings() {
+    initSidebar();
+    const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    if (user.role !== 'admin') return;
+    await loadUsers();
+}
+
+// ── Load users into table ─────────────────────────────────────────────────────
+let _allUsers = [];
+async function loadUsers() {
+    try {
+        _allUsers = await apiFetch('/api/admin/users');
+        renderUserTable(_allUsers);
+    } catch (e) {
+        document.getElementById('user-table-body').innerHTML =
+            `<tr><td colspan="6" class="text-center py-8 text-red-400 text-sm">${e.message}</td></tr>`;
+    }
+}
+
+function renderUserTable(users) {
+    const roleColors = { admin: 'text-yellow-400 bg-yellow-400/10', manager: 'text-blue-400 bg-blue-400/10', viewer: 'text-gray-400 bg-gray-400/10' };
+    const currentUser = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+
+    const html = users.map(u => {
+        const menusLabel = u.allowed_menus === null
+            ? '<span class="text-white/40 text-xs italic">Semua Menu</span>'
+            : (u.allowed_menus.length === 0
+                ? '<span class="text-red-400 text-xs">Tidak ada akses</span>'
+                : u.allowed_menus.map(m => {
+                    const def = MENU_DEFS.find(d => d.key === m);
+                    return `<span class="inline-flex items-center gap-1 bg-white/5 border border-white/10 rounded-full px-2 py-0.5 text-[10px] text-white/60"><i class="fa-solid ${def?.icon||'fa-circle'} text-[9px]"></i>${def?.label||m}</span>`;
+                }).join(' '));
+
+        const isMe = u.id === currentUser.id;
+        return `<tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+            <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold">${u.username.charAt(0).toUpperCase()}</div>
+                    <span class="font-medium text-sm">${u.username}</span>
+                    ${isMe ? '<span class="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full text-white/40">Anda</span>' : ''}
+                </div>
+            </td>
+            <td class="px-4 py-3"><span class="text-xs font-bold px-2 py-1 rounded-full ${roleColors[u.role]||''}">${u.role}</span></td>
+            <td class="px-4 py-3"><div class="flex flex-wrap gap-1">${menusLabel}</div></td>
+            <td class="px-4 py-3">
+                <span class="text-xs font-semibold ${u.is_active ? 'text-green-400' : 'text-red-400'}">
+                    <i class="fa-solid fa-circle text-[8px] mr-1"></i>${u.is_active ? 'Aktif' : 'Nonaktif'}
+                </span>
+            </td>
+            <td class="px-4 py-3 text-white/40 text-xs">${u.created_at?.split(' ')[0] || '-'}</td>
+            <td class="px-4 py-3">
+                <div class="flex gap-2 justify-end">
+                    <button onclick="openUserModal(${u.id})" class="text-white/40 hover:text-white transition p-1.5 rounded-lg hover:bg-white/5" title="Edit">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    ${!isMe ? `<button onclick="deleteUser(${u.id},'${u.username}')" class="text-white/40 hover:text-red-400 transition p-1.5 rounded-lg hover:bg-red-400/10" title="Hapus">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                    </button>` : ''}
+                </div>
+            </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6" class="text-center py-8 text-white/30 text-sm">Belum ada pengguna</td></tr>';
+
+    document.getElementById('user-table-body').innerHTML = html;
+}
+
+// ── Change Password ───────────────────────────────────────────────────────────
+async function changePassword() {
+    const old = document.getElementById('cp-old').value;
+    const nw  = document.getElementById('cp-new').value;
+    const cf  = document.getElementById('cp-confirm').value;
+    const errEl = document.getElementById('cp-error');
+    const errTxt = document.getElementById('cp-error-text');
+
+    const showErr = (msg) => { errTxt.textContent = msg; errEl.classList.remove('hidden'); };
+    errEl.classList.add('hidden');
+
+    if (!old || !nw || !cf) return showErr('Semua field wajib diisi.');
+    if (nw.length < 8) return showErr('Password baru minimal 8 karakter.');
+    if (nw !== cf) return showErr('Konfirmasi password tidak cocok.');
+
+    try {
+        await apiFetch('/api/auth/change-password', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: old, new_password: nw })
+        });
+        document.getElementById('cp-old').value = '';
+        document.getElementById('cp-new').value = '';
+        document.getElementById('cp-confirm').value = '';
+        toast('Password berhasil diubah! Silakan login kembali.', false);
+        setTimeout(() => doLogout(), 2500);
+    } catch (e) { showErr(e.message); }
+}
+
+// ── User Modal ────────────────────────────────────────────────────────────────
+let _editingUserId = null;
+
+function buildMenuCheckboxes(checkedList) {
+    // checkedList = null (all), [] (none), or ['overview', ...]
+    const allChecked = checkedList === null;
+    const role = document.getElementById('um-role').value;
+    const isAdmin = role === 'admin';
+
+    return MENU_DEFS.map(m => {
+        const checked = isAdmin || allChecked || (Array.isArray(checkedList) && checkedList.includes(m.key));
+        const disabled = isAdmin; // admin always gets all menus
+        return `<label class="flex items-center gap-3 p-3 rounded-xl border ${checked ? 'border-white/20 bg-white/5' : 'border-white/5'} cursor-pointer hover:bg-white/[0.04] transition-colors ${disabled ? 'opacity-50 pointer-events-none' : ''}">
+            <input type="checkbox" name="menu-access" value="${m.key}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
+                class="w-4 h-4 rounded accent-white" onchange="this.closest('label').classList.toggle('border-white/20',this.checked); this.closest('label').classList.toggle('bg-white/5',this.checked)">
+            <i class="fa-solid ${m.icon} w-4 text-sm text-white/50"></i>
+            <span class="text-sm font-medium">${m.label}</span>
+        </label>`;
+    }).join('');
+}
+
+function updateMenuAccessByRole() {
+    const role = document.getElementById('um-role').value;
+    const isAdmin = role === 'admin';
+    const menus = isAdmin ? null : getDefaultMenusByRole(role);
+    document.getElementById('um-menu-checkboxes').innerHTML = buildMenuCheckboxes(menus);
+    document.getElementById('um-menus-wrap').style.opacity = isAdmin ? '0.5' : '1';
+}
+
+function getDefaultMenusByRole(role) {
+    if (role === 'manager') return ['overview', 'products', 'inventory', 'popular', 'orders'];
+    if (role === 'viewer')  return ['overview', 'products', 'orders'];
+    return null;
+}
+
+function openUserModal(userId = null) {
+    _editingUserId = userId;
+    const modal = document.getElementById('user-modal');
+    const title = document.getElementById('user-modal-title');
+    const pwNote = document.getElementById('um-pw-edit-note');
+    const errEl = document.getElementById('um-error');
+    errEl.classList.add('hidden');
+
+    if (userId) {
+        // Edit mode
+        const u = _allUsers.find(x => x.id === userId);
+        if (!u) return;
+        title.textContent = `Edit Pengguna: ${u.username}`;
+        document.getElementById('um-username').value = u.username;
+        document.getElementById('um-username').disabled = true; // can't change username
+        document.getElementById('um-password').value = '';
+        document.getElementById('um-role').value = u.role;
+        pwNote.classList.remove('hidden');
+        document.getElementById('um-menu-checkboxes').innerHTML = buildMenuCheckboxes(u.allowed_menus);
+        document.getElementById('um-menus-wrap').style.opacity = u.role === 'admin' ? '0.5' : '1';
+    } else {
+        // Create mode
+        title.textContent = 'Tambah Pengguna Baru';
+        document.getElementById('um-username').value = '';
+        document.getElementById('um-username').disabled = false;
+        document.getElementById('um-password').value = '';
+        document.getElementById('um-role').value = 'viewer';
+        pwNote.classList.add('hidden');
+        document.getElementById('um-menu-checkboxes').innerHTML = buildMenuCheckboxes(getDefaultMenusByRole('viewer'));
+        document.getElementById('um-menus-wrap').style.opacity = '1';
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeUserModal() {
+    const modal = document.getElementById('user-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    _editingUserId = null;
+    document.getElementById('um-username').disabled = false;
+}
+
+async function saveUser() {
+    const username = document.getElementById('um-username').value.trim();
+    const password = document.getElementById('um-password').value;
+    const role = document.getElementById('um-role').value;
+    const errEl = document.getElementById('um-error');
+    const errTxt = document.getElementById('um-error-text');
+    const saveBtn = document.getElementById('um-save-btn');
+    const saveTxt = document.getElementById('um-save-text');
+
+    const showErr = (msg) => { errTxt.textContent = msg; errEl.classList.remove('hidden'); };
+    errEl.classList.add('hidden');
+
+    // Collect selected menus
+    const checkboxes = document.querySelectorAll('input[name="menu-access"]:checked:not([disabled])');
+    const all = document.querySelectorAll('input[name="menu-access"]:not([disabled])');
+    const allowedMenus = role === 'admin' ? null :
+        (checkboxes.length === 0 ? [] : [...checkboxes].map(cb => cb.value));
+
+    // Validations
+    if (!_editingUserId && !username) return showErr('Username wajib diisi.');
+    if (!_editingUserId && !password) return showErr('Password wajib diisi.');
+    if (password && password.length < 8) return showErr('Password minimal 8 karakter.');
+
+    saveTxt.textContent = 'Menyimpan...';
+    saveBtn.disabled = true;
+
+    try {
+        if (_editingUserId) {
+            // Edit existing
+            const body = { role, allowed_menus: allowedMenus };
+            if (password) body.password = password;
+            await apiFetch(`/api/admin/users/${_editingUserId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            toast(`Pengguna "${username || 'user'}" berhasil diperbarui`);
+        } else {
+            // Create new
+            await apiFetch('/api/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, role, allowed_menus: allowedMenus })
+            });
+            toast(`Pengguna "${username}" berhasil ditambahkan`);
+        }
+        closeUserModal();
+        await loadUsers();
+    } catch (e) {
+        showErr(e.message);
+    } finally {
+        saveTxt.textContent = 'Simpan';
+        saveBtn.disabled = false;
+    }
+}
+
+async function deleteUser(id, username) {
+    if (!confirm(`Hapus pengguna "${username}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+    try {
+        await apiFetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+        toast(`Pengguna "${username}" dihapus`);
+        await loadUsers();
+    } catch (e) { toast(e.message, true); }
+}
+
+// ── Helper: toggle password field visibility ──────────────────────────────────
+function togglePw(fieldId, btn) {
+    const input = document.getElementById(fieldId);
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+    }
+}
+
+// ── Run sidebar init after DOM loads ─────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    // initSidebar runs when settings module opens, but also init on load
+    // to ensure correct menu visibility from the start
+    setTimeout(initSidebar, 100);
+});
+
+</script>
+</body>
+</html>

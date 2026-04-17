@@ -1,0 +1,529 @@
+﻿<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout | WearScrubs</title>
+    <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } } }</script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
+        .step { display: none; }
+        .step.active { display: block; }
+        .city-option { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.8rem; }
+        .city-option:hover { background: rgba(99,102,241,0.15); }
+        input[type=text]:focus, input[type=tel]:focus, textarea:focus { border-color: #6366f1 !important; }
+        .bordir-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+    </style>
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://wearscrubs-production.up.railway.app">
+</head>
+<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
+
+<!-- Header -->
+<header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10">
+    <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+        <a href="index.html">
+            <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-8 w-auto block dark:hidden">
+            <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-8 w-auto hidden dark:block">
+        </a>
+        <h1 class="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Checkout</h1>
+        <a href="cart.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Kembali ke Keranjang</a>
+    </div>
+</header>
+
+<!-- Progress Bar -->
+<div class="border-b border-gray-100 dark:border-white/5 bg-white dark:bg-darkbg">
+    <div class="container mx-auto px-6 py-3 flex items-center justify-center gap-3 text-[11px] font-bold">
+        <span class="text-gray-400">1. Keranjang</span>
+        <i class="fa-solid fa-chevron-right text-gray-300 dark:text-white/20 text-[9px]"></i>
+        <span id="pb-info" class="text-gray-400">2. Informasi</span>
+        <i class="fa-solid fa-chevron-right text-gray-300 dark:text-white/20 text-[9px]"></i>
+        <span id="pb-bordir" class="text-gray-400">3. Bordir</span>
+        <i class="fa-solid fa-chevron-right text-gray-300 dark:text-white/20 text-[9px]"></i>
+        <span id="pb-payment" class="text-gray-400">4. Pembayaran</span>
+    </div>
+</div>
+
+<main class="container mx-auto px-6 py-12 max-w-5xl">
+
+    <!-- ═══ STEP 1: Info Pengiriman ═══ -->
+    <div id="step-info" class="step active flex flex-col lg:flex-row gap-8">
+        <div class="flex-1">
+            <h2 class="text-xl font-bold mb-6">Informasi Pengiriman</h2>
+            <form id="checkout-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Nama Lengkap *</label>
+                    <input type="text" id="f-name" placeholder="Nama lengkap Anda" required
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Nomor WhatsApp *</label>
+                    <input type="tel" id="f-phone" placeholder="08xxxxxxxxxx" required
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                </div>
+
+                <!-- Kota Tujuan dengan autocomplete -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Kota Tujuan Pengiriman *</label>
+                    <div class="relative">
+                        <input type="text" id="f-city-search" placeholder="Ketik nama kota..." autocomplete="off" required
+                            class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                        <input type="hidden" id="f-city" required>
+                        <div id="city-dropdown" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 hidden"></div>
+                    </div>
+                    <div id="shipping-info" class="mt-2 hidden">
+                        <div class="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/20 rounded-xl px-4 py-2.5 text-sm">
+                            <div>
+                                <span id="shipping-courier" class="font-bold text-indigo-700 dark:text-indigo-300"></span>
+                                <span class="text-gray-500 dark:text-white/40 text-xs ml-2" id="shipping-weight"></span>
+                            </div>
+                            <span id="shipping-cost-display" class="font-bold text-gray-900 dark:text-white"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Alamat Lengkap *</label>
+                    <textarea id="f-address" rows="3" placeholder="Jalan, nomor rumah, kelurahan, kecamatan, kode pos..." required
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Catatan (Opsional)</label>
+                    <input type="text" id="f-notes" placeholder="Instruksi khusus pengiriman..."
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                </div>
+                <button type="submit" class="w-full bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold text-sm hover:opacity-80 transition-all flex items-center justify-center gap-2">
+                    Lanjut <i class="fa-solid fa-arrow-right-long"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- Order Summary -->
+        <aside class="w-full lg:w-80 shrink-0">
+            <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 sticky top-24 shadow-sm">
+                <h3 class="font-bold mb-4">Pesanan Anda</h3>
+                <div id="order-items-preview" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-1"></div>
+                <div class="border-t border-gray-100 dark:border-white/10 pt-3 space-y-1.5">
+                    <div class="flex justify-between text-sm text-gray-500 dark:text-white/50">
+                        <span>Subtotal produk</span>
+                        <span id="subtotal-display">Rp 0</span>
+                    </div>
+                    <div id="bordir-summary-row" class="hidden flex justify-between text-sm text-purple-600 dark:text-purple-400">
+                        <span>Biaya bordir</span>
+                        <span id="bordir-cost-display">Rp 0</span>
+                    </div>
+                    <div id="shipping-summary-row" class="hidden flex justify-between text-sm text-indigo-600 dark:text-indigo-400">
+                        <span id="shipping-summary-label">Ongkir</span>
+                        <span id="shipping-summary-cost">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-base border-t border-gray-100 dark:border-white/10 pt-2 mt-1">
+                        <span>Total</span>
+                        <span id="co-total" class="text-lg">Rp 0</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ═══ STEP 2: Detail Bordir ═══ -->
+    <div id="step-bordir" class="step hidden max-w-2xl mx-auto">
+        <div class="mb-6">
+            <h2 class="text-xl font-bold mb-1">Detail Bordir</h2>
+            <p class="text-sm text-gray-500 dark:text-white/40">Isi informasi bordir untuk setiap item di bawah ini.</p>
+            <!-- Estimasi bordir info -->
+            <div class="mt-4 flex items-start gap-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-500/30 rounded-xl px-4 py-3">
+                <i class="fa-regular fa-clock text-purple-500 mt-0.5 text-base shrink-0"></i>
+                <div>
+                    <p class="text-sm font-semibold text-purple-800 dark:text-purple-300">Estimasi Proses Bordir: ±1 Minggu</p>
+                    <p class="text-xs text-purple-600 dark:text-purple-400 mt-0.5">Pesanan bordir akan diproses selama ±1 minggu setelah pembayaran dikonfirmasi. Bordir logo memerlukan file logo dari Anda — admin akan menghubungi via WhatsApp.</p>
+                </div>
+            </div>
+        </div>
+        <div id="bordir-form-container" class="space-y-4"></div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="goToStep('info')" class="flex-1 py-3 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Kembali
+            </button>
+            <button onclick="submitBordirStep()" class="flex-2 flex-1 py-3 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold hover:opacity-80 transition">
+                Lanjut ke Pembayaran <i class="fa-solid fa-arrow-right-long ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══ STEP 3: Pembayaran ═══ -->
+    <div id="step-payment" class="step hidden max-w-2xl mx-auto">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-check-circle text-green-500 text-3xl"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Pesanan Berhasil Dibuat!</h2>
+            <p class="text-gray-500 dark:text-white/50 text-sm">Kode Invoice: <span id="order-code-display" class="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-base bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 rounded-lg"></span></p>
+            <p class="text-xs text-gray-400 dark:text-white/30 mt-2">Simpan kode ini untuk konfirmasi pembayaran ke admin</p>
+        </div>
+
+        <!-- Bank Transfer Info -->
+        <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 shadow-sm mb-4">
+            <h3 class="font-bold mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-building-columns text-blue-500"></i>
+                Instruksi Pembayaran
+            </h3>
+            <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-500/10 rounded-xl p-4 mb-4">
+                <p class="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-3">Transfer ke Rekening BCA</p>
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-white/50">Bank</span>
+                        <span class="font-bold">BCA</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-white/50">No. Rekening</span>
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold text-lg" id="bank-account-display">8780269791</span>
+                            <button onclick="copyAccount()" class="text-xs text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-white/50">Atas Nama</span>
+                        <span class="font-bold">Priscilla Lavine</span>
+                    </div>
+                    <div class="flex justify-between items-center border-t border-blue-100 dark:border-blue-500/10 pt-2 mt-2">
+                        <span class="text-sm font-bold text-gray-700 dark:text-white">Jumlah Transfer</span>
+                        <span id="payment-amount" class="font-bold text-xl text-green-600 dark:text-green-400"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4 text-sm text-yellow-800 dark:text-yellow-300 space-y-2">
+                <p class="font-bold">⚠️ Penting:</p>
+                <ol class="list-decimal pl-4 space-y-1 text-xs">
+                    <li>Transfer <strong>tepat</strong> sesuai jumlah di atas</li>
+                    <li>Setelah transfer, kirim bukti bayar + <strong>kode invoice</strong> ke WhatsApp Admin</li>
+                    <li>Pesanan diproses setelah konfirmasi Admin</li>
+                    <li>Batas waktu pembayaran: <strong>24 jam</strong></li>
+                </ol>
+            </div>
+        </div>
+
+        <a id="wa-confirm-btn" href="#" target="_blank"
+            class="w-full flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white py-4 rounded-2xl font-bold text-sm transition-all mb-4">
+            <i class="fa-brands fa-whatsapp text-xl"></i>
+            Kirim Bukti Transfer via WhatsApp
+        </a>
+        <a href="scrub-top.html" class="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+            <i class="fa-solid fa-arrow-left"></i> Kembali Belanja
+        </a>
+    </div>
+
+</main>
+
+<script src="catalog.js"></script>
+<script>
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://wearscrubs-production.up.railway.app';
+function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+
+const BORDIR_NAMA_PRICE = 20000;
+const BORDIR_LOGO_PRICE = 30000;
+
+let cartItems = [];
+let selectedCity = null;   // { name, is_dki, courier, shipping_cost }
+let embroideryData = [];
+
+// ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
+
+function goToStep(step) {
+    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
+    document.getElementById('step-' + step).classList.remove('hidden');
+    document.getElementById('step-' + step).classList.add('active');
+    // Progress bar
+    const steps = { info: 'pb-info', bordir: 'pb-bordir', payment: 'pb-payment' };
+    Object.values(steps).forEach(id => document.getElementById(id)?.classList.remove('text-gray-900','dark:text-white','underline','underline-offset-2'));
+    const active = steps[step];
+    if (active) { document.getElementById(active)?.classList.add('text-gray-900','dark:text-white','underline','underline-offset-2'); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── RENDER PREVIEW ───────────────────────────────────────────────────────────
+
+function calcBordirCost(item) {
+    if (item.category !== 'tops') return 0;
+    return ((item.bordir_nama ? BORDIR_NAMA_PRICE : 0) + (item.bordir_logo ? BORDIR_LOGO_PRICE : 0)) * item.quantity;
+}
+
+function recalcTotals() {
+    let subtotal = 0;
+    let bordirTotal = 0;
+    cartItems.forEach(item => {
+        subtotal += item.price * item.quantity;
+        bordirTotal += calcBordirCost(item);
+    });
+    const shippingCost = selectedCity ? selectedCity.shipping_cost : 0;
+    const grandTotal = subtotal + bordirTotal + shippingCost;
+
+    document.getElementById('subtotal-display').textContent = fmt(subtotal);
+    document.getElementById('co-total').textContent = fmt(grandTotal);
+
+    const bordirRow = document.getElementById('bordir-summary-row');
+    if (bordirTotal > 0) { bordirRow.classList.remove('hidden'); document.getElementById('bordir-cost-display').textContent = fmt(bordirTotal); }
+    else { bordirRow.classList.add('hidden'); }
+
+    const shipRow = document.getElementById('shipping-summary-row');
+    if (selectedCity) {
+        shipRow.classList.remove('hidden');
+        document.getElementById('shipping-summary-label').textContent = `Ongkir (${selectedCity.courier})`;
+        document.getElementById('shipping-summary-cost').textContent = fmt(shippingCost);
+    } else { shipRow.classList.add('hidden'); }
+}
+
+function renderPreview() {
+    cartItems = Cart.get();
+    if (cartItems.length === 0) { window.location.href = 'cart.html'; return; }
+
+    document.getElementById('order-items-preview').innerHTML = cartItems.map(item => {
+        const bordirBadges = item.category === 'tops'
+            ? `${item.bordir_nama ? '<span class="bordir-badge bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">Bordir Nama</span> ' : ''}${item.bordir_logo ? '<span class="bordir-badge bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">Bordir Logo</span>' : ''}`
+            : '';
+        return `
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-darkbg shrink-0">
+                <img src="${item.photo ? (item.photo.startsWith('/uploads/') ? API + item.photo : item.photo) : ''}"
+                    alt="${item.name || 'Product image'}"
+                    class="w-full h-full object-cover object-top"
+                    onerror="this.src='images/logo/logo%20ws%20black%20250x55.png';this.classList.add('object-contain','p-1')">
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold truncate">${item.name}</p>
+                <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span class="text-[9px] px-1 bg-gray-100 dark:bg-white/10 rounded font-bold">${item.size}</span>
+                    <span class="text-[9px] text-gray-400 capitalize">${item.color}</span>
+                    ${item.type && item.type !== 'null' ? `<span class="text-[9px] text-indigo-400 font-bold uppercase">${item.type}</span>` : ''}
+                    <span class="text-[9px] text-gray-500 italic">x${item.quantity}</span>
+                </div>
+                ${bordirBadges ? `<div class="mt-1 flex gap-1 flex-wrap">${bordirBadges}</div>` : ''}
+            </div>
+            <p class="text-xs font-bold shrink-0">${fmt(item.price * item.quantity)}</p>
+        </div>`;
+    }).join('');
+
+    recalcTotals();
+}
+
+// ─── CITY AUTOCOMPLETE ────────────────────────────────────────────────────────
+
+let allCities = [];
+async function loadCities() {
+    try {
+        allCities = await fetch(API + '/api/cities').then(r => r.json());
+    } catch(e) { console.error('Gagal load kota', e); }
+}
+
+function showCityDropdown(query) {
+    const dd = document.getElementById('city-dropdown');
+    const filtered = query.length < 2 ? [] : allCities.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 20);
+    if (!filtered.length) { dd.classList.add('hidden'); return; }
+    dd.innerHTML = filtered.map(c => `
+        <div class="city-option ${c.is_dki ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-white'}"
+             onclick="selectCity('${c.name.replace(/'/g, "\\'")}')">
+            ${c.name} <span class="text-[10px] opacity-50">${c.is_dki ? '— DKI' : ''}</span>
+        </div>`).join('');
+    dd.classList.remove('hidden');
+}
+
+async function selectCity(name) {
+    document.getElementById('f-city-search').value = name;
+    document.getElementById('f-city').value = name;
+    document.getElementById('city-dropdown').classList.add('hidden');
+
+    const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
+    try {
+        const res = await fetch(`${API}/api/shipping-cost?city=${encodeURIComponent(name)}&qty=${qty}`);
+        const data = await res.json();
+        selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier, shipping_cost: data.shipping_cost, weight_kg: data.weight_kg };
+
+        document.getElementById('shipping-courier').textContent = data.courier;
+        document.getElementById('shipping-weight').textContent = `${data.weight_kg} kg (${qty} item)`;
+        document.getElementById('shipping-cost-display').textContent = data.shipping_cost_formatted;
+        document.getElementById('shipping-info').classList.remove('hidden');
+        recalcTotals();
+    } catch(e) { console.error(e); }
+}
+
+document.getElementById('f-city-search').addEventListener('input', function() {
+    showCityDropdown(this.value);
+    if (!this.value) { selectedCity = null; document.getElementById('shipping-info').classList.add('hidden'); document.getElementById('f-city').value = ''; recalcTotals(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('#f-city-search') && !e.target.closest('#city-dropdown'))
+        document.getElementById('city-dropdown').classList.add('hidden');
+});
+
+// ─── STEP 1 SUBMIT ────────────────────────────────────────────────────────────
+
+document.getElementById('checkout-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!document.getElementById('f-city').value) {
+        alert('Pilih kota tujuan pengiriman terlebih dahulu'); return;
+    }
+
+    // Check apakah ada item tops dengan bordir
+    const hasBordir = cartItems.some(item => item.category === 'tops' && (item.bordir_nama || item.bordir_logo));
+    if (hasBordir) {
+        buildBordirForm();
+        goToStep('bordir');
+    } else {
+        await submitOrder();
+    }
+});
+
+// ─── STEP 2: BORDIR FORM ──────────────────────────────────────────────────────
+
+function buildBordirForm() {
+    const container = document.getElementById('bordir-form-container');
+    const inputs = [];
+
+    cartItems.forEach((item, itemIdx) => {
+        if (item.category !== 'tops') return;
+        if (!item.bordir_nama && !item.bordir_logo) return;
+
+        // For each qty of this item, create a separate input set
+        for (let q = 1; q <= item.quantity; q++) {
+            const label = `${item.name} (${item.color}${item.type && item.type !== 'null' ? ', ' + item.type : ''}, ${item.size}) — Item ke-${q}`;
+            inputs.push({ item, itemIdx, q, label });
+        }
+    });
+
+    container.innerHTML = inputs.map(({ item, itemIdx, q, label }) => `
+        <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-white/40 mb-3">${label}</p>
+            ${item.bordir_nama ? `
+            <div class="mb-3">
+                <label class="flex items-center gap-2 text-sm font-bold mb-1.5">
+                    <span class="bordir-badge bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">Bordir Nama</span>
+                    <span class="text-gray-600 dark:text-white/60 font-medium text-xs">+${fmt(BORDIR_NAMA_PRICE)}</span>
+                </label>
+                <input type="text" id="bordir-nama-${itemIdx}-${q}"
+                    placeholder="Masukkan nama yang akan dibordir..."
+                    class="w-full bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition"
+                    required>
+            </div>` : ''}
+            ${item.bordir_logo ? `
+            <div>
+                <label class="flex items-center gap-2 text-sm font-bold mb-1.5">
+                    <span class="bordir-badge bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">Bordir Logo</span>
+                    <span class="text-gray-600 dark:text-white/60 font-medium text-xs">+${fmt(BORDIR_LOGO_PRICE)}</span>
+                </label>
+                <input type="text" id="bordir-logo-${itemIdx}-${q}"
+                    placeholder="Deskripsi logo / kirim via WA setelah order..."
+                    class="w-full bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition">
+            </div>` : ''}
+        </div>
+    `).join('');
+
+    // Store reference for submit
+    container._inputs = inputs;
+}
+
+async function submitBordirStep() {
+    const container = document.getElementById('bordir-form-container');
+    const inputs = container._inputs || [];
+    embroideryData = [];
+
+    for (const { item, itemIdx, q } of inputs) {
+        if (item.bordir_nama) {
+            const val = document.getElementById(`bordir-nama-${itemIdx}-${q}`)?.value?.trim();
+            if (!val) { alert(`Harap isi nama bordir untuk "${item.name}" item ke-${q}`); return; }
+            embroideryData.push({ item_label: `${item.name} (ke-${q})`, type: 'nama', value: val });
+        }
+        if (item.bordir_logo) {
+            const val = document.getElementById(`bordir-logo-${itemIdx}-${q}`)?.value?.trim() || '(kirim via WA)';
+            embroideryData.push({ item_label: `${item.name} (ke-${q})`, type: 'logo', value: val });
+        }
+    }
+
+    await submitOrder();
+}
+
+// ─── SUBMIT ORDER ─────────────────────────────────────────────────────────────
+
+async function submitOrder() {
+    const submitBtns = document.querySelectorAll('button[type=submit], #bordir-submit-btn');
+    submitBtns.forEach(b => { b.disabled = true; });
+
+    try {
+        const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
+        const payload = {
+            customer_name: document.getElementById('f-name').value,
+            customer_phone: document.getElementById('f-phone').value,
+            customer_address: document.getElementById('f-address').value,
+            notes: document.getElementById('f-notes').value,
+            shipping_city: selectedCity?.name || '',
+            shipping_cost: selectedCity?.shipping_cost || 0,
+            embroidery_details: embroideryData.length ? embroideryData : null,
+            items: cartItems.map(item => ({
+                product_id: Number(item.product_id),
+                size: item.size,
+                color: item.color,
+                variant_type: item.type || 'null',
+                quantity: Number(item.quantity),
+                bordir_nama: item.bordir_nama || false,
+                bordir_logo: item.bordir_logo || false
+            }))
+        };
+
+        const res = await fetch(API + '/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal membuat pesanan');
+
+        Cart.save([]);
+
+        // Build WA message for user to send proof of payment
+        const bordirNote = embroideryData.length > 0
+            ? `\n🧵 Bordir:\n` + embroideryData.map(e => `• ${e.item_label}: ${e.value}`).join('\n')
+            : '';
+        const waMsg = encodeURIComponent(
+            `Halo WearScrubs! Saya sudah melakukan transfer untuk pesanan saya.\n\n` +
+            `🧾 Invoice: *${data.order_code}*\n` +
+            `💰 Total: ${fmt(data.total_amount)}\n` +
+            `📦 Ongkir (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
+            `🏙️ Kota: ${selectedCity?.name || ''}` +
+            bordirNote +
+            `\n\nMohon dikonfirmasi. Terima kasih! 🙏`
+        );
+
+        document.getElementById('order-code-display').textContent = data.order_code;
+        document.getElementById('payment-amount').textContent = fmt(data.total_amount);
+        document.getElementById('wa-confirm-btn').href = `https://wa.me/628787172220?text=${waMsg}`;
+
+        goToStep('payment');
+
+    } catch (err) {
+        alert('❌ ' + err.message);
+        submitBtns.forEach(b => { b.disabled = false; });
+    }
+}
+
+function copyAccount() {
+    navigator.clipboard.writeText('8780269791').then(() => {
+        const btn = event.currentTarget;
+        btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
+        setTimeout(() => btn.innerHTML = '<i class="fa-solid fa-copy"></i>', 2000);
+    });
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+loadCities();
+renderPreview();
+goToStep('info');
+</script>
+<script src="main.js"></script>
+</body>
+</html>

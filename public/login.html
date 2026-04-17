@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — WearScrubs Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#1c1c1c',
+                        darkcard: '#2a2a2a',
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+
+        .login-bg {
+            background: radial-gradient(ellipse at top left, #2a2a2a 0%, #1c1c1c 50%, #111 100%);
+        }
+        .glass-card {
+            background: rgba(255,255,255,0.04);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.09);
+        }
+        .input-field {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.2s;
+        }
+        .input-field:focus {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.3);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
+        }
+        .btn-login {
+            background: white;
+            color: black;
+            transition: all 0.2s;
+        }
+        .btn-login:hover { background: #e5e5e5; transform: translateY(-1px); }
+        .btn-login:active { transform: translateY(0); }
+        .btn-login:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-up { animation: fadeUp 0.5s ease-out forwards; }
+        .fade-up-delay { animation: fadeUp 0.5s ease-out 0.1s forwards; opacity: 0; }
+
+        .shake { animation: shake 0.4s ease-in-out; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-6px); }
+            80% { transform: translateX(6px); }
+        }
+    </style>
+</head>
+<body class="login-bg min-h-screen flex items-center justify-center p-4">
+
+    <!-- Background grid pattern -->
+    <div class="fixed inset-0 opacity-[0.03]" style="background-image: linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+    <div class="w-full max-w-sm relative z-10">
+
+        <!-- Logo -->
+        <div class="text-center mb-8 fade-up">
+            <a href="index.html">
+                <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-9 w-auto mx-auto mb-6">
+            </a>
+            <h1 class="text-2xl font-bold text-white tracking-tight">Dashboard Login</h1>
+            <p class="text-sm text-white/40 mt-1">Masuk untuk mengelola toko</p>
+        </div>
+
+        <!-- Card -->
+        <div class="glass-card rounded-2xl p-8 fade-up-delay" id="login-card">
+            <form id="login-form" class="space-y-5" autocomplete="off">
+
+                <!-- Username -->
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-2">Username</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-user absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-sm"></i>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-sm text-white placeholder-white/25 font-medium"
+                            placeholder="Masukkan username"
+                            autocomplete="username"
+                            required
+                        >
+                    </div>
+                </div>
+
+                <!-- Password -->
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-2">Password</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-sm"></i>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="input-field w-full pl-10 pr-12 py-3 rounded-xl text-sm text-white placeholder-white/25 font-medium"
+                            placeholder="Masukkan password"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <button type="button" id="toggle-pw"
+                            class="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 transition-colors">
+                            <i class="fa-solid fa-eye text-sm" id="pw-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Error message -->
+                <div id="error-msg" class="hidden flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl px-4 py-3">
+                    <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+                    <span id="error-text">Login gagal.</span>
+                </div>
+
+                <!-- Submit -->
+                <button type="submit" id="submit-btn" class="btn-login w-full py-3.5 rounded-xl text-sm font-bold tracking-wide mt-2">
+                    <span id="btn-text">Masuk</span>
+                    <i class="fa-solid fa-spinner fa-spin hidden ml-2" id="btn-spinner"></i>
+                </button>
+
+            </form>
+        </div>
+
+        <!-- Back to site -->
+        <p class="text-center text-white/25 text-xs mt-6 fade-up-delay">
+            <a href="index.html" class="hover:text-white/60 transition-colors">← Kembali ke website</a>
+        </p>
+
+    </div>
+
+    <script>
+        const WS_API = 'http://localhost:3000';
+
+        // Redirect if already logged in
+        const token = localStorage.getItem('ws_admin_token');
+        if (token) {
+            fetch(`${WS_API}/api/auth/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }).then(r => {
+                if (r.ok) window.location.replace('dashboard.html');
+            }).catch(() => {});
+        }
+
+        // Password toggle
+        document.getElementById('toggle-pw').addEventListener('click', () => {
+            const pw = document.getElementById('password');
+            const eye = document.getElementById('pw-eye');
+            if (pw.type === 'password') {
+                pw.type = 'text';
+                eye.classList.replace('fa-eye', 'fa-eye-slash');
+            } else {
+                pw.type = 'password';
+                eye.classList.replace('fa-eye-slash', 'fa-eye');
+            }
+        });
+
+        // Form submit
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('error-msg');
+            const errorText = document.getElementById('error-text');
+            const btnText = document.getElementById('btn-text');
+            const btnSpinner = document.getElementById('btn-spinner');
+            const submitBtn = document.getElementById('submit-btn');
+            const card = document.getElementById('login-card');
+
+            // Reset errors
+            errorMsg.classList.add('hidden');
+            btnText.textContent = 'Memverifikasi...';
+            btnSpinner.classList.remove('hidden');
+            submitBtn.disabled = true;
+
+            try {
+                const res = await fetch(`${WS_API}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.error || 'Login gagal.');
+
+                // Save token & user info
+                localStorage.setItem('ws_admin_token', data.token);
+                localStorage.setItem('ws_admin_user', JSON.stringify(data.user));
+
+                // Success animation then redirect
+                btnText.textContent = 'Berhasil! Mengalihkan...';
+                submitBtn.style.background = '#22c55e';
+                setTimeout(() => window.location.replace('dashboard.html'), 800);
+
+            } catch (err) {
+                // Show error with shake animation
+                errorText.textContent = err.message;
+                errorMsg.classList.remove('hidden');
+                card.classList.add('shake');
+                setTimeout(() => card.classList.remove('shake'), 400);
+
+                btnText.textContent = 'Masuk';
+                btnSpinner.classList.add('hidden');
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Enter key on username field moves to password
+        document.getElementById('username').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('password').focus();
+        });
+    </script>
+</body>
+</html>

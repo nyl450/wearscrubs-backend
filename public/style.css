@@ -1,0 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .hero-pane {
+            position: relative;
+            height: 85vh;
+            overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .hero-pane:last-child {
+            border-right: none;
+        }
+
+        .hero-image {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            filter: brightness(0.7);
+            transition: transform 0.8s ease;
+        }
+
+        .hero-pane:hover .hero-image {
+            transform: scale(1.05);
+            filter: brightness(0.85);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 10;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 3rem 2rem;
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%);
+        }
+
+        .custom-button {
+            border: 1px solid #fff;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: all 0.3s;
+            width: fit-content;
+            color: #fff;
+        }
+
+        .custom-button:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        /* Gaya Kartu Produk */
+        .product-card-img-container {
+            position: relative;
+            aspect-ratio: 3/4;
+            overflow: hidden;
+            border-radius: 1rem;
+            background-color: #f3f4f6;
+        }
+
+        .product-img-primary, .product-img-secondary {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: opacity 0.6s ease, transform 1.5s ease;
+        }
+
+        .product-img-secondary {
+            opacity: 0;
+        }
+
+        .product-card:hover .product-img-secondary {
+            opacity: 1;
+        }
+
+        .product-card:hover .product-img-primary {
+            opacity: 0;
+        }
+
+        .product-card:hover .product-img-container img {
+            transform: scale(1.05);
+        }
+
+        /* Gaya Khusus Chatbot AI */
+        #ai-chat-panel {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            transform-origin: bottom left;
+        }
+        
+        .chat-hidden {
+            transform: scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .chat-visible {
+            transform: scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #9ca3af;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Penyesuaian Mobile */
+        @media (max-width: 768px) {
+            .hero-container {
+                flex-direction: column;
+            }
+            .hero-pane {
+                height: 50vh;
+                border-right: none;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            #ai-chat-panel {
+                width: calc(100vw - 2rem) !important;
+                left: 1rem !important;
+                bottom: 5rem !important;
+            }
+        }
