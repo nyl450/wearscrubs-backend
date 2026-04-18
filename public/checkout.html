@@ -13,6 +13,8 @@
         #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
         .step { display: none; }
         .step.active { display: block; }
+        /* Override: step-info uses flex layout */
+        #step-info.active { display: flex !important; flex-direction: row; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
         .city-option { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.8rem; }
         .city-option:hover { background: rgba(99,102,241,0.15); }
         input[type=text]:focus, input[type=tel]:focus, textarea:focus { border-color: #6366f1 !important; }
@@ -64,11 +66,11 @@
 <main class="container mx-auto px-6 py-12 max-w-5xl">
 
     <!-- ═══ STEP 1: Info Pengiriman ═══ -->
-    <div id="step-info" class="step active flex flex-col md:flex-row gap-8">
+    <div id="step-info" class="step active">
 
-        <!-- Order Summary — LEFT on desktop, TOP on mobile -->
-        <aside class="w-full md:w-72 lg:w-80 shrink-0">
-            <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 md:sticky md:top-24 shadow-sm">
+        <!-- Order Summary — LEFT -->
+        <aside class="w-64 lg:w-72 shrink-0">
+            <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 sticky top-24 shadow-sm">
                 <h3 class="font-bold mb-4">Pesanan Anda</h3>
                 <div id="order-items-preview" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-1"></div>
                 <div class="border-t border-gray-100 dark:border-white/10 pt-3 space-y-1.5">
@@ -92,8 +94,8 @@
             </div>
         </aside>
 
-        <!-- Informasi Pengiriman — RIGHT on desktop, BOTTOM on mobile -->
-        <div class="flex-1">
+        <!-- Informasi Pengiriman — RIGHT -->
+        <div class="flex-1 min-w-[280px] max-w-lg">
             <h2 class="text-xl font-bold mb-6">Informasi Pengiriman</h2>
             <form id="checkout-form" class="space-y-4">
                 <div>
