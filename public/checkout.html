@@ -199,7 +199,7 @@
                         <span class="text-sm text-gray-500 dark:text-white/50">No. Rekening</span>
                         <div class="flex items-center gap-2">
                             <span class="font-mono font-bold text-lg" id="bank-account-display">8780269791</span>
-                            <button onclick="copyAccount()" class="text-xs text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-copy"></i></button>
+                            <button onclick="copyAccount(this)" class="text-xs text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-copy"></i></button>
                         </div>
                     </div>
                     <div class="flex justify-between items-center">
@@ -250,9 +250,15 @@ let embroideryData = [];
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
 
 function goToStep(step) {
-    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
-    document.getElementById('step-' + step).classList.remove('hidden');
-    document.getElementById('step-' + step).classList.add('active');
+    // Hide all steps cleanly (avoid adding 'hidden' class to prevent Tailwind conflict)
+    document.querySelectorAll('.step').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+    });
+    const target = document.getElementById('step-' + step);
+    target.classList.add('active');
+    // Restore correct display type: step-info uses flex, others use block
+    target.style.display = (step === 'info') ? '' : 'block'; // step-info uses CSS #step-info.active override
     // Progress bar
     const steps = { info: 'pb-info', bordir: 'pb-bordir', payment: 'pb-payment' };
     Object.values(steps).forEach(id => document.getElementById(id)?.classList.remove('text-gray-900','dark:text-white','underline','underline-offset-2'));
@@ -304,7 +310,7 @@ function renderPreview() {
         return `
         <div class="flex items-center gap-3">
             <div class="w-12 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-darkbg shrink-0">
-                <img src="${item.photo ? (item.photo.startsWith('/uploads/') ? API + item.photo : item.photo) : ''}"
+                <img src="${item.photo ? (item.photo.startsWith('/uploads/') ? item.photo : item.photo) : ''}"
                     alt="${item.name || 'Product image'}"
                     class="w-full h-full object-cover object-top"
                     onerror="this.src='images/logo/logo%20ws%20black%20250x55.png';this.classList.add('object-contain','p-1')">
@@ -488,7 +494,7 @@ async function submitOrder() {
             }))
         };
 
-        const res = await fetch(API + '/api/orders', {
+        const res = await fetch('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -524,11 +530,22 @@ async function submitOrder() {
     }
 }
 
-function copyAccount() {
+function copyAccount(btn) {
     navigator.clipboard.writeText('8780269791').then(() => {
-        const btn = event.currentTarget;
+        const prev = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
-        setTimeout(() => btn.innerHTML = '<i class="fa-solid fa-copy"></i>', 2000);
+        setTimeout(() => btn.innerHTML = prev, 2000);
+    }).catch(() => {
+        // Fallback for mobile browsers
+        const el = document.createElement('textarea');
+        el.value = '8780269791';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        const prev = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
+        setTimeout(() => btn.innerHTML = prev, 2000);
     });
 }
 
