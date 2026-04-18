@@ -78,9 +78,6 @@
             <i class="fa-solid fa-bag-shopping w-4 text-xs"></i> Pesanan
             <span id="orders-badge" class="hidden ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
         </button>
-        <button onclick="showModule('report')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="report">
-            <i class="fa-solid fa-chart-bar w-4 text-xs"></i> Laporan
-        </button>
     </nav>
     <!-- Settings (Admin only) -->
     <div id="sidebar-settings-wrap" class="p-3 border-t border-darkborder">
@@ -214,111 +211,23 @@
     <div id="module-orders" class="hidden p-6 space-y-4">
         <div class="flex justify-between items-center flex-wrap gap-3">
             <h2 class="text-xl font-bold">Manajemen Pesanan</h2>
-            <div class="flex gap-2 flex-wrap">
-                <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black">Semua</button>
-                <button onclick="filterOrders('pending')" data-tab="pending" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">Belum Bayar</button>
-                <button onclick="filterOrders('paid')" data-tab="paid" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">Dikonfirmasi</button>
-                <button onclick="filterOrders('bordir')" data-tab="bordir" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🧵 Bordir</button>
-                <button onclick="filterOrders('shipped')" data-tab="shipped" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">Dikirim</button>
-                <button onclick="filterOrders('cancelled')" data-tab="cancelled" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">❌ Dibatalkan</button>
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
+                <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="renderOrders()"
+                    class="pl-8 pr-4 py-1.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 w-52">
             </div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black">Semua</button>
+            <button onclick="filterOrders('pending')" data-tab="pending" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">⏳ Belum Bayar</button>
+            <button onclick="filterOrders('paid')" data-tab="paid" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">✅ Dikonfirmasi</button>
+            <button onclick="filterOrders('bordir')" data-tab="bordir" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🧵 Bordir</button>
+            <button onclick="filterOrders('packed')" data-tab="packed" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">📦 Dikemas</button>
+            <button onclick="filterOrders('shipped')" data-tab="shipped" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🚚 Dikirim</button>
+            <button onclick="filterOrders('done')" data-tab="done" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">✔ Selesai</button>
+            <button onclick="filterOrders('cancelled')" data-tab="cancelled" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">❌ Dibatalkan</button>
         </div>
         <div id="orders-list" class="space-y-3"></div>
-    </div>
-
-    <!-- ═══ LAPORAN / REPORT ════════════════════════════════════════════════ -->
-    <div id="module-report" class="hidden p-6 space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 class="text-xl font-bold">Laporan Penjualan</h2>
-            <button onclick="exportReportCSV()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold transition-all">
-                <i class="fa-solid fa-download text-[10px]"></i> Export CSV
-            </button>
-        </div>
-
-        <!-- Filter Bar -->
-        <div class="bg-darkcard border border-darkborder rounded-2xl p-4 flex flex-wrap gap-3 items-center">
-            <!-- Type Toggle -->
-            <div class="flex gap-1 bg-black/30 rounded-xl p-1">
-                <button id="rep-btn-monthly" onclick="setReportType('monthly')"
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-black">Per Bulan</button>
-                <button id="rep-btn-daily" onclick="setReportType('daily')"
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-white/50 hover:text-white">Per Hari</button>
-            </div>
-            <!-- Year -->
-            <div class="flex items-center gap-2">
-                <label class="text-[10px] text-white/40 uppercase tracking-wider font-bold">Tahun</label>
-                <select id="rep-year" onchange="loadReport()"
-                    class="bg-black/30 border border-white/10 text-white text-xs rounded-xl px-3 py-2 cursor-pointer outline-none w-24"></select>
-            </div>
-            <!-- Month (only for daily) -->
-            <div id="rep-month-wrap" class="hidden flex items-center gap-2">
-                <label class="text-[10px] text-white/40 uppercase tracking-wider font-bold">Bulan</label>
-                <select id="rep-month" onchange="loadReport()"
-                    class="bg-black/30 border border-white/10 text-white text-xs rounded-xl px-3 py-2 cursor-pointer outline-none w-36">
-                    <option value="1">Januari</option><option value="2">Februari</option>
-                    <option value="3">Maret</option><option value="4">April</option>
-                    <option value="5">Mei</option><option value="6">Juni</option>
-                    <option value="7">Juli</option><option value="8">Agustus</option>
-                    <option value="9">September</option><option value="10">Oktober</option>
-                    <option value="11">November</option><option value="12">Desember</option>
-                </select>
-            </div>
-            <div id="rep-loading" class="hidden ml-auto"><i class="fa-solid fa-spinner fa-spin text-white/40"></i></div>
-        </div>
-
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
-                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Total Order</p>
-                <p id="rep-stat-total" class="text-3xl font-bold">—</p>
-                <p class="text-[10px] text-white/30 mt-1">Semua status</p>
-            </div>
-            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
-                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Pendapatan</p>
-                <p id="rep-stat-revenue" class="text-xl font-bold text-green-400">—</p>
-                <p class="text-[10px] text-white/30 mt-1">Order terbayar</p>
-            </div>
-            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
-                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Dibatalkan</p>
-                <p id="rep-stat-cancelled" class="text-3xl font-bold text-red-400">—</p>
-                <p class="text-[10px] text-white/30 mt-1">Order cancelled</p>
-            </div>
-            <div class="bg-darkcard border border-darkborder rounded-2xl p-5">
-                <p class="text-[10px] text-white/40 uppercase tracking-wider mb-2">Rata-rata Order</p>
-                <p id="rep-stat-avg" class="text-xl font-bold text-indigo-400">—</p>
-                <p class="text-[10px] text-white/30 mt-1">Per transaksi</p>
-            </div>
-        </div>
-
-        <!-- Chart -->
-        <div class="bg-darkcard border border-darkborder rounded-2xl p-6">
-            <p id="rep-chart-title" class="text-xs font-bold text-white/40 uppercase tracking-wider mb-4">Grafik Pendapatan</p>
-            <div class="relative h-56">
-                <canvas id="rep-chart"></canvas>
-            </div>
-        </div>
-
-        <!-- Table -->
-        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
-            <div class="px-6 py-4 border-b border-darkborder flex items-center justify-between">
-                <p class="text-xs font-bold text-white/60 uppercase tracking-wider">Detail</p>
-                <p id="rep-table-subtitle" class="text-[10px] text-white/30"></p>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-darkborder">
-                            <th class="px-6 py-3 text-left text-[10px] font-bold text-white/40 uppercase tracking-wider">Periode</th>
-                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Total Order</th>
-                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Order Dibayar</th>
-                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Dibatalkan</th>
-                            <th class="px-6 py-3 text-right text-[10px] font-bold text-white/40 uppercase tracking-wider">Pendapatan</th>
-                        </tr>
-                    </thead>
-                    <tbody id="rep-table-body" class="divide-y divide-darkborder"></tbody>
-                </table>
-            </div>
-        </div>
     </div>
 
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
@@ -719,7 +628,7 @@
 <script>
 const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : '';  // empty = same origin (Railway serves FE + BE together)
+    : 'https://wearscrubs-production.up.railway.app';
 
 // ── Auth Guard ────────────────────────────────────────────────────────────────
 (function checkAuth() {
@@ -788,14 +697,7 @@ const ALL_MOTIFS = [
     { id: 'circus',            label: 'Circus' },
     { id: 'tooth-doodle',      label: 'Tooth Doodle' },
 ];
-const ORDER_STATUS_MAP = {
-    waiting_payment: { label: 'Menunggu Bayar', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' },
-    confirmed: { label: 'Terkonfirmasi', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
-    packed: { label: 'Dikemas', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-    shipped: { label: 'Dikirim', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
-    done: { label: 'Selesai', color: 'bg-gray-500/10 text-gray-400 border-gray-500/20' },
-    cancelled: { label: 'Dibatalkan', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
-};
+// ORDER_STATUS_MAP removed — gunakan statusBadge() di bawah
 
 let allProducts = [], inventoryEdits = {}, popularSelected = new Set();
 let currentOrderFilter = 'all', currentProductFilter = 'all';
@@ -809,15 +711,15 @@ function toast(msg, isErr = false) {
     setTimeout(() => el.classList.add('hidden'), 3500);
 }
 function fmt(n) { return Number(n||0).toLocaleString('id-ID'); }
-function statusBadge(s) {
-    // Full implementation in renderOrders section below
-    const label = { waiting_payment:'⏳ Menunggu Bayar', confirmed:'✅ Dikonfirmasi', bordir:'🧵 Proses Bordir', packed:'📦 Dikemas', shipped:'🚚 Dikirim', done:'✔ Selesai', cancelled:'❌ Dibatalkan' };
-    const color = { waiting_payment:'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', confirmed:'bg-blue-500/10 text-blue-400 border-blue-500/20', bordir:'bg-purple-500/10 text-purple-300 border-purple-500/20', packed:'bg-teal-500/10 text-teal-400 border-teal-500/20', shipped:'bg-indigo-500/10 text-indigo-400 border-indigo-500/20', done:'bg-green-500/10 text-green-400 border-green-500/20', cancelled:'bg-red-500/10 text-red-400 border-red-500/20' };
-    return `<span class="status-badge border ${color[s]||'bg-white/5 text-white/50 border-white/10'}">${label[s]||s}</span>`;
-}
+// statusBadge() — definisi lengkap ada di bawah (line ~1464), ini dihapus untuk hindari duplicate
 function resolvePhoto(url) {
     if (!url) return '';
-    return url.startsWith('/uploads/') ? API + url : url;
+    // /uploads/ → Railway absolute (auth needed for dashboard)
+    if (url.startsWith('/uploads/')) return API + url;
+    // Full URL (http/https) → use directly
+    if (url.startsWith('http')) return url;
+    // Local relative path (images/...) → served from same origin
+    return url;
 }
 
 async function apiFetch(url, options = {}) {
@@ -848,144 +750,7 @@ function showModule(name) {
     if (name === 'popular')   loadPopular();
     if (name === 'orders')    loadOrders();
     if (name === 'settings')  loadSettings();
-    if (name === 'report')    initReport();
 }
-
-// ─── REPORT ──────────────────────────────────────────────────────────────────
-let repType = 'monthly';
-let repChart = null;
-let repData = null;
-const MONTH_NAMES = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-
-function initReport() {
-    // Populate year dropdown
-    const yearSel = document.getElementById('rep-year');
-    if (!yearSel.options.length) {
-        const now = new Date().getFullYear();
-        for (let y = now; y >= now - 3; y--) {
-            const opt = document.createElement('option');
-            opt.value = y; opt.textContent = y;
-            yearSel.appendChild(opt);
-        }
-    }
-    // Set current month
-    const monthSel = document.getElementById('rep-month');
-    if (monthSel) monthSel.value = new Date().getMonth() + 1;
-    loadReport();
-}
-
-function setReportType(type) {
-    repType = type;
-    document.getElementById('rep-btn-monthly').className =
-        'px-4 py-1.5 rounded-lg text-xs font-bold transition-all ' +
-        (type === 'monthly' ? 'bg-white text-black' : 'text-white/50 hover:text-white');
-    document.getElementById('rep-btn-daily').className =
-        'px-4 py-1.5 rounded-lg text-xs font-bold transition-all ' +
-        (type === 'daily' ? 'bg-white text-black' : 'text-white/50 hover:text-white');
-    const mw = document.getElementById('rep-month-wrap');
-    if (type === 'daily') mw.classList.remove('hidden'); else mw.classList.add('hidden');
-    loadReport();
-}
-
-async function loadReport() {
-    const year  = document.getElementById('rep-year')?.value || new Date().getFullYear();
-    const month = document.getElementById('rep-month')?.value || (new Date().getMonth() + 1);
-    document.getElementById('rep-loading').classList.remove('hidden');
-    try {
-        const url = `/api/orders/report?type=${repType}&year=${year}${repType === 'daily' ? '&month=' + month : ''}`;
-        repData = await apiFetch(url);
-        const s = repData.summary;
-        // Summary cards
-        document.getElementById('rep-stat-total').textContent = s.total_orders || 0;
-        document.getElementById('rep-stat-revenue').textContent = 'Rp ' + fmt(s.total_revenue || 0);
-        document.getElementById('rep-stat-cancelled').textContent = s.cancelled_orders || 0;
-        document.getElementById('rep-stat-avg').textContent = 'Rp ' + fmt(Math.round(s.avg_order_value || 0));
-        // Subtitle
-        document.getElementById('rep-chart-title').textContent =
-            repType === 'monthly' ? `Grafik Pendapatan Tahun ${year}` : `Grafik Pendapatan ${MONTH_NAMES[month]} ${year}`;
-        document.getElementById('rep-table-subtitle').textContent =
-            repType === 'monthly' ? `${repData.rows.length} bulan dari ${year}` : `${repData.rows.length} hari aktif — ${MONTH_NAMES[month]} ${year}`;
-        // Chart
-        renderRepChart(repData.rows, year, month);
-        // Table
-        renderRepTable(repData.rows, year, month);
-    } catch(e) {
-        console.error('Report error:', e);
-    } finally {
-        document.getElementById('rep-loading').classList.add('hidden');
-    }
-}
-
-function renderRepChart(rows, year, month) {
-    const ctx = document.getElementById('rep-chart').getContext('2d');
-    if (repChart) { repChart.destroy(); repChart = null; }
-    // Build labels & data for all periods (fill gaps with 0)
-    const maxPeriod = repType === 'monthly' ? 12 : new Date(year, month, 0).getDate();
-    const revenueMap = {}; rows.forEach(r => { revenueMap[r.period] = Number(r.confirmed_revenue || 0); });
-    const labels = [], data = [];
-    for (let i = 1; i <= maxPeriod; i++) {
-        labels.push(repType === 'monthly' ? MONTH_NAMES[i] : i);
-        data.push(revenueMap[i] || 0);
-    }
-    repChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [{
-                label: 'Pendapatan (Rp)',
-                data,
-                backgroundColor: 'rgba(99,102,241,0.6)',
-                borderColor: 'rgba(99,102,241,0.9)',
-                borderWidth: 1.5,
-                borderRadius: 6,
-            }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 10 } } },
-                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 10 },
-                    callback: v => 'Rp ' + (v >= 1000000 ? (v/1000000).toFixed(1) + 'jt' : (v >= 1000 ? (v/1000).toFixed(0) + 'rb' : v)) } }
-            }
-        }
-    });
-}
-
-function renderRepTable(rows, year, month) {
-    const tbody = document.getElementById('rep-table-body');
-    if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-white/20 text-sm">Tidak ada data untuk periode ini</td></tr>';
-        return;
-    }
-    tbody.innerHTML = rows.map(r => {
-        const label = repType === 'monthly' ? MONTH_NAMES[r.period] + ' ' + year : r.period + ' ' + MONTH_NAMES[month] + ' ' + year;
-        return `<tr class="hover:bg-white/2 transition-colors">
-            <td class="px-6 py-3 font-semibold">${label}</td>
-            <td class="px-6 py-3 text-right text-white/70">${r.total_orders}</td>
-            <td class="px-6 py-3 text-right text-green-400">${r.paid_orders}</td>
-            <td class="px-6 py-3 text-right text-red-400">${r.cancelled_orders}</td>
-            <td class="px-6 py-3 text-right font-semibold">Rp ${fmt(r.confirmed_revenue || 0)}</td>
-        </tr>`;
-    }).join('');
-}
-
-function exportReportCSV() {
-    if (!repData || !repData.rows.length) { toast('Tidak ada data untuk diekspor', true); return; }
-    const year = document.getElementById('rep-year')?.value;
-    const month = document.getElementById('rep-month')?.value;
-    const header = 'Periode,Total Order,Order Dibayar,Dibatalkan,Pendapatan (Rp)\n';
-    const lines = repData.rows.map(r => {
-        const label = repType === 'monthly' ? MONTH_NAMES[r.period] + ' ' + year : r.period + ' ' + MONTH_NAMES[month] + ' ' + year;
-        return [label, r.total_orders, r.paid_orders, r.cancelled_orders, r.confirmed_revenue || 0].join(',');
-    });
-    const blob = new Blob([header + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `laporan-wearscrubs-${repType}-${year}${repType === 'daily' ? '-' + month : ''}.csv`;
-    a.click(); URL.revokeObjectURL(url);
-}
-
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
 async function loadOverview() {
@@ -1108,7 +873,7 @@ function renderProducts() {
                 <p class="text-xs text-white/40 font-mono">${p.sku}</p>
                 <p class="text-sm text-green-400 font-bold mt-2">Rp ${fmt(p.price)}</p>
                 <div class="flex gap-2 mt-3 pt-3 border-t border-darkborder">
-                    <button onclick="editProduct(${p.id})" class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
+                    <button onclick='openProductModal(${safeP})' class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-pen text-[9px]"></i> Edit
                     </button>
                     <a href="product.html?id=${p.id}" target="_blank" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-xs">
@@ -1129,18 +894,8 @@ async function deleteProduct(id, name) {
     catch(e) { toast('Gagal: '+e.message, true); }
 }
 
-async function editProduct(id) {
-    try {
-        const product = await apiFetch(`/api/products/${id}`);
-        openProductModal(product);
-    } catch(e) {
-        toast('Gagal memuat produk: ' + e.message, true);
-    }
-}
-
 // ─── WIZARD ──────────────────────────────────────────────────────────────────
 let currentStep = 1;
-let currentEditingProduct = null;
 
 function goToStep(n) {
     if (n === 2) {
@@ -1340,27 +1095,6 @@ function generatePhotoSlots(colors, types) {
             grid.appendChild(div);
         });
     });
-
-    // ── Pre-fill existing photos when editing ─────────────────────────────────
-    if (currentEditingProduct && currentEditingProduct.variants) {
-        currentEditingProduct.variants.forEach(variant => {
-            const vType = (variant.variant_type === null || variant.variant_type === undefined) ? 'null' : variant.variant_type;
-            (variant.photos || []).forEach((photoUrl, idx) => {
-                if (!photoUrl || idx >= NUM_PHOTOS) return;
-                const key = `${variant.color}_${vType}_${idx + 1}`;
-                const previewEl = document.getElementById(`preview-${key}`);
-                const placeholderEl = document.getElementById(`placeholder-${key}`);
-                const urlInput = document.getElementById(`url-${key}`);
-                if (previewEl) {
-                    previewEl.classList.remove('hidden');
-                    const imgEl = previewEl.querySelector('img');
-                    if (imgEl) imgEl.src = photoUrl;
-                    if (placeholderEl) placeholderEl.classList.add('hidden');
-                    if (urlInput) urlInput.value = photoUrl;
-                }
-            });
-        });
-    }
 }
 
 function previewPhoto(input, key) {
@@ -1376,7 +1110,6 @@ function previewPhoto(input, key) {
 }
 
 function openProductModal(product = null) {
-    currentEditingProduct = product;  // Store so generatePhotoSlots can pre-fill photos
     document.getElementById('product-form').reset();
     document.getElementById('pf-id').value = product ? product.id : '';
     document.getElementById('pf-sku').value = product ? product.sku : '';
@@ -1677,12 +1410,21 @@ function filterOrders(filter) {
 }
 
 function renderOrders() {
-    const filtered = currentOrderFilter === 'all'      ? cachedOrders
+    const searchQ = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
+    let filtered = currentOrderFilter === 'all'      ? cachedOrders
         : currentOrderFilter === 'pending'   ? cachedOrders.filter(o => o.payment_status==='pending')
         : currentOrderFilter === 'paid'      ? cachedOrders.filter(o => o.payment_status==='paid')
         : currentOrderFilter === 'bordir'    ? cachedOrders.filter(o => o.order_status==='bordir')
         : currentOrderFilter === 'cancelled' ? cachedOrders.filter(o => o.order_status==='cancelled')
         : cachedOrders.filter(o => o.order_status===currentOrderFilter);
+    // Apply search filter
+    if (searchQ) {
+        filtered = filtered.filter(o =>
+            (o.customer_name||'').toLowerCase().includes(searchQ) ||
+            (o.order_code||'').toLowerCase().includes(searchQ) ||
+            (o.customer_phone||'').includes(searchQ)
+        );
+    }
 
     const el = document.getElementById('orders-list');
     if (!filtered.length) { el.innerHTML = '<div class="text-center py-12 text-white/30 text-sm">Tidak ada pesanan</div>'; return; }
@@ -1930,7 +1672,7 @@ async function viewOrder(id) {
         const actionBtns = o.order_status === 'cancelled' ? '' : `
         <div class="flex flex-wrap gap-2 pt-4 border-t border-darkborder">
             ${o.payment_status==='pending' ? `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-circle"></i> Konfirmasi Bayar</button>` : ''}
-            ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-needle"></i> Bordir Selesai</button>` : ''}
+            ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Bordir Selesai</button>` : ''}
             ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas</button>` : ''}
             ${o.order_status==='packed' ? `<button onclick="updateOrderStatus(${o.id},'shipped')" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Kirim</button>` : ''}
             ${o.order_status==='shipped' ? `<button onclick="updateOrderStatus(${o.id},'done')" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Selesai</button>` : ''}
