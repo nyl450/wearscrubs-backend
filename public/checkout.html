@@ -116,7 +116,7 @@
         </div>
 
         <!-- Order Summary -->
-        <aside class="w-full lg:w-80 shrink-0">
+        <aside class="w-full lg:w-80 shrink-0 mt-4 pt-6 border-t border-gray-200 dark:border-white/10 lg:mt-0 lg:pt-0 lg:border-0">
             <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 sticky top-24 shadow-sm">
                 <h3 class="font-bold mb-4">Pesanan Anda</h3>
                 <div id="order-items-preview" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-1"></div>
@@ -327,7 +327,7 @@ function renderPreview() {
 let allCities = [];
 async function loadCities() {
     try {
-        allCities = await fetch(API + '/api/cities').then(r => r.json());
+        allCities = await fetch('/api/cities').then(r => r.json());
     } catch(e) { console.error('Gagal load kota', e); }
 }
 
@@ -350,7 +350,7 @@ async function selectCity(name) {
 
     const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
     try {
-        const res = await fetch(`${API}/api/shipping-cost?city=${encodeURIComponent(name)}&qty=${qty}`);
+        const res = await fetch(`/api/shipping-cost?city=${encodeURIComponent(name)}&qty=${qty}`);
         const data = await res.json();
         selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier, shipping_cost: data.shipping_cost, weight_kg: data.weight_kg };
 
