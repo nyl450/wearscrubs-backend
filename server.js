@@ -1043,14 +1043,14 @@ app.get('/api/orders/report', requireAuth(['admin']), async (req, res) => {
             `, [y]);
         }
 
-        // Summary totals
+        // Summary totals — revenue only from paid AND non-cancelled orders
         const summary = await dbGet(`
             SELECT
                 COUNT(*) AS total_orders,
-                COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS total_revenue,
-                COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_orders,
+                COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS total_revenue,
+                COUNT(*) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled') AS paid_orders,
                 COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders,
-                COALESCE(AVG(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS avg_order_value
+                COALESCE(AVG(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS avg_order_value
             FROM orders
             WHERE EXTRACT(YEAR FROM created_at) = $1
             ${type === 'daily' ? 'AND EXTRACT(MONTH FROM created_at) = $2' : ''}

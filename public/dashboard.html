@@ -921,7 +921,7 @@ function renderRepChart(rows, year, month) {
     if (repChart) { repChart.destroy(); repChart = null; }
     // Build labels & data for all periods (fill gaps with 0)
     const maxPeriod = repType === 'monthly' ? 12 : new Date(year, month, 0).getDate();
-    const revenueMap = {}; rows.forEach(r => { revenueMap[r.period] = Number(r.total_revenue || 0); });
+    const revenueMap = {}; rows.forEach(r => { revenueMap[r.period] = Number(r.confirmed_revenue || 0); });
     const labels = [], data = [];
     for (let i = 1; i <= maxPeriod; i++) {
         labels.push(repType === 'monthly' ? MONTH_NAMES[i] : i);
@@ -965,7 +965,7 @@ function renderRepTable(rows, year, month) {
             <td class="px-6 py-3 text-right text-white/70">${r.total_orders}</td>
             <td class="px-6 py-3 text-right text-green-400">${r.paid_orders}</td>
             <td class="px-6 py-3 text-right text-red-400">${r.cancelled_orders}</td>
-            <td class="px-6 py-3 text-right font-semibold">Rp ${fmt(r.total_revenue || 0)}</td>
+            <td class="px-6 py-3 text-right font-semibold">Rp ${fmt(r.confirmed_revenue || 0)}</td>
         </tr>`;
     }).join('');
 }
@@ -977,7 +977,7 @@ function exportReportCSV() {
     const header = 'Periode,Total Order,Order Dibayar,Dibatalkan,Pendapatan (Rp)\n';
     const lines = repData.rows.map(r => {
         const label = repType === 'monthly' ? MONTH_NAMES[r.period] + ' ' + year : r.period + ' ' + MONTH_NAMES[month] + ' ' + year;
-        return [label, r.total_orders, r.paid_orders, r.cancelled_orders, r.total_revenue || 0].join(',');
+        return [label, r.total_orders, r.paid_orders, r.cancelled_orders, r.confirmed_revenue || 0].join(',');
     });
     const blob = new Blob([header + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
