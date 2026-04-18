@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="dark">
 
 <head>
@@ -107,65 +107,64 @@
     <div id="mobile-overlay"
         class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
 
-    <!-- Mobile Drawer (slide-in dari kanan) -->
+    <!-- Mobile Drawer (slide-in from right) -->
     <div id="mobile-drawer"
         class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
 
         <!-- Drawer Header -->
-        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-white/10">
-            <a href="index-en.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-7 w-auto block dark:hidden"></a>
-            <a href="index-en.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-7 w-auto hidden dark:block"></a>
-            <button id="mobile-close-btn" class="text-gray-500 hover:text-black dark:hover:text-white transition-colors">
-                <i class="fa-solid fa-times text-xl"></i>
+        <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
+            <a href="index-en.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-6 w-auto block dark:hidden"></a>
+            <a href="index-en.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto hidden dark:block"></a>
+            <button id="mobile-close-btn" class="text-gray-400 hover:text-black dark:text-white/40 dark:hover:text-white transition-colors p-1 rounded-lg">
+                <i class="fa-solid fa-times text-lg"></i>
             </button>
         </div>
 
         <!-- Drawer Nav Links -->
-        <nav class="flex-1 overflow-y-auto px-8 py-8 space-y-0">
-            <!-- Kategori Scrub -->
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mb-4">Collection</p>
-            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
-                Scrub Tops
+        <nav class="flex-1 overflow-y-auto px-4 py-4">
+            <!-- Collection -->
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mb-1 px-3">Collection</p>
+            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-shirt w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Scrub Tops
             </a>
-            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
-                Scrub Pants
+            <a href="scrub-pants-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-person w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Scrub Pants
             </a>
-            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
-                Scrub Caps
+            <a href="scrub-caps-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-hat-cowboy w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Scrub Caps
+            </a>
+            <a href="gown-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-user-doctor w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Gowns
             </a>
 
             <!-- More -->
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">More</p>
-            <a href="about-us-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Our Story</a>
-            <a href="contact-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Contact Us</a>
-
-            <!-- Search -->
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Search</p>
-            <div class="flex items-center bg-gray-100 dark:bg-white/5 rounded-xl px-4 py-3 border border-gray-200 dark:border-white/10">
-                <i class="fa-solid fa-magnifying-glass text-gray-400 mr-3 text-sm"></i>
-                <input type="text" placeholder="Search products..." class="bg-transparent flex-1 text-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none">
-            </div>
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">More</p>
+            <a href="about-us-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-circle-info w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Our Story
+            </a>
+            <a href="contact-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-envelope w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Contact Us
+            </a>
 
             <!-- Cart -->
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Cart</p>
-            <button class="w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
-                <div class="flex items-center">
-                    <i class="fa-solid fa-bag-shopping mr-3 text-gray-400"></i>
-                    Shopping Cart
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Cart</p>
+            <a href="cart.html" class="cart-btn w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-bag-shopping text-gray-400 dark:text-white/30 text-xs"></i>Shopping Cart
                 </div>
-                <span class="bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
-            </button>
+                <span class="cart-count bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
+            </a>
 
             <!-- Language -->
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Language</p>
-            <div class="flex gap-3">
-                <a href="news-4.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">ID</a>
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-2 px-3">Language</p>
+            <div class="flex gap-2">
+                <a href="news-4.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">ID</a>
                 <a href="news-4-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">EN</a>
             </div>
         </nav>
 
         <!-- Drawer Footer: Dark Mode Toggle -->
-        <div class="px-8 py-6 border-t border-gray-100 dark:border-white/10">
+        <div class="px-4 py-4 border-t border-gray-100 dark:border-white/10">
             <button id="theme-toggle-mobile" data-theme-toggle
                 class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
                 <span id="theme-text-mobile" data-theme-text
@@ -178,10 +177,7 @@
             </button>
         </div>
     </div>
-
-
-
-    <!-- Bagian Utama Hero -->
+<!-- Bagian Utama Hero -->
     
     <main class="min-h-screen bg-gray-50 dark:bg-darkbg py-24 transition-colors">
         <div class="container mx-auto px-6 text-center">

@@ -64,37 +64,80 @@
     </header>
 
     <!-- Mobile Drawer Overlay -->
-    <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
-    <!-- Mobile Drawer -->
-    <div id="mobile-drawer" class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
-        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-white/10">
-            <a href="index-en.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-7 w-auto block dark:hidden"></a>
-            <a href="index-en.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-7 w-auto hidden dark:block"></a>
-            <button id="mobile-close-btn" class="text-gray-500 hover:text-black dark:hover:text-white transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+    <div id="mobile-overlay"
+        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
+
+    <!-- Mobile Drawer (slide-in from right) -->
+    <div id="mobile-drawer"
+        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
+
+        <!-- Drawer Header -->
+        <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
+            <a href="index-en.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-6 w-auto block dark:hidden"></a>
+            <a href="index-en.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto hidden dark:block"></a>
+            <button id="mobile-close-btn" class="text-gray-400 hover:text-black dark:text-white/40 dark:hover:text-white transition-colors p-1 rounded-lg">
+                <i class="fa-solid fa-times text-lg"></i>
+            </button>
         </div>
-        <nav class="flex-1 overflow-y-auto px-8 py-8 space-y-0">
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mb-4">Collections</p>
-            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Scrub Tops</a>
-            <a href="scrub-pants-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Scrub Pants</a>
-            <a href="scrub-caps-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Scrub Caps</a>
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">More</p>
-            <a href="about-us-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Our Story</a>
-            <a href="contact-en.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Contact Us</a>
-            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Bahasa</p>
-            <div class="flex gap-3">
-                <a href="payments-shipping-en.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
-                <a href="payments-shipping-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
+
+        <!-- Drawer Nav Links -->
+        <nav class="flex-1 overflow-y-auto px-4 py-4">
+            <!-- Collection -->
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mb-1 px-3">Collection</p>
+            <a href="scrub-top-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-shirt w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Scrub Tops
+            </a>
+            <a href="scrub-pants-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-person w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Scrub Pants
+            </a>
+            <a href="scrub-caps-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-hat-cowboy w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Scrub Caps
+            </a>
+            <a href="gown-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-user-doctor w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Gowns
+            </a>
+
+            <!-- More -->
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">More</p>
+            <a href="about-us-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-circle-info w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Our Story
+            </a>
+            <a href="contact-en.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-envelope w-4 text-center text-gray-400 dark:text-white/30 text-xs shrink-0"></i>Contact Us
+            </a>
+
+            <!-- Cart -->
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Cart</p>
+            <a href="cart.html" class="cart-btn w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-bag-shopping text-gray-400 dark:text-white/30 text-xs"></i>Shopping Cart
+                </div>
+                <span class="cart-count bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
+            </a>
+
+            <!-- Language -->
+            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-2 px-3">Language</p>
+            <div class="flex gap-2">
+                <a href="payments-shipping.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">ID</a>
+                <a href="payments-shipping-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">EN</a>
             </div>
         </nav>
-        <div class="px-8 py-6 border-t border-gray-100 dark:border-white/10">
-            <button id="theme-toggle-mobile" data-theme-toggle class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
-                <span id="theme-text-mobile" data-theme-text class="text-[10px] text-gray-500 dark:text-gray-400 font-bold">DARK MODE</span>
-                <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative"><div id="theme-thumb-mobile" data-theme-thumb class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4"></div></div>
+
+        <!-- Drawer Footer: Dark Mode Toggle -->
+        <div class="px-4 py-4 border-t border-gray-100 dark:border-white/10">
+            <button id="theme-toggle-mobile" data-theme-toggle
+                class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
+                <span id="theme-text-mobile" data-theme-text
+                    class="text-[10px] text-gray-500 dark:text-gray-400 font-bold group-hover:text-black dark:group-hover:text-white transition-colors">DARK MODE</span>
+                <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative transition-colors">
+                    <div id="theme-thumb-mobile" data-theme-thumb
+                        class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4">
+                    </div>
+                </div>
             </button>
         </div>
     </div>
-
-    <main class="min-h-screen bg-gray-50 dark:bg-darkbg py-20 transition-colors">
+<main class="min-h-screen bg-gray-50 dark:bg-darkbg py-20 transition-colors">
         <div class="container mx-auto px-6 max-w-4xl">
 
             <!-- Page Header -->

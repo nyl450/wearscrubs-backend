@@ -172,8 +172,7 @@
 
     <!-- Mobile Drawer Overlay -->
     <div id="mobile-overlay"
-        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden">
-    </div>
+        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
 
     <!-- Mobile Drawer (slide-in dari kanan) -->
     <div id="mobile-drawer"
@@ -216,17 +215,17 @@
 
             <!-- Keranjang -->
             <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Keranjang</p>
-            <button class="w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
+            <a href="cart.html" class="cart-btn w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
                 <div class="flex items-center gap-3">
                     <i class="fa-solid fa-bag-shopping text-gray-400 dark:text-white/30 text-xs"></i>Keranjang Belanja
                 </div>
-                <span class="bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
-            </button>
+                <span class="cart-count bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
+            </a>
 
             <!-- Bahasa -->
             <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-2 px-3">Bahasa</p>
             <div class="flex gap-2">
-                <a href="index.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold">ID</a>
+                <a href="index.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
                 <a href="index-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
             </div>
         </nav>
@@ -245,10 +244,7 @@
             </button>
         </div>
     </div>
-
-
-
-    <!-- Bagian Utama Hero -->
+<!-- Bagian Utama Hero -->
     <main>
         <div class="hero-container flex flex-col md:flex-row w-full">
 
