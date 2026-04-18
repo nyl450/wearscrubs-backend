@@ -628,7 +628,7 @@
 <script>
 const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : 'https://wearscrubs-production.up.railway.app';
+    : '';  // Relative URL — same Railway server (wearscrubs-backend-production)
 
 // ── Auth Guard ────────────────────────────────────────────────────────────────
 (function checkAuth() {
