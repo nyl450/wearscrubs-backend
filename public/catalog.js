@@ -3,10 +3,10 @@
  * Handles: product loading from API, filtering (with inventory), sorting, cart management
  */
 
-// Auto-detect environment: use Railway URL in production, localhost in dev
+// Auto-detect environment: use relative URL in production, localhost in dev
 var WS_API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : 'https://wearscrubs-production.up.railway.app';  // ← ganti dengan URL Railway Anda
+    : '';  // Empty = relative URL, API call goes to same Railway server
 
 const COLOR_META = {
     // Scrub colors
