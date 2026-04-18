@@ -896,6 +896,7 @@ async function deleteProduct(id, name) {
 
 // ─── WIZARD ──────────────────────────────────────────────────────────────────
 let currentStep = 1;
+let _editProductFull = null; // stores full product data (with variants) for photo restoration
 
 function goToStep(n) {
     if (n === 2) {
@@ -924,6 +925,10 @@ function goToStep(n) {
         if (!sizes.length) return toast('Pilih minimal 1 ukuran', true);
         const finalColors = cat === 'gown' ? selectedGownColors : colors;
         generatePhotoSlots(finalColors, cat === 'caps' ? ['null'] : types);
+        // Restore existing photos when editing a product
+        if (_editProductFull && _editProductFull.variants) {
+            restorePhotoSlots(_editProductFull.variants);
+        }
     }
     document.querySelectorAll('[id^="step-"]').forEach(s => s.classList.add('hidden'));
     document.getElementById('step-'+n).classList.remove('hidden');
@@ -1097,6 +1102,26 @@ function generatePhotoSlots(colors, types) {
     });
 }
 
+// ── Restore existing photos into edit slots ───────────────────────────────────
+function restorePhotoSlots(variants) {
+    (variants || []).forEach(v => {
+        (v.photos || []).forEach((photoUrl, idx) => {
+            if (!photoUrl) return;
+            const key = `${v.color}_${v.variant_type}_${idx + 1}`;
+            const urlEl = document.getElementById(`url-${key}`);
+            const previewEl = document.getElementById(`preview-${key}`);
+            const placeholderEl = document.getElementById(`placeholder-${key}`);
+            if (urlEl) urlEl.value = photoUrl;
+            if (previewEl) {
+                const img = previewEl.querySelector('img');
+                if (img) img.src = photoUrl;
+                previewEl.classList.remove('hidden');
+            }
+            if (placeholderEl) placeholderEl.classList.add('hidden');
+        });
+    });
+}
+
 function previewPhoto(input, key) {
     if (input.files && input.files[0]) {
         const reader = new FileReader();
@@ -1109,7 +1134,7 @@ function previewPhoto(input, key) {
     }
 }
 
-function openProductModal(product = null) {
+async function openProductModal(product = null) {
     document.getElementById('product-form').reset();
     document.getElementById('pf-id').value = product ? product.id : '';
     document.getElementById('pf-sku').value = product ? product.sku : '';
@@ -1177,6 +1202,11 @@ function openProductModal(product = null) {
             const pantsEl = document.getElementById('pf-price-single');
             if (pantsEl) pantsEl.value = product.price || '';
         }
+    }
+    // Fetch full product data (including variants with photos) for edit mode
+    _editProductFull = null;
+    if (product) {
+        try { _editProductFull = await apiFetch('/api/products/' + product.id); } catch(e) {}
     }
     goToStep(1);
     document.getElementById('modal-title').textContent = product ? 'Edit Produk' : 'Tambah Produk Baru';
@@ -1263,7 +1293,10 @@ document.getElementById('product-form').addEventListener('submit', async e => {
         fd.append('photo_map', JSON.stringify(photoMap));
         const url = id ? `/api/products/${id}` : '/api/products';
         const method = id ? 'PUT' : 'POST';
-        const res = await fetch(API + url, { method, body: fd });
+        // Include auth token for product save (required by backend)
+        const _tok = localStorage.getItem('ws_admin_token');
+        const _hdrs = _tok ? { 'Authorization': 'Bearer ' + _tok } : {};
+        const res = await fetch(API + url, { method, body: fd, headers: _hdrs });
         const ct = res.headers.get('content-type') || '';
         let data;
         if (ct.includes('application/json')) { data = await res.json(); }
