@@ -6,7 +6,7 @@
 // Auto-detect environment: use Railway URL in production, localhost in dev
 var WS_API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : '';  // empty = same origin (Railway serves FE + BE together)
+    : 'https://wearscrubs-production.up.railway.app';  // ← ganti dengan URL Railway Anda
 
 const COLOR_META = {
     // Scrub colors

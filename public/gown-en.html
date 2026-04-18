@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" class="dark">
 
 <head>
@@ -40,7 +40,7 @@
     <header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10 transition-colors duration-300">
         <div class="container mx-auto px-6 py-4 flex items-center justify-between">
             <!-- Nav Left -->
-            <nav class="hidden md:flex items-center space-x-8 flex-1">
+            <nav class="hidden lg:flex items-center space-x-8 flex-1">
                 <div class="group relative py-4 -my-4 flex items-center cursor-default">
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors flex items-center">
                         Shop All <i class="fa-solid fa-chevron-down ml-2 text-[10px]"></i>
@@ -64,13 +64,13 @@
             <!-- Logo -->
             <div class="flex-shrink-0">
                 <a href="index-en.html" class="flex items-center justify-center">
-                    <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs Logo" class="h-8 md:h-10 w-auto object-contain block dark:hidden">
-                    <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs Logo" class="h-8 md:h-10 w-auto object-contain hidden dark:block">
+                    <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs Logo" class="h-8 lg:h-10 w-auto object-contain block dark:hidden">
+                    <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs Logo" class="h-8 lg:h-10 w-auto object-contain hidden dark:block">
                 </a>
             </div>
 
             <!-- Nav Right -->
-            <div class="hidden md:flex items-center justify-end space-x-6 flex-1 text-sm">
+            <div class="hidden lg:flex items-center justify-end space-x-6 flex-1 text-sm">
                 <button id="theme-toggle" data-theme-toggle class="hidden lg:flex items-center bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
                     <span id="theme-text" data-theme-text class="text-[10px] mr-2 text-gray-500 dark:text-gray-400 font-bold group-hover:text-black dark:group-hover:text-white transition-colors">DARK MODE</span>
                     <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative transition-colors">
@@ -84,7 +84,7 @@
             </div>
 
             <!-- Hamburger -->
-            <button id="mobile-menu-btn" class="md:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors" aria-label="Open menu">
+            <button id="mobile-menu-btn" class="lg:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors" aria-label="Open menu">
                 <i id="hamburger-icon" class="fa-solid fa-bars text-xl"></i>
             </button>
         </div>
@@ -92,11 +92,11 @@
 
     <!-- Mobile Drawer Overlay -->
     <div id="mobile-overlay"
-        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
+        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none lg:hidden"></div>
 
     <!-- Mobile Drawer (slide-in from right) -->
     <div id="mobile-drawer"
-        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
+        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col lg:hidden shadow-2xl">
 
         <!-- Drawer Header -->
         <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
