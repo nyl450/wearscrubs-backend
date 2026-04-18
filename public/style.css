@@ -152,3 +152,8 @@
                 bottom: 5rem !important;
             }
         }
+
+        /* ─── Dark Mode: Tombol Bahasa di Mobile Drawer ─── */
+        html.dark a[data-lang-id] { color: #111827 !important; }
+        html.dark a[data-lang-en] { color: rgba(255,255,255,0.6); }
+
