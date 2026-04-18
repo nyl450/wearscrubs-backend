@@ -210,6 +210,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- UPDATE CART BADGE (all pages, even without catalog.js) ---
+    try {
+        const _rawCart = localStorage.getItem('ws_cart');
+        const _cart = _rawCart ? JSON.parse(_rawCart) : [];
+        const _count = Array.isArray(_cart) ? _cart.reduce((s, i) => s + (Number(i.quantity) || 0), 0) : 0;
+        document.querySelectorAll('.cart-count').forEach(el => { el.textContent = _count; });
+    } catch(e) {}
+
 }); // end DOMContentLoaded
 
 

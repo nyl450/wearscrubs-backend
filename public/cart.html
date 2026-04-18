@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id" class="dark">
 <head>
     <meta charset="UTF-8">
@@ -24,16 +24,25 @@
             <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-8 w-auto block dark:hidden">
             <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-8 w-auto hidden dark:block">
         </a>
-        <h1 class="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Keranjang Belanja</h1>
-        <a href="scrub-top.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Lanjut Belanja</a>
+        <h1 class="hidden md:block text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Keranjang Belanja</h1>
+        <a href="scrub-top.html" class="hidden md:flex text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Lanjut Belanja</a>
     </div>
 </header>
 
 <main class="container mx-auto px-6 py-12 max-w-5xl">
+    <!-- Mobile page title: shows above item list on small screens -->
+    <div class="flex items-center justify-between mb-6 md:hidden">
+        <h2 class="text-xl font-bold">Keranjang Belanja</h2>
+        <a href="scrub-top.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrow-left text-xs"></i> Lanjut Belanja
+        </a>
+    </div>
+
     <div id="cart-content" class="flex flex-col lg:flex-row gap-8">
         <!-- Left: Cart Items -->
         <div class="flex-1">
-            <h2 class="text-xl font-bold mb-6">Item Dipilih (<span id="cart-total-count">0</span>)</h2>
+            <h2 class="hidden md:block text-xl font-bold mb-6">Item Dipilih (<span id="cart-total-count">0</span>)</h2>
+            <h2 class="md:hidden text-base font-semibold mb-4 text-gray-600 dark:text-white/60">Item Dipilih (<span id="cart-total-count">0</span>)</h2>
             <div id="cart-items" class="space-y-4"></div>
         </div>
         <!-- Right: Summary -->
