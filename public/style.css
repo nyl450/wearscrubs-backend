@@ -154,6 +154,10 @@
         }
 
         /* ─── Dark Mode: Tombol Bahasa di Mobile Drawer ─── */
-        html.dark a[data-lang-id] { color: #111827 !important; }
-        html.dark a[data-lang-en] { color: rgba(255,255,255,0.6); }
+        /* Aktif = bg-gray-900 (light) / bg-white (dark) → text gelap */
+        html.dark a[data-lang-id].bg-gray-900,
+        html.dark a[data-lang-en].bg-gray-900 { color: #111827 !important; }
+        /* Tidak Aktif = bg-gray-100 (light) / bg-white/10 (dark) → text putih dimmed */
+        html.dark a[data-lang-id]:not(.bg-gray-900),
+        html.dark a[data-lang-en]:not(.bg-gray-900) { color: rgba(255,255,255,0.6) !important; }
 
