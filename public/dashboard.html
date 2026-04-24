@@ -407,6 +407,43 @@
             </button>
           </div>
 
+          <!-- SECTION: Diskon -->
+          <div class="p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Diskon (Opsional)</p>
+              <span class="text-[10px] text-white/20">Hanya berlaku untuk harga produk</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Diskon 5% -->
+              <div id="label-disc-5" onclick="waSelectDiscount(5)"
+                class="flex items-center gap-3 p-3.5 rounded-xl border border-white/8 bg-white/3 cursor-pointer hover:border-white/20 transition-all">
+                <div class="w-4 h-4 rounded-full border-2 border-white/20 flex items-center justify-center shrink-0" id="radio-disc-5">
+                  <div class="w-2 h-2 rounded-full bg-green-400 hidden" id="dot-disc-5"></div>
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-white/80">Diskon 5%</p>
+                  <p class="text-xs text-white/30">Diskon reguler</p>
+                </div>
+              </div>
+              <!-- Consignment 30% -->
+              <div id="label-disc-30" onclick="waSelectDiscount(30)"
+                class="flex items-center gap-3 p-3.5 rounded-xl border border-white/8 bg-white/3 cursor-pointer hover:border-white/20 transition-all">
+                <div class="w-4 h-4 rounded-full border-2 border-white/20 flex items-center justify-center shrink-0" id="radio-disc-30">
+                  <div class="w-2 h-2 rounded-full bg-yellow-400 hidden" id="dot-disc-30"></div>
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-white/80">Consignment 30%</p>
+                  <p class="text-xs text-white/30">Event / partner</p>
+                </div>
+              </div>
+            </div>
+            <!-- Preview diskon -->
+            <div id="wa-discount-preview" class="hidden px-4 py-2.5 rounded-xl bg-green-500/8 border border-green-500/15 flex items-center justify-between">
+              <span id="wa-discount-label-text" class="text-xs font-medium text-green-400"></span>
+              <span id="wa-discount-amount-text" class="text-sm font-bold text-green-400"></span>
+            </div>
+          </div>
+
           <!-- SECTION: Foto & Bordir -->
           <div class="p-5 space-y-4">
             <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Lampiran Invoice (Opsional)</p>
@@ -2584,6 +2621,34 @@ async function waOnProductChange(idx) {
     waUpdateTotal();
 }
 
+let waSelectedDiscount = 0; // 0, 5, atau 30
+
+function waSelectDiscount(pct) {
+    waSelectedDiscount = (waSelectedDiscount === pct) ? 0 : pct;
+    waRenderDiscountUI();
+    waUpdateTotal();
+}
+
+function waRenderDiscountUI() {
+    [5, 30].forEach(p => {
+        const lbl = document.getElementById(`label-disc-${p}`);
+        const dot = document.getElementById(`dot-disc-${p}`);
+        const radio = document.getElementById(`radio-disc-${p}`);
+        if (lbl) { lbl.classList.remove('border-green-500/40','border-yellow-500/40','bg-green-500/5','bg-yellow-500/5'); }
+        if (dot) dot.classList.add('hidden');
+        if (radio) { radio.classList.remove('border-green-400','border-yellow-400'); }
+    });
+    const prev = document.getElementById('wa-discount-preview');
+    if (waSelectedDiscount === 0) { if (prev) prev.classList.add('hidden'); return; }
+    const color = waSelectedDiscount === 30 ? 'yellow' : 'green';
+    const lbl = document.getElementById(`label-disc-${waSelectedDiscount}`);
+    const dot = document.getElementById(`dot-disc-${waSelectedDiscount}`);
+    const radio = document.getElementById(`radio-disc-${waSelectedDiscount}`);
+    if (lbl) lbl.classList.add(`border-${color}-500/40`, `bg-${color}-500/5`);
+    if (dot) dot.classList.remove('hidden');
+    if (radio) radio.classList.add(`border-${color}-400`);
+}
+
 function waUpdateTotal() {
     let productTotal = 0;
     const container = document.getElementById('wa-items-container');
@@ -2598,7 +2663,25 @@ function waUpdateTotal() {
         productTotal += (price + bordirNama + bordirLogo) * qty;
     });
     const ongkir = parseInt(document.getElementById('wa-shipping-cost')?.value || 0);
-    document.getElementById('wa-total-preview').textContent = 'Rp ' + (productTotal + ongkir).toLocaleString('id-ID');
+
+    // Kalkulasi diskon dari product total saja
+    const discountAmount = Math.round(productTotal * waSelectedDiscount / 100);
+    const total = productTotal - discountAmount + ongkir;
+
+    // Update preview diskon
+    const discPreview = document.getElementById('wa-discount-preview');
+    const discLabelEl = document.getElementById('wa-discount-label-text');
+    const discAmountEl = document.getElementById('wa-discount-amount-text');
+    if (waSelectedDiscount > 0 && discountAmount > 0) {
+        const labelText = waSelectedDiscount === 30 ? 'Consignment 30%' : 'Diskon 5%';
+        if (discLabelEl) discLabelEl.textContent = labelText + ' dari Rp ' + productTotal.toLocaleString('id-ID');
+        if (discAmountEl) discAmountEl.textContent = '-Rp ' + discountAmount.toLocaleString('id-ID');
+        if (discPreview) discPreview.classList.remove('hidden');
+    } else {
+        if (discPreview) discPreview.classList.add('hidden');
+    }
+
+    document.getElementById('wa-total-preview').textContent = 'Rp ' + total.toLocaleString('id-ID');
     waCheckBordirSection();
 }
 
@@ -2641,7 +2724,7 @@ async function waSubmitOrder() {
         const res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
-            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, notes, order_source: 'whatsapp', payment_method: paymentMethod, items })
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, notes, order_source: 'whatsapp', payment_method: paymentMethod, discount_percent: waSelectedDiscount, items })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
@@ -2658,12 +2741,19 @@ async function waSubmitOrder() {
             return line;
         }).join('\n');
 
+        const discAmtFromServer = data.discount_amount || 0;
+        const discLblFromServer = data.discount_label || '';
+        const discountLine = discAmtFromServer > 0
+            ? `🏷️ ${discLblFromServer}: -Rp ${discAmtFromServer.toLocaleString('id-ID')}\n`
+            : '';
+
         const waMsg =
             `Halo ${customerName} 👋\n\n` +
             `Pesanan Anda sudah kami catat.\n\n` +
             `🧾 *Invoice: ${data.order_code}*\n\n` +
             `📦 Detail Produk:\n${itemLines}\n\n` +
             `🚚 Ongkir (${data.courier}): Rp ${Number(data.shipping_cost).toLocaleString('id-ID')}\n` +
+            discountLine +
             `💰 *TOTAL: Rp ${Number(data.total_amount).toLocaleString('id-ID')}*` +
             (paymentMethod ? `\n💳 Metode: ${paymentMethod}` : '') +
             `\n\nSilakan lakukan pembayaran dan kirim bukti transfer ke WA ini ya Dok 🙏\n\nTerima kasih sudah berbelanja di WearScrubs! 🏥`;
@@ -2709,6 +2799,9 @@ function waResetForm() {
     const brInput = document.getElementById('wa-bordir-ref-photo');
     if (brInput) brInput.value = '';
     window.waLastOrderId = null;
+    // Reset diskon
+    waSelectedDiscount = 0;
+    waRenderDiscountUI();
     waItemCount = 0;
     waAddItem();
 }
@@ -2730,9 +2823,11 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
 
     let itemRowsHTML = '';
+    let productSubtotal = 0;
     items.forEach(item => {
         const unitPrice = item.price || 0;
         const qty = item.quantity || 1;
+        productSubtotal += unitPrice * qty;
         itemRowsHTML += `<tr>
             <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}</td>
             <td>${fmtRp(unitPrice)}</td>
@@ -2745,8 +2840,18 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const shippingCost = order.shipping_cost || 0;
     const courier = order.shipping_courier || 'Kurir';
     const shippingCity = order.shipping_city || '';
-    itemRowsHTML += `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
     const total = order.total_amount || 0;
+
+    // Diskon rows
+    const discountAmt = order.discount_amount || 0;
+    const discountLbl = order.discount_label || '';
+    const subtotalRowHTML = discountAmt > 0
+        ? `<tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal Produk</td><td>${fmtRp(productSubtotal)}</td></tr>`
+        : '';
+    const discountRowHTML = discountAmt > 0
+        ? `<tr class="totals-row" style="color:#16a34a;"><td colspan="3" style="text-align:right;font-weight:500;">🏷️ ${discountLbl}</td><td style="font-weight:600;">-${fmtRp(discountAmt)}</td></tr>`
+        : '';
+    const ongkirRow = `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
 
     const photosHTML = (extraPhotos && extraPhotos.length > 0)
         ? `<div class="invoice-photos"><div class="section-label">Referensi Produk</div><div class="photos-grid">${extraPhotos.map(s=>`<img src="${s}" alt="Foto" />`).join('')}</div></div>`
@@ -2795,7 +2900,10 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 <thead><tr><th>Description</th><th>Unit Price</th><th>Qty</th><th>Amount</th></tr></thead>
                 <tbody>
                     ${itemRowsHTML}
-                    <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal</td><td>${fmtRp(total)}</td></tr>
+                    ${subtotalRowHTML}
+                    ${discountRowHTML}
+                    ${ongkirRow}
+                    <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Total Pembayaran</td><td>${fmtRp(total)}</td></tr>
                 </tbody>
                 <tfoot><tr class="grand-total"><td colspan="3" style="text-align:right;">Total</td><td>${fmtRp(total)}</td></tr></tfoot>
             </table>

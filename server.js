@@ -321,6 +321,9 @@ async function initDB() {
     // Migrate: order channel & payment method
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source TEXT DEFAULT 'website' CHECK(order_source IN ('website', 'whatsapp'))`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT ''`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_percent INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_label TEXT DEFAULT NULL`);
 
     // ── Migrate: add gown to category constraint ──────────────────────────────
     // Drop old constraint and recreate to include gown (PostgreSQL approach)
@@ -1083,7 +1086,8 @@ app.post('/api/orders', async (req, res) => {
             customer_name, customer_phone, customer_address, items, notes,
             shipping_city, shipping_cost, embroidery_details,
             order_source,    // 'website' atau 'whatsapp', default 'website'
-            payment_method   // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
+            payment_method,  // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
+            discount_percent // 0, 5, atau 30 — hanya untuk WA order
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
@@ -1110,7 +1114,13 @@ app.post('/api/orders', async (req, res) => {
         }
 
         const shippingCost = parseInt(shipping_cost || 0);
-        const total = productTotal + shippingCost;
+
+        // Kalkulasi diskon (hanya product total, ongkir tidak kena diskon)
+        const validDiscounts = [0, 5, 30];
+        const safeDiscountPct = validDiscounts.includes(parseInt(discount_percent)) ? parseInt(discount_percent) : 0;
+        const discountAmount = Math.round(productTotal * safeDiscountPct / 100);
+        const discountLabel = safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null;
+        const total = productTotal - discountAmount + shippingCost;
 
         // Determine courier from city
         const cityInfo = CITIES.find(c => c.name === shipping_city);
@@ -1124,15 +1134,19 @@ app.post('/api/orders', async (req, res) => {
         const orderResult = await dbRun(
             `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
               shipping_city, shipping_courier, shipping_cost, total_amount, embroidery_details,
-              has_bordir_logo, has_bordir_nama, notes, order_source, payment_method)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+              has_bordir_logo, has_bordir_nama, notes, order_source, payment_method,
+              discount_percent, discount_amount, discount_label)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
             [orderCode, customer_name, customer_phone, customer_address,
              shipping_city || '', courier, shippingCost, total,
              embroidery_details ? JSON.stringify(embroidery_details) : null,
              hasBordirLogo, hasBordirNama,
              notes || '',
              order_source || 'website',
-             payment_method || '']
+             payment_method || '',
+             safeDiscountPct,
+             discountAmount,
+             discountLabel]
         );
         const orderId = orderResult.rows[0].id;
 
@@ -1160,6 +1174,10 @@ app.post('/api/orders', async (req, res) => {
               ).join('\n')
             : '';
 
+        const discountLine = discountAmount > 0
+            ? `🏷️ ${discountLabel}: -Rp ${discountAmount.toLocaleString('id-ID')}\n`
+            : '';
+
         const waMsg =
             `🛍️ *PESANAN BARU! #${orderCode}*\n\n` +
             `👤 ${customer_name}\n` +
@@ -1168,6 +1186,7 @@ app.post('/api/orders', async (req, res) => {
             `🏙️ Kota: ${shipping_city || '-'} (${courier})\n\n` +
             `🧾 *Detail Produk:*\n${itemSummary}${embroiderySection}\n\n` +
             `📦 Ongkir: Rp ${shippingCost.toLocaleString('id-ID')}\n` +
+            discountLine +
             `💰 *TOTAL: Rp ${total.toLocaleString('id-ID')}*\n\n` +
             `⏳ Menunggu Pembayaran`;
         // Skip WA notification to admin for manually-input WA orders (admin already knows)
@@ -1191,12 +1210,15 @@ app.post('/api/orders', async (req, res) => {
 
         res.json({
             message: 'Pesanan berhasil dibuat',
-            id: orderId,           // ← untuk openInvoiceModal() di dashboard
-            order_id: orderId,     // ← backward-compat (tidak diubah)
+            id: orderId,
+            order_id: orderId,
             order_code: orderCode,
             total_amount: total,
             shipping_cost: shippingCost,
-            courier
+            courier,
+            discount_percent: safeDiscountPct,
+            discount_amount: discountAmount,
+            discount_label: discountLabel
         });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
