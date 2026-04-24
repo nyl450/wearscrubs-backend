@@ -9,6 +9,8 @@
     <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#0f0f0f', darkcard: '#1a1a1a', darkborder: 'rgba(255,255,255,0.07)' } } } }</script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
@@ -26,6 +28,67 @@
         .pop-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
         .pop-card.selected { border-color: rgba(99,102,241,0.7); background: rgba(99,102,241,0.08); }
         .chart-tab-btn.active { background: white; color: black; }
+
+        /* ═══════════════════════════════════════════════════════════
+           INVOICE STYLES
+        ═══════════════════════════════════════════════════════════ */
+        .invoice-wrap { font-family: 'DM Sans', sans-serif; background: white; color: #1a1a1a; max-width: 794px; margin: 0 auto; }
+        .invoice-header { background: #1a1a1a; color: white; padding: 32px 40px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .invoice-header .logo-side { display: flex; flex-direction: column; gap: 4px; }
+        .invoice-header .logo-side .invoice-label { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
+        .invoice-header .logo-img { width: 200px; height: auto; }
+        .invoice-header .company-info { text-align: right; font-size: 11px; line-height: 1.7; color: rgba(255,255,255,0.75); max-width: 220px; }
+        .invoice-billed { padding: 28px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-bottom: 1px solid #e5e5e5; }
+        .invoice-billed .section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #888; margin-bottom: 12px; grid-column: 1 / -1; }
+        .invoice-billed .customer-info p, .invoice-billed .invoice-meta p { font-size: 13px; margin: 3px 0; color: #2d2d2d; }
+        .invoice-billed .customer-info strong, .invoice-billed .invoice-meta strong { color: #1a1a1a; font-weight: 600; }
+        .invoice-table-wrap { padding: 0 40px 24px; }
+        .invoice-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .invoice-table thead th { background: #f5f5f5; padding: 10px 14px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #666; border-bottom: 2px solid #e5e5e5; }
+        .invoice-table thead th:not(:first-child) { text-align: right; }
+        .invoice-table tbody td { padding: 11px 14px; border-bottom: 1px solid #f0f0f0; color: #2d2d2d; vertical-align: top; }
+        .invoice-table tbody td:not(:first-child) { text-align: right; }
+        .invoice-table .bordir-row td { padding: 4px 14px 4px 28px; font-size: 12px; color: #888; border-bottom: none; }
+        .invoice-table .totals-row td { border-bottom: none; padding: 8px 14px; font-size: 13px; color: #444; }
+        .invoice-table tfoot .grand-total td { font-size: 15px; font-weight: 700; color: #1a1a1a; padding-top: 12px; border-top: 2px solid #1a1a1a; }
+        .invoice-payment { margin: 0 40px; padding: 20px 24px; background: #f9f9f9; border: 1px solid #e5e5e5; border-radius: 8px; }
+        .invoice-payment .section-label, .invoice-photos .section-label, .invoice-bordir .section-label, .invoice-tnc .section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #888; margin-bottom: 12px; }
+        .invoice-payment table { font-size: 13px; width: 100%; }
+        .invoice-payment table td:first-child { font-weight: 600; color: #666; width: 140px; padding-right: 16px; }
+        .invoice-payment table td:last-child { color: #1a1a1a; }
+        .invoice-photos { margin: 24px 40px 0; padding: 20px 0; border-top: 1px solid #e5e5e5; }
+        .invoice-photos .photos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .invoice-photos .photos-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; border: 1px solid #e5e5e5; }
+        .invoice-bordir { margin: 24px 40px 0; padding: 20px 0; border-top: 1px solid #e5e5e5; }
+        .invoice-bordir table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .invoice-bordir table thead th { background: #f5f5f5; padding: 10px 16px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #666; border: 1px solid #e5e5e5; }
+        .invoice-bordir table tbody td { padding: 14px 16px; border: 1px solid #e5e5e5; vertical-align: top; }
+        .invoice-bordir .bordir-detail p { margin: 3px 0; color: #2d2d2d; }
+        .invoice-bordir .bordir-visual { text-align: center; }
+        .invoice-bordir .bordir-visual img { max-width: 160px; max-height: 120px; object-fit: contain; border: 1px solid #e5e5e5; border-radius: 4px; padding: 4px; }
+        .invoice-bordir .bordir-placeholder { width: 160px; height: 100px; background: #f5f5f5; border: 1px dashed #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; text-align: center; padding: 10px; margin: 0 auto; }
+        .invoice-tnc { margin: 24px 40px 40px; padding: 20px 0; border-top: 1px solid #e5e5e5; }
+        .invoice-tnc ol { padding-left: 18px; font-size: 11.5px; color: #666; line-height: 1.7; margin: 0; }
+        @media (max-width: 600px) {
+            .invoice-header { padding: 20px; flex-direction: column; gap: 16px; }
+            .invoice-header .company-info { text-align: left; }
+            .invoice-header .logo-img { width: 150px; }
+            .invoice-billed { padding: 20px; grid-template-columns: 1fr; }
+            .invoice-table-wrap { padding: 0 20px 20px; }
+            .invoice-payment { margin: 0 20px; }
+            .invoice-photos { margin: 20px 20px 0; }
+            .invoice-photos .photos-grid { grid-template-columns: repeat(2, 1fr); }
+            .invoice-bordir { margin: 20px 20px 0; }
+            .invoice-tnc { margin: 20px 20px 32px; }
+            .invoice-table { font-size: 12px; }
+        }
+        @media print {
+            body * { visibility: hidden; }
+            #invoice-print-area, #invoice-print-area * { visibility: visible; }
+            #invoice-print-area { position: fixed; top: 0; left: 0; width: 100%; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .invoice-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+        }
     </style>
 </head>
 <body class="bg-darkbg text-white min-h-screen">
@@ -272,6 +335,28 @@
               <div><label class="text-xs font-medium text-white/60 mb-1 block">Catatan (opsional)</label><textarea id="wa-notes" rows="2" placeholder="Misal: minta packing bubble wrap extra"></textarea></div>
             </div>
           </div>
+          <hr class="border-white/5" />
+          <!-- FOTO PRODUK UNTUK INVOICE -->
+          <div>
+            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">Foto Produk (Opsional)</p>
+            <p class="text-xs text-white/30 mb-3">Upload foto produk untuk ditampilkan di invoice (max 4 foto)</p>
+            <div id="wa-photo-previews" class="grid grid-cols-4 gap-2 mb-3"></div>
+            <label class="w-full py-3 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/30 text-sm font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-image text-xs"></i> Pilih Foto Produk
+              <input type="file" id="wa-product-photos" accept="image/*" multiple class="hidden" onchange="waHandleProductPhotos(this)" />
+            </label>
+          </div>
+          <!-- REFERENSI BORDIR (conditional) -->
+          <div id="wa-bordir-ref-section" class="hidden">
+            <hr class="border-white/5 mb-4" />
+            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">Referensi Bordir</p>
+            <p class="text-xs text-white/30 mb-3">Upload foto nama/logo yang ingin dibordir (untuk invoice)</p>
+            <div id="wa-bordir-ref-preview" class="mb-3"></div>
+            <label class="w-full py-3 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/30 text-sm font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-upload text-xs"></i> Upload Gambar Referensi Bordir
+              <input type="file" id="wa-bordir-ref-photo" accept="image/*" class="hidden" onchange="waHandleBordirRef(this)" />
+            </label>
+          </div>
           <div class="bg-white/5 rounded-xl p-4 flex items-center justify-between">
             <span class="text-sm text-white/60 font-medium">Total Estimasi</span>
             <span id="wa-total-preview" class="text-lg font-bold text-white">Rp 0</span>
@@ -286,7 +371,8 @@
           <div class="bg-green-950/30 border border-green-500/10 rounded-xl p-4"><p class="text-xs text-white/40 mb-2 font-medium">Pesan WA Siap Kirim</p><pre id="wa-result-message" class="text-sm text-white/80 whitespace-pre-wrap font-mono leading-relaxed"></pre></div>
           <div class="flex gap-3">
             <button onclick="waCopyMessage()" class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Pesan WA</button>
-            <button onclick="waResetForm()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 font-medium text-sm transition-all">Input Order Baru</button>
+            <button onclick="openInvoiceModal(window.waLastOrderId, waProductPhotoBase64s, waBordirRefBase64)" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">📄 Print Invoice</button>
+            <button onclick="waResetForm()" class="py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 font-medium text-sm transition-all">Order Baru</button>
           </div>
         </div>
       </div>
@@ -1556,6 +1642,7 @@ function renderOrders() {
             </div>
             <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-darkborder">
                 <button onclick="viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">📋 Detail</button>
+                <button onclick="openInvoiceModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20">📄 Invoice</button>
                 ${o.payment_status==='pending' && o.order_status!='cancelled' ? `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>` : ''}
                 ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Bordir Selesai</button>` : ''}
                 ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas</button>` : ''}
@@ -2425,6 +2512,7 @@ function waUpdateTotal() {
     });
     const ongkir = parseInt(document.getElementById('wa-shipping-cost')?.value || 0);
     document.getElementById('wa-total-preview').textContent = 'Rp ' + (productTotal + ongkir).toLocaleString('id-ID');
+    waCheckBordirSection();
 }
 
 async function waSubmitOrder() {
@@ -2470,6 +2558,8 @@ async function waSubmitOrder() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
+
+        window.waLastOrderId = data.id;
 
         const itemLines = items.map(it => {
             const prod = waProducts.find(p => p.id === it.product_id);
@@ -2520,8 +2610,220 @@ function waResetForm() {
     document.getElementById('wa-result-panel').classList.add('hidden');
     document.getElementById('wa-submit-btn').disabled = false;
     document.getElementById('wa-submit-btn').innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
+    // Reset foto
+    waProductPhotoBase64s = [];
+    waBordirRefBase64 = null;
+    const prev = document.getElementById('wa-photo-previews');
+    if (prev) prev.innerHTML = '';
+    const bprev = document.getElementById('wa-bordir-ref-preview');
+    if (bprev) bprev.innerHTML = '';
+    const phInput = document.getElementById('wa-product-photos');
+    if (phInput) phInput.value = '';
+    const brInput = document.getElementById('wa-bordir-ref-photo');
+    if (brInput) brInput.value = '';
+    window.waLastOrderId = null;
     waItemCount = 0;
     waAddItem();
+}
+
+// ═══════════════════════════════════════════════════
+// INVOICE GENERATOR & MODAL
+// ═══════════════════════════════════════════════════
+
+let waProductPhotoBase64s = [];
+let waBordirRefBase64 = null;
+
+function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
+    const items = order.items || [];
+    const embDetails = (() => {
+        try { return order.embroidery_details ? (typeof order.embroidery_details === 'string' ? JSON.parse(order.embroidery_details) : order.embroidery_details) : []; }
+        catch { return []; }
+    })();
+    const fmtRp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
+    const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+
+    let itemRowsHTML = '';
+    items.forEach(item => {
+        const unitPrice = item.price || 0;
+        const qty = item.quantity || 1;
+        itemRowsHTML += `<tr>
+            <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}</td>
+            <td>${fmtRp(unitPrice)}</td>
+            <td>${qty}</td>
+            <td>${fmtRp(unitPrice * qty)}</td>
+        </tr>`;
+        if (item.bordir_nama) itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Nama</td><td>${fmtRp(20000)}</td><td>-</td><td>-</td></tr>`;
+        if (item.bordir_logo) itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Logo</td><td>${fmtRp(30000)}</td><td>-</td><td>-</td></tr>`;
+    });
+    const shippingCost = order.shipping_cost || 0;
+    const courier = order.shipping_courier || 'Kurir';
+    const shippingCity = order.shipping_city || '';
+    itemRowsHTML += `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
+    const total = order.total_amount || 0;
+
+    const photosHTML = (extraPhotos && extraPhotos.length > 0)
+        ? `<div class="invoice-photos"><div class="section-label">Referensi Produk</div><div class="photos-grid">${extraPhotos.map(s=>`<img src="${s}" alt="Foto" />`).join('')}</div></div>`
+        : '';
+
+    let bordirHTML = '';
+    if ((order.has_bordir_nama || order.has_bordir_logo) && embDetails.length > 0) {
+        const rows = embDetails.map(emb => {
+            const det = emb.type === 'nama'
+                ? `<p><strong>Jenis:</strong> Bordir Nama</p><p><strong>Produk:</strong> ${emb.item_label||'-'}</p><p><strong>Nama:</strong> ${emb.value||'-'}</p>${emb.color?`<p><strong>Warna Benang:</strong> ${emb.color}</p>`:''} ${emb.position?`<p><strong>Posisi:</strong> ${emb.position}</p>`:''}`
+                : `<p><strong>Jenis:</strong> Bordir Logo</p><p><strong>Produk:</strong> ${emb.item_label||'-'}</p><p><strong>Keterangan:</strong> ${emb.value||'-'}</p>${emb.color?`<p><strong>Warna Benang:</strong> ${emb.color}</p>`:''}`;
+            const vis = bordirRefPhoto
+                ? `<img src="${bordirRefPhoto}" alt="Referensi Bordir" />`
+                : `<div class="bordir-placeholder">Referensi visual<br>akan dilampirkan<br>terpisah</div>`;
+            return `<tr><td class="bordir-detail">${det}</td><td class="bordir-visual">${vis}</td></tr>`;
+        }).join('');
+        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Detail Bordir</div><table><thead><tr><th style="width:55%">Detail Permintaan</th><th style="width:45%">Referensi Visual</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    return `<div class="invoice-wrap">
+        <div class="invoice-header">
+            <div class="logo-side">
+                <span class="invoice-label">Invoice</span>
+                <img src="images/logo/logo ws putih invoice.png" alt="WearScrubs" class="logo-img" onerror="this.style.display='none'" />
+            </div>
+            <div class="company-info">
+                RUKO ALLOGIO BARAT NO.25,<br>MEDANG, KEC. PAGEDANGAN,<br>KABUPATEN TANGERANG, BANTEN 15334<br><br>
+                WEARSCRUBS.ID@GMAIL.COM<br>+62 878-8717-2220
+            </div>
+        </div>
+        <div class="invoice-billed">
+            <div class="section-label">Billed To</div>
+            <div class="customer-info">
+                <p><strong>Customer's Name:</strong> ${order.customer_name||'-'}</p>
+                <p><strong>Address:</strong> ${order.customer_address||'-'}</p>
+                <p><strong>Phone:</strong> ${order.customer_phone||'-'}</p>
+            </div>
+            <div class="invoice-meta">
+                <p><strong>Invoice Number:</strong> ${order.order_code||'-'}</p>
+                <p><strong>Invoice Date:</strong> ${fmtDate(order.created_at)}</p>
+                ${order.payment_method ? `<p><strong>Metode Bayar:</strong> ${order.payment_method}</p>` : ''}
+            </div>
+        </div>
+        <div class="invoice-table-wrap">
+            <table class="invoice-table">
+                <thead><tr><th>Description</th><th>Unit Price</th><th>Qty</th><th>Amount</th></tr></thead>
+                <tbody>
+                    ${itemRowsHTML}
+                    <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal</td><td>${fmtRp(total)}</td></tr>
+                </tbody>
+                <tfoot><tr class="grand-total"><td colspan="3" style="text-align:right;">Total</td><td>${fmtRp(total)}</td></tr></tfoot>
+            </table>
+        </div>
+        <div class="invoice-payment">
+            <div class="section-label">Payment Information</div>
+            <table>
+                <tr><td>Bank:</td><td>BCA 8780269791 / Mandiri 1220010735721</td></tr>
+                <tr><td>Account Name:</td><td>Priscilla Lavine</td></tr>
+            </table>
+        </div>
+        ${photosHTML}
+        ${bordirHTML}
+        <div class="invoice-tnc">
+            <div class="section-label">Terms &amp; Conditions</div>
+            <ol>
+                <li>Produksi akan dilakukan setelah dilakukan pembayaran.</li>
+                <li>Pembayaran dapat dilakukan secara transfer via bank BCA 8780269791 atau Mandiri 1220010735721 a/n Priscilla Lavine.</li>
+                <li>Mohon untuk mengirimkan bukti transfer melalui WhatsApp atau email.</li>
+                <li>Segala hal yang membutuhkan approval sebelum pengerjaan akan dilakukan komunikasi via WhatsApp dengan PIC yang bertanggung jawab.</li>
+                <li>Biaya ongkir masih estimasi, apabila biaya tambahan/kelebihan akan diinfokan sebelum pengiriman.</li>
+            </ol>
+        </div>
+    </div>`;
+}
+
+async function openInvoiceModal(orderId, extraPhotos = [], bordirRefPhoto = null) {
+    if (!orderId) { alert('ID order tidak valid.'); return; }
+    let order;
+    try {
+        const res = await fetch(API + '/api/orders/' + orderId, { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') } });
+        order = await res.json();
+        if (!res.ok) throw new Error(order.error);
+    } catch (e) { alert('Gagal load data invoice: ' + e.message); return; }
+
+    const invoiceHTML = generateInvoiceHTML(order, extraPhotos, bordirRefPhoto);
+    let modal = document.getElementById('invoice-modal');
+    if (!modal) { modal = document.createElement('div'); modal.id = 'invoice-modal'; document.body.appendChild(modal); }
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;overflow:hidden;';
+
+    modal.innerHTML = `
+        <div class="no-print" style="background:#111;border-bottom:1px solid #333;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
+            <span style="color:white;font-weight:700;font-size:14px;">📄 Invoice — ${order.order_code}</span>
+            <div style="display:flex;gap:8px;">
+                <button onclick="printInvoice()" style="background:#3b82f6;color:white;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Print / Save PDF</button>
+                <button onclick="downloadInvoicePDF('${order.order_code}')" style="background:#059669;color:white;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;" id="inv-dl-btn">⬇️ Download PDF</button>
+                <button onclick="document.getElementById('invoice-modal').style.display='none'" style="background:rgba(255,255,255,0.08);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Tutup</button>
+            </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:24px;background:#e0e0e0;">
+            <div id="invoice-print-area" style="max-width:794px;margin:0 auto;background:white;box-shadow:0 4px 32px rgba(0,0,0,0.25);border-radius:4px;overflow:hidden;">
+                ${invoiceHTML}
+            </div>
+        </div>`;
+}
+
+function printInvoice() { window.print(); }
+
+async function downloadInvoicePDF(orderCode) {
+    const el = document.getElementById('invoice-print-area');
+    if (!el || typeof html2pdf === 'undefined') {
+        alert('Gunakan tombol Print dan pilih Save as PDF.');
+        return;
+    }
+    const btn = document.getElementById('inv-dl-btn');
+    if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
+    try {
+        await html2pdf().set({
+            margin: 0,
+            filename: `Invoice-WearScrubs-${orderCode}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        }).from(el).save();
+    } catch (e) { alert('Gagal download PDF. Gunakan tombol Print sebagai alternatif.'); }
+    if (btn) { btn.textContent = '⬇️ Download PDF'; btn.disabled = false; }
+}
+
+function waHandleProductPhotos(input) {
+    const files = Array.from(input.files).slice(0, 4);
+    waProductPhotoBase64s = [];
+    const previewEl = document.getElementById('wa-photo-previews');
+    if (previewEl) previewEl.innerHTML = '';
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            waProductPhotoBase64s.push(e.target.result);
+            if (!previewEl) return;
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.1);';
+            previewEl.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function waHandleBordirRef(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        waBordirRefBase64 = e.target.result;
+        const el = document.getElementById('wa-bordir-ref-preview');
+        if (el) el.innerHTML = `<img src="${e.target.result}" style="max-height:120px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
+    };
+    reader.readAsDataURL(file);
+}
+
+function waCheckBordirSection() {
+    const container = document.getElementById('wa-items-container');
+    if (!container) return;
+    const hasBordir = container.querySelector('input[id^="wa-bordir-nama-"]:checked, input[id^="wa-bordir-logo-"]:checked');
+    const section = document.getElementById('wa-bordir-ref-section');
+    if (section) section.classList.toggle('hidden', !hasBordir);
 }
 
 </script>
