@@ -176,15 +176,9 @@ const upload = multer({
 // GANTI: Tidak pakai file .sqlite lagi, pakai koneksi ke Supabase via DATABASE_URL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10000,
-    // Force IPv4 — Railway tidak support IPv6 ke Supabase
-    // Node.js `dns.setDefaultResultOrder` tidak selalu mempengaruhi pg internal lookup
-    ...(process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('family=') ? {} : {})
+    ssl: { rejectUnauthorized: false },  // wajib untuk Supabase
+    connectionTimeoutMillis: 10000
 });
-
-// Patch: intercept pg connections to force IPv4 family
-require('dns').setDefaultResultOrder('ipv4first');
 
 // Helper functions — interface sama seperti sebelumnya, tinggal ganti isinya
 const dbRun = async (sql, params = []) => {
@@ -317,6 +311,9 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS bordir_logo_requested BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_by TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT DEFAULT NULL`);
+    // Migrate: order channel & payment method
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source TEXT DEFAULT 'website' CHECK(order_source IN ('website', 'whatsapp'))`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT ''`);
 
     // ── Migrate: add gown to category constraint ──────────────────────────────
     // Drop old constraint and recreate to include gown (PostgreSQL approach)
@@ -375,12 +372,13 @@ async function sendWANotification(message) {
     }
 }
 
-function generateOrderCode() {
+function generateOrderCode(source = 'website') {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
-    return `WS-${y}${m}${d}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    const prefix = source === 'whatsapp' ? 'WS-WA' : 'WS';
+    return `${prefix}-${y}${m}${d}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
 }
 
 function safeJSON(str, fallback = []) {
@@ -778,12 +776,10 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
         const selTypes  = safeJSON(types,  []);
         const selSizes  = safeJSON(sizes,  []); // ← FIX: was missing, caused "selSizes is not defined"
 
-        // ── Photo upload: handle up to 3 photos per color-type slot ───────────
+        // ── Photo upload: handle up to 3 photos per color-type slot (matching POST logic) ──
         const NUM_PHOTOS = 3;
         for (const color of selColors) {
             for (const type of selTypes) {
-                // Collect all new photos for this color+type slot first
-                const newPhotos = [];
                 for (let i = 1; i <= NUM_PHOTOS; i++) {
                     const mapKey = `${color}_${type}_${i}`;
                     let photoUrl = req.body[`photo_url_${mapKey}`] || null;
@@ -794,7 +790,7 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
                         );
                         if (file) photoUrl = await uploadToSupabase(file.buffer, file.originalname, 'products');
                     }
-                    // Fallback: legacy key format (slot 1 only)
+                    // Fallback: legacy key format (color_type without slot index)
                     if (!photoUrl && i === 1) {
                         const legacyKey = `${color}_${type}`;
                         photoUrl = req.body[`photo_url_${legacyKey}`] || null;
@@ -805,27 +801,20 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
                             if (legacyFile) photoUrl = await uploadToSupabase(legacyFile.buffer, legacyFile.originalname, 'products');
                         }
                     }
-                    if (photoUrl) newPhotos.push(photoUrl);
-                }
-
-                // If new photos uploaded → delete OLD rows first, then insert fresh ones
-                // This removes stale local-path photos that would be broken on Railway
-                if (newPhotos.length > 0) {
-                    const dbType = type === 'null' ? null : type;
-                    await dbRun(
-                        `DELETE FROM product_variants
-                         WHERE product_id = $1 AND color = $2 AND variant_type IS NOT DISTINCT FROM $3`,
-                        [req.params.id, color, dbType]
-                    );
-                    for (const photoUrl of newPhotos) {
+                    if (photoUrl) {
+                        // Try upsert, fall back to plain update if no unique constraint
                         await dbRun(
                             `INSERT INTO product_variants (product_id, color, variant_type, photo_url)
-                             VALUES ($1,$2,$3,$4)`,
+                             VALUES ($1,$2,$3,$4)
+                             ON CONFLICT(product_id, color, variant_type) DO UPDATE SET photo_url = EXCLUDED.photo_url`,
                             [req.params.id, color, type, photoUrl]
-                        );
+                        ).catch(() => dbRun(
+                            `UPDATE product_variants SET photo_url = $1
+                             WHERE product_id = $2 AND color = $3 AND variant_type = $4`,
+                            [photoUrl, req.params.id, color, type]
+                        ));
                     }
                 }
-                // If no new photos → leave existing rows untouched (preserve old photos)
             }
         }
 
@@ -1001,65 +990,6 @@ app.get('/api/orders/stats', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/orders/report?type=monthly&year=2026
-// GET /api/orders/report?type=daily&year=2026&month=4
-app.get('/api/orders/report', requireAuth(['admin']), async (req, res) => {
-    try {
-        const { type = 'monthly', year, month } = req.query;
-        const y = parseInt(year) || new Date().getFullYear();
-
-        let rows;
-        if (type === 'daily') {
-            const m = parseInt(month) || (new Date().getMonth() + 1);
-            // Daily aggregation for a specific month
-            rows = await dbAll(`
-                SELECT
-                    EXTRACT(DAY FROM created_at)::int AS period,
-                    COUNT(*) AS total_orders,
-                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS total_revenue,
-                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS confirmed_revenue,
-                    COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_orders,
-                    COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders
-                FROM orders
-                WHERE EXTRACT(YEAR FROM created_at) = $1
-                  AND EXTRACT(MONTH FROM created_at) = $2
-                GROUP BY period
-                ORDER BY period ASC
-            `, [y, m]);
-        } else {
-            // Monthly aggregation for a year
-            rows = await dbAll(`
-                SELECT
-                    EXTRACT(MONTH FROM created_at)::int AS period,
-                    COUNT(*) AS total_orders,
-                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) AS total_revenue,
-                    COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS confirmed_revenue,
-                    COUNT(*) FILTER (WHERE payment_status = 'paid') AS paid_orders,
-                    COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders
-                FROM orders
-                WHERE EXTRACT(YEAR FROM created_at) = $1
-                GROUP BY period
-                ORDER BY period ASC
-            `, [y]);
-        }
-
-        // Summary totals — revenue only from paid AND non-cancelled orders
-        const summary = await dbGet(`
-            SELECT
-                COUNT(*) AS total_orders,
-                COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS total_revenue,
-                COUNT(*) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled') AS paid_orders,
-                COUNT(*) FILTER (WHERE order_status = 'cancelled') AS cancelled_orders,
-                COALESCE(AVG(total_amount) FILTER (WHERE payment_status = 'paid' AND order_status != 'cancelled'), 0) AS avg_order_value
-            FROM orders
-            WHERE EXTRACT(YEAR FROM created_at) = $1
-            ${type === 'daily' ? 'AND EXTRACT(MONTH FROM created_at) = $2' : ''}
-        `, type === 'daily' ? [y, parseInt(month) || (new Date().getMonth() + 1)] : [y]);
-
-        res.json({ type, year: y, month: type === 'daily' ? (parseInt(month) || new Date().getMonth() + 1) : null, rows, summary });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 // ── CITIES & SHIPPING ──────────────────────────────────────────────────────────
 
 // GET /api/cities — Daftar kota Indonesia
@@ -1144,7 +1074,9 @@ app.post('/api/orders', async (req, res) => {
     try {
         const {
             customer_name, customer_phone, customer_address, items, notes,
-            shipping_city, shipping_cost, embroidery_details
+            shipping_city, shipping_cost, embroidery_details,
+            order_source,    // 'website' atau 'whatsapp', default 'website'
+            payment_method   // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
@@ -1181,17 +1113,19 @@ app.post('/api/orders', async (req, res) => {
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
         const hasBordirNama = itemDetails.some(i => i.bordir_nama);
 
-        const orderCode = generateOrderCode();
+        const orderCode = generateOrderCode(order_source || 'website');
         const orderResult = await dbRun(
             `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
               shipping_city, shipping_courier, shipping_cost, total_amount, embroidery_details,
-              has_bordir_logo, has_bordir_nama, notes)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+              has_bordir_logo, has_bordir_nama, notes, order_source, payment_method)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
             [orderCode, customer_name, customer_phone, customer_address,
              shipping_city || '', courier, shippingCost, total,
              embroidery_details ? JSON.stringify(embroidery_details) : null,
              hasBordirLogo, hasBordirNama,
-             notes || '']
+             notes || '',
+             order_source || 'website',
+             payment_method || '']
         );
         const orderId = orderResult.rows[0].id;
 
@@ -1229,7 +1163,10 @@ app.post('/api/orders', async (req, res) => {
             `📦 Ongkir: Rp ${shippingCost.toLocaleString('id-ID')}\n` +
             `💰 *TOTAL: Rp ${total.toLocaleString('id-ID')}*\n\n` +
             `⏳ Menunggu Pembayaran`;
-        await sendWANotification(waMsg);
+        // Skip WA notification to admin for manually-input WA orders (admin already knows)
+        if ((order_source || 'website') !== 'whatsapp') {
+            await sendWANotification(waMsg);
+        }
 
         // ⚠️ Immediate reminder if bordir logo ordered
         if (hasBordirLogo) {
@@ -1458,7 +1395,7 @@ app.put('/api/orders/:id/request-logo', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  STATIC SERVING
 // ═══════════════════════════════════════════════════════════════════════════════
-const websiteDir = path.join(__dirname, 'public');
+const websiteDir = path.resolve(__dirname, '..');
 app.use(express.static(websiteDir));
 
 // ─── Start Server ──────────────────────────────────────────────────────────────

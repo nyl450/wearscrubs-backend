@@ -78,6 +78,9 @@
             <i class="fa-solid fa-bag-shopping w-4 text-xs"></i> Pesanan
             <span id="orders-badge" class="hidden ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
         </button>
+        <button onclick="showModule('manual-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="manual-order">
+            <i class="fa-brands fa-whatsapp w-4 text-xs"></i> Input Order WA
+        </button>
     </nav>
     <!-- Settings (Admin only) -->
     <div id="sidebar-settings-wrap" class="p-3 border-t border-darkborder">
@@ -229,6 +232,65 @@
         </div>
         <div id="orders-list" class="space-y-3"></div>
     </div>
+
+    <!-- MODULE: INPUT ORDER MANUAL WA -->
+    <section id="module-manual-order" class="module-section hidden flex-1 overflow-y-auto p-6 space-y-6">
+      <div class="max-w-2xl mx-auto">
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+            <i class="fa-brands fa-whatsapp text-green-400"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-bold text-white">Input Order WhatsApp</h2>
+            <p class="text-xs text-white/40">Catat pesanan dari dokter yang order via WA</p>
+          </div>
+        </div>
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
+          <div>
+            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Data Pelanggan</p>
+            <div class="space-y-3">
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Nama Dokter / Pelanggan <span class="text-red-400">*</span></label><input type="text" id="wa-customer-name" placeholder="Dr. Budi Santoso" /></div>
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Nomor WhatsApp <span class="text-red-400">*</span></label><input type="text" id="wa-customer-phone" placeholder="08xxxxxxxxxx" /></div>
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Alamat Lengkap <span class="text-red-400">*</span></label><textarea id="wa-customer-address" rows="2" placeholder="Jl. Sudirman No. 10..."></textarea></div>
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Kota Pengiriman <span class="text-red-400">*</span></label><select id="wa-shipping-city"><option value="">-- Pilih Kota --</option></select></div>
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Ongkos Kirim (Rp)</label><input type="number" id="wa-shipping-cost" placeholder="0" min="0" /></div>
+            </div>
+          </div>
+          <hr class="border-white/5" />
+          <div>
+            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Produk Dipesan</p>
+            <div id="wa-items-container" class="space-y-3"></div>
+            <button onclick="waAddItem()" class="mt-3 w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/30 text-sm font-medium transition-all flex items-center justify-center gap-2">
+              <i class="fa-solid fa-plus text-xs"></i> Tambah Produk
+            </button>
+          </div>
+          <hr class="border-white/5" />
+          <div>
+            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Pembayaran</p>
+            <div class="space-y-3">
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Metode Pembayaran</label><select id="wa-payment-method"><option value="">-- Pilih --</option><option value="BCA">Transfer BCA</option><option value="BRI">Transfer BRI</option><option value="Mandiri">Transfer Mandiri</option><option value="BNI">Transfer BNI</option><option value="QRIS">QRIS</option></select></div>
+              <div><label class="text-xs font-medium text-white/60 mb-1 block">Catatan (opsional)</label><textarea id="wa-notes" rows="2" placeholder="Misal: minta packing bubble wrap extra"></textarea></div>
+            </div>
+          </div>
+          <div class="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+            <span class="text-sm text-white/60 font-medium">Total Estimasi</span>
+            <span id="wa-total-preview" class="text-lg font-bold text-white">Rp 0</span>
+          </div>
+          <button onclick="waSubmitOrder()" id="wa-submit-btn" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">
+            <i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA
+          </button>
+        </div>
+        <div id="wa-result-panel" class="hidden bg-darkcard border border-green-500/20 rounded-2xl p-6 space-y-4 mt-6">
+          <div class="flex items-center gap-2 text-green-400 font-bold"><i class="fa-solid fa-circle-check"></i><span>Order Berhasil Dicatat!</span></div>
+          <div class="bg-white/5 rounded-xl p-4"><p class="text-xs text-white/40 mb-1">Kode Invoice</p><p id="wa-result-code" class="text-2xl font-bold text-white tracking-wider"></p></div>
+          <div class="bg-green-950/30 border border-green-500/10 rounded-xl p-4"><p class="text-xs text-white/40 mb-2 font-medium">Pesan WA Siap Kirim</p><pre id="wa-result-message" class="text-sm text-white/80 whitespace-pre-wrap font-mono leading-relaxed"></pre></div>
+          <div class="flex gap-3">
+            <button onclick="waCopyMessage()" class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Pesan WA</button>
+            <button onclick="waResetForm()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 font-medium text-sm transition-all">Input Order Baru</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
     <div id="module-settings" class="hidden p-6 space-y-8 max-w-4xl">
@@ -744,12 +806,13 @@ function showModule(name) {
     document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
     const btn = [...document.querySelectorAll('.sidebar-btn')].find(b => b.getAttribute('onclick')?.includes(`'${name}'`));
     if (btn) btn.classList.add('active');
-    if (name === 'overview')  loadOverview();
-    if (name === 'products')  loadProducts();
-    if (name === 'inventory') loadInventory();
-    if (name === 'popular')   loadPopular();
-    if (name === 'orders')    loadOrders();
-    if (name === 'settings')  loadSettings();
+    if (name === 'overview')      loadOverview();
+    if (name === 'products')      loadProducts();
+    if (name === 'inventory')     loadInventory();
+    if (name === 'popular')       loadPopular();
+    if (name === 'orders')        loadOrders();
+    if (name === 'settings')      loadSettings();
+    if (name === 'manual-order')  waInitModule();
 }
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
@@ -1489,6 +1552,7 @@ function renderOrders() {
                 ${o.payment_status==='pending' ? '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">⏳ Belum Bayar</span>' : ''}
                 ${o.payment_status==='paid'    ? '<span class="status-badge border bg-green-500/10 text-green-400 border-green-500/20">✅ Lunas</span>' : ''}
                 ${bordirBadge}${logoBadge}
+                ${o.order_source==='whatsapp' ? '<span class="status-badge border bg-green-500/15 text-green-400 border-green-500/20"><i class="fa-brands fa-whatsapp mr-1"></i>WA</span>' : '<span class="status-badge border bg-blue-500/15 text-blue-400 border-blue-500/20"><i class="fa-solid fa-globe mr-1"></i>Web</span>'}
             </div>
             <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-darkborder">
                 <button onclick="viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">📋 Detail</button>
@@ -2249,6 +2313,216 @@ document.addEventListener('DOMContentLoaded', () => {
     // to ensure correct menu visibility from the start
     setTimeout(initSidebar, 100);
 });
+
+// ═══════════════════════════════════════════════════
+// MODULE: INPUT ORDER MANUAL WA
+// ═══════════════════════════════════════════════════
+
+let waProducts = [];
+let waItemCount = 0;
+
+async function waInitModule() {
+    if (waProducts.length === 0) {
+        try {
+            const res = await fetch(API + '/api/products');
+            waProducts = await res.json();
+        } catch (e) { console.error('Gagal load produk:', e); }
+    }
+    const citySelect = document.getElementById('wa-shipping-city');
+    if (citySelect.options.length <= 1) {
+        try {
+            const res = await fetch(API + '/api/cities');
+            const cities = await res.json();
+            cities.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.name; opt.textContent = c.name;
+                citySelect.appendChild(opt);
+            });
+        } catch (e) {}
+    }
+    if (document.getElementById('wa-items-container').children.length === 0) {
+        waAddItem();
+    }
+    document.getElementById('wa-shipping-cost').oninput = waUpdateTotal;
+}
+
+function waAddItem() {
+    waItemCount++;
+    const idx = waItemCount;
+    const container = document.getElementById('wa-items-container');
+    const div = document.createElement('div');
+    div.id = `wa-item-${idx}`;
+    div.className = 'bg-white/5 border border-white/8 rounded-xl p-4 space-y-3 relative';
+    div.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+            <p class="text-xs font-bold text-white/50">Item #${idx}</p>
+            ${idx > 1 ? `<button onclick="waRemoveItem(${idx})" class="text-red-400/60 hover:text-red-400 text-xs transition-colors"><i class="fa-solid fa-trash"></i></button>` : ''}
+        </div>
+        <div>
+            <label class="text-xs text-white/50 mb-1 block">Produk</label>
+            <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})" class="text-sm">
+                <option value="">-- Pilih Produk --</option>
+                ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}">${p.name} — Rp ${Number(p.price).toLocaleString('id-ID')}</option>`).join('')}
+            </select>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+            <div><label class="text-xs text-white/50 mb-1 block">Warna</label><select id="wa-color-${idx}" onchange="waUpdateTotal()" class="text-sm"><option value="">--</option></select></div>
+            <div><label class="text-xs text-white/50 mb-1 block">Variant</label><select id="wa-variant-${idx}" onchange="waUpdateTotal()" class="text-sm"><option value="">--</option></select></div>
+            <div><label class="text-xs text-white/50 mb-1 block">Ukuran</label><select id="wa-size-${idx}" onchange="waUpdateTotal()" class="text-sm"><option value="">--</option></select></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+            <div><label class="text-xs text-white/50 mb-1 block">Jumlah</label><input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waUpdateTotal()" class="text-sm" /></div>
+            <div><label class="text-xs text-white/50 mb-1 block">Bordir</label>
+                <div class="flex gap-3 mt-2">
+                    <label class="flex items-center gap-1.5 text-xs text-white/60 cursor-pointer"><input type="checkbox" id="wa-bordir-nama-${idx}" onchange="waUpdateTotal()" class="rounded" /> Nama (+20rb)</label>
+                    <label class="flex items-center gap-1.5 text-xs text-white/60 cursor-pointer"><input type="checkbox" id="wa-bordir-logo-${idx}" onchange="waUpdateTotal()" class="rounded" /> Logo (+30rb)</label>
+                </div>
+            </div>
+        </div>`;
+    container.appendChild(div);
+}
+
+function waRemoveItem(idx) {
+    const el = document.getElementById(`wa-item-${idx}`);
+    if (el) el.remove();
+    waUpdateTotal();
+}
+
+async function waOnProductChange(idx) {
+    const productId = document.getElementById(`wa-prod-${idx}`).value;
+    const colorSel = document.getElementById(`wa-color-${idx}`);
+    const variantSel = document.getElementById(`wa-variant-${idx}`);
+    const sizeSel = document.getElementById(`wa-size-${idx}`);
+    colorSel.innerHTML = '<option value="">--</option>';
+    variantSel.innerHTML = '<option value="">--</option>';
+    sizeSel.innerHTML = '<option value="">--</option>';
+    if (!productId) return;
+    try {
+        const res = await fetch(API + `/api/inventory/${productId}`);
+        const inv = await res.json();
+        const colors   = [...new Set(inv.filter(i => i.stock > 0).map(i => i.color))];
+        const variants = [...new Set(inv.filter(i => i.stock > 0).map(i => i.variant_type))];
+        const sizes    = [...new Set(inv.filter(i => i.stock > 0).map(i => i.size))];
+        colors.forEach(c   => colorSel.innerHTML   += `<option value="${c}">${c}</option>`);
+        variants.forEach(v => variantSel.innerHTML += `<option value="${v}">${v}</option>`);
+        sizes.forEach(s    => sizeSel.innerHTML    += `<option value="${s}">${s}</option>`);
+    } catch(e) {}
+    waUpdateTotal();
+}
+
+function waUpdateTotal() {
+    let productTotal = 0;
+    const container = document.getElementById('wa-items-container');
+    container.querySelectorAll('[id^="wa-item-"]').forEach(item => {
+        const idx = item.id.replace('wa-item-', '');
+        const prodEl = document.getElementById(`wa-prod-${idx}`);
+        if (!prodEl || !prodEl.value) return;
+        const price = parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
+        const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
+        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.checked ? 20000 : 0;
+        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.checked ? 30000 : 0;
+        productTotal += (price + bordirNama + bordirLogo) * qty;
+    });
+    const ongkir = parseInt(document.getElementById('wa-shipping-cost')?.value || 0);
+    document.getElementById('wa-total-preview').textContent = 'Rp ' + (productTotal + ongkir).toLocaleString('id-ID');
+}
+
+async function waSubmitOrder() {
+    const btn = document.getElementById('wa-submit-btn');
+    const customerName    = document.getElementById('wa-customer-name').value.trim();
+    const customerPhone   = document.getElementById('wa-customer-phone').value.trim();
+    const customerAddress = document.getElementById('wa-customer-address').value.trim();
+    const shippingCity    = document.getElementById('wa-shipping-city').value;
+    const shippingCost    = parseInt(document.getElementById('wa-shipping-cost').value || 0);
+    const paymentMethod   = document.getElementById('wa-payment-method').value;
+    const notes           = document.getElementById('wa-notes').value.trim();
+
+    if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
+        alert('Lengkapi data pelanggan terlebih dahulu.'); return;
+    }
+
+    const container = document.getElementById('wa-items-container');
+    const items = [];
+    for (const item of container.querySelectorAll('[id^="wa-item-"]')) {
+        const idx       = item.id.replace('wa-item-', '');
+        const productId = document.getElementById(`wa-prod-${idx}`)?.value;
+        if (!productId) continue;
+        items.push({
+            product_id:   parseInt(productId),
+            color:        document.getElementById(`wa-color-${idx}`)?.value,
+            variant_type: document.getElementById(`wa-variant-${idx}`)?.value || 'null',
+            size:         document.getElementById(`wa-size-${idx}`)?.value,
+            quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
+            bordir_nama:  document.getElementById(`wa-bordir-nama-${idx}`)?.checked || false,
+            bordir_logo:  document.getElementById(`wa-bordir-logo-${idx}`)?.checked || false,
+        });
+    }
+    if (items.length === 0) { alert('Tambahkan minimal satu produk.'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...';
+
+    try {
+        const res = await fetch(API + '/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, notes, order_source: 'whatsapp', payment_method: paymentMethod, items })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
+
+        const itemLines = items.map(it => {
+            const prod = waProducts.find(p => p.id === it.product_id);
+            const price = prod ? prod.price : 0;
+            const embCost = (it.bordir_nama ? 20000 : 0) + (it.bordir_logo ? 30000 : 0);
+            let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = Rp ${((price + embCost) * it.quantity).toLocaleString('id-ID')}`;
+            if (it.bordir_nama) line += ' [Bordir Nama]';
+            if (it.bordir_logo) line += ' [Bordir Logo]';
+            return line;
+        }).join('\n');
+
+        const waMsg =
+            `Halo ${customerName} 👋\n\n` +
+            `Pesanan Anda sudah kami catat.\n\n` +
+            `🧾 *Invoice: ${data.order_code}*\n\n` +
+            `📦 Detail Produk:\n${itemLines}\n\n` +
+            `🚚 Ongkir (${data.courier}): Rp ${Number(data.shipping_cost).toLocaleString('id-ID')}\n` +
+            `💰 *TOTAL: Rp ${Number(data.total_amount).toLocaleString('id-ID')}*` +
+            (paymentMethod ? `\n💳 Metode: ${paymentMethod}` : '') +
+            `\n\nSilakan lakukan pembayaran dan kirim bukti transfer ke WA ini ya Dok 🙏\n\nTerima kasih sudah berbelanja di WearScrubs! 🏥`;
+
+        document.getElementById('wa-result-code').textContent = data.order_code;
+        document.getElementById('wa-result-message').textContent = waMsg;
+        document.getElementById('wa-result-panel').classList.remove('hidden');
+        document.getElementById('wa-result-panel').scrollIntoView({ behavior: 'smooth' });
+    } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
+    }
+}
+
+function waCopyMessage() {
+    const msg = document.getElementById('wa-result-message').textContent;
+    navigator.clipboard.writeText(msg).then(() => {
+        const btn = event.target.closest('button');
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Tersalin!';
+        setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i> Salin Pesan WA'; }, 2000);
+    });
+}
+
+function waResetForm() {
+    ['wa-customer-name','wa-customer-phone','wa-customer-address','wa-shipping-cost','wa-payment-method','wa-notes']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('wa-shipping-city').value = '';
+    document.getElementById('wa-items-container').innerHTML = '';
+    document.getElementById('wa-total-preview').textContent = 'Rp 0';
+    document.getElementById('wa-result-panel').classList.add('hidden');
+    document.getElementById('wa-submit-btn').disabled = false;
+    document.getElementById('wa-submit-btn').innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
+    waItemCount = 0;
+    waAddItem();
+}
 
 </script>
 </body>
