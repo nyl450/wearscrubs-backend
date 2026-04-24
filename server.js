@@ -31,6 +31,9 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false
 }));
 
+// ─── Trust Proxy (Railway / Heroku behind reverse proxy) ──────────────────────
+app.set('trust proxy', 1);
+
 // ─── Rate Limiting ─────────────────────────────────────────────────────────────
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
