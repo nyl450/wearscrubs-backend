@@ -159,8 +159,8 @@
             <!-- Bahasa -->
             <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-2 px-3">Bahasa</p>
             <div class="flex gap-2">
-                <a href="product.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
-                <a href="product.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
+                <a href="product.html" id="mobile-lang-id" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
+                <a href="product.html" id="mobile-lang-en" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
             </div>
         </nav>
 
@@ -425,11 +425,8 @@
             </div>
         </div>
         <div class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
-            <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400" data-id="Â© 2026 WearScrubs. Hak Cipta Dilindungi." data-en="Â© 2026 WearScrubs. All Rights Reserved.">Â© 2026 WearScrubs. Hak Cipta Dilindungi.</p>
-            <div class="flex space-x-6">
-                <a href="#" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition" data-id="Privasi" data-en="Privacy">Privasi</a>
-                <a href="#" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition" data-id="Syarat" data-en="Terms">Syarat</a>
-            </div>
+            <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400" data-id="© 2026 WearScrubs. Hak Cipta Dilindungi." data-en="© 2026 WearScrubs. All Rights Reserved.">© 2026 WearScrubs. Hak Cipta Dilindungi.</p>
+            
         </div>
     </div>
 </footer>
@@ -502,6 +499,14 @@
     async function init() {
         const params = new URLSearchParams(window.location.search);
         const id = params.get('id');
+    // Update mobile drawer lang links to preserve product ID
+    const _pid = params.get('id');
+    if (_pid) {
+        const mlId = document.getElementById('mobile-lang-id');
+        const mlEn = document.getElementById('mobile-lang-en');
+        if (mlId) mlId.href = `product.html?id=${_pid}`;
+        if (mlEn) mlEn.href = `product.html?id=${_pid}`;
+    }
         if (!id) { window.location.href = 'index.html'; return; }
 
         try {

@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function () {
+﻿document.addEventListener('DOMContentLoaded', function () {
 
     // --- 0. MOBILE DRAWER ---
     const mobileMenuBtn = document.getElementById('mobile-menu-btn');
@@ -111,105 +111,6 @@ document.addEventListener('DOMContentLoaded', function () {
             if (target) target.classList.remove('hidden');
         });
     });
-
-    // --- 4. CHATBOT AI (via /api/chat backend) ---
-    const chatBtn = document.getElementById('ai-chat-btn');
-    const chatPanel = document.getElementById('ai-chat-panel');
-    const closeChat = document.getElementById('close-chat');
-    const chatForm = document.getElementById('chat-form');
-    const chatInput = document.getElementById('chat-input');
-    const chatMessages = document.getElementById('chat-messages');
-
-    let conversationHistory = [];
-
-    if (chatBtn && chatPanel) {
-        chatBtn.addEventListener('click', () => {
-            chatPanel.style.display = 'flex';
-            requestAnimationFrame(() => {
-                chatPanel.style.transform = 'scale(1)';
-                chatPanel.style.opacity = '1';
-            });
-            if (chatInput) chatInput.focus();
-        });
-    }
-
-    if (closeChat && chatPanel) {
-        closeChat.addEventListener('click', () => {
-            chatPanel.style.transform = 'scale(0.95)';
-            chatPanel.style.opacity = '0';
-            setTimeout(() => { chatPanel.style.display = 'none'; }, 200);
-        });
-    }
-
-    function appendMessage(text, sender) {
-        if (!chatMessages) return;
-        const msgDiv = document.createElement('div');
-        msgDiv.classList.add('p-3', 'max-w-[85%]', 'border', 'shadow-sm');
-        if (sender === 'user') {
-            msgDiv.classList.add('bg-blue-600', 'text-white', 'border-transparent', 'rounded-tl-xl', 'rounded-bl-xl', 'rounded-br-xl', 'self-end');
-            msgDiv.textContent = text;
-        } else {
-            msgDiv.classList.add('bg-gray-200', 'dark:bg-[#3a3a3a]', 'text-gray-900', 'dark:text-white', 'border-transparent', 'dark:border-white/5', 'rounded-tr-xl', 'rounded-bl-xl', 'rounded-br-xl', 'self-start');
-            msgDiv.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        }
-        chatMessages.appendChild(msgDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    function showTypingIndicator() {
-        if (!chatMessages) return;
-        const typingDiv = document.createElement('div');
-        typingDiv.id = 'typing-indicator';
-        typingDiv.classList.add('bg-gray-200', 'dark:bg-[#3a3a3a]', 'p-3', 'rounded-tr-xl', 'rounded-bl-xl', 'rounded-br-xl', 'max-w-[85%]', 'self-start', 'border', 'border-transparent', 'dark:border-white/5', 'typing-indicator', 'shadow-sm');
-        typingDiv.innerHTML = '<span></span><span></span><span></span>';
-        chatMessages.appendChild(typingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    function removeTypingIndicator() {
-        const el = document.getElementById('typing-indicator');
-        if (el) el.remove();
-    }
-
-    async function sendToBackend() {
-        const response = await fetch('http://localhost:3000/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation: conversationHistory })
-        });
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
-        const data = await response.json();
-        if (!data.result) throw new Error('No result in response');
-        return data.result;
-    }
-
-    if (chatForm) {
-        chatForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const text = chatInput.value.trim();
-            if (!text) return;
-            appendMessage(text, 'user');
-            chatInput.value = '';
-            chatInput.disabled = true;
-            conversationHistory.push({ role: 'user', text });
-            showTypingIndicator();
-            try {
-                const aiText = await sendToBackend();
-                conversationHistory.push({ role: 'model', text: aiText });
-                removeTypingIndicator();
-                appendMessage(aiText, 'ai');
-            } catch (err) {
-                removeTypingIndicator();
-                const errorMsg = err.message.includes('No result') ? 'Sorry, no response received.' : 'Failed to get response from server.';
-                appendMessage(errorMsg, 'ai');
-                console.error('[WearScrubs Chat]', err);
-            } finally {
-                chatInput.disabled = false;
-                if (chatInput) chatInput.focus();
-            }
-        });
-    }
-
     // --- UPDATE CART BADGE (all pages, even without catalog.js) ---
     try {
         const _rawCart = localStorage.getItem('ws_cart');
@@ -344,7 +245,7 @@ const WS_LANG_MAP = {
         });
     });
 
-    // ── Universal fix: any plain <a> link pointing to an ID-version page ───────
+    // â”€â”€ Universal fix: any plain <a> link pointing to an ID-version page â”€â”€â”€â”€â”€â”€â”€
     // Covers hardcoded href links in EN pages (e.g. href="scrub-top.html" for ID button)
     // When clicked, stamp ws_lang='id' so initLanguage() on landing page won't redirect back.
     const idPages = Object.keys(WS_LANG_MAP).filter(k => !k.endsWith('-en.html') && k !== 'index-en.html');
@@ -359,7 +260,7 @@ const WS_LANG_MAP = {
         }
     });
 
-    // ── Universal fix: any plain <a> link pointing to an EN-version page ────────
+    // â”€â”€ Universal fix: any plain <a> link pointing to an EN-version page â”€â”€â”€â”€â”€â”€â”€â”€
     // Covers hardcoded href links in ID pages (e.g. href="scrub-top-en.html" for EN button)
     const enPages = Object.keys(WS_LANG_MAP).filter(k => k.endsWith('-en.html') || k === 'index-en.html');
     document.querySelectorAll('a[href]').forEach(el => {

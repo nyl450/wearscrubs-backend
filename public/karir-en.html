@@ -86,12 +86,10 @@
                     </div>
                 </button>
                 
-                <button
-                    class="text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white flex items-center transition-colors">
+                <a href="cart.html" class="cart-btn text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white flex items-center transition-colors">
                     <span class="mr-2 uppercase text-[12px] tracking-widest font-medium">Cart</span>
-                    <span
-                        class="bg-black text-white dark:bg-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full transition-colors">0</span>
-                </button>
+                    <span class="cart-count bg-black text-white dark:bg-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full transition-colors">0</span>
+                </a>
             </div>
 
             <!-- Hamburger Button (Mobile only) -->
@@ -173,10 +171,22 @@
 <!-- Bagian Utama Hero -->
     
     <main class="min-h-screen bg-gray-50 dark:bg-darkbg py-24 transition-colors">
-        <div class="container mx-auto px-6 text-center">
-            <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white">Careers</h1>
+    <div class="container mx-auto px-6 max-w-2xl text-center">
+        <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white mb-6">Careers</h1>
+        <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-200 dark:border-white/10 p-10 shadow-sm">
+            <div class="text-5xl mb-6">🩺</div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-3">No Open Positions</h2>
+            <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed mb-6">
+                We are not currently hiring. Check back later or follow us on Instagram
+                to stay updated on future opportunities.
+            </p>
+            <a href="https://www.instagram.com/wearscrubs.id/" target="_blank"
+                class="inline-flex items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-full text-sm font-bold hover:bg-gray-700 dark:hover:bg-gray-200 transition-colors">
+                <i class="fa-brands fa-instagram"></i> Follow @wearscrubs.id
+            </a>
         </div>
-    </main>
+    </div>
+</main>
 
 
     <!-- Footer Super Lengkap (Partners & Subscribe) -->
@@ -254,13 +264,7 @@
                 class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
                 <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400">&copy;
                     2026 WearScrubs. All Rights Reserved.</p>
-                <div class="flex space-x-6 items-center flex-wrap justify-center gap-y-4">
-                    <a href="#"
-                        class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Privacy</a>
-                    <a href="#"
-                        class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Terms</a>
-
-                </div>
+                
             </div>
         </div>
     </footer>
