@@ -1191,7 +1191,8 @@ app.post('/api/orders', async (req, res) => {
 
         res.json({
             message: 'Pesanan berhasil dibuat',
-            order_id: orderId,
+            id: orderId,           // ← untuk openInvoiceModal() di dashboard
+            order_id: orderId,     // ← backward-compat (tidak diubah)
             order_code: orderCode,
             total_amount: total,
             shipping_cost: shippingCost,
