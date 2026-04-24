@@ -330,6 +330,10 @@ async function initDB() {
     await dbRun(`ALTER TABLE products DROP CONSTRAINT IF EXISTS products_category_check`).catch(() => {});
     await dbRun(`ALTER TABLE products ADD CONSTRAINT products_category_check CHECK(category IN ('tops','pants','caps','gown'))`).catch(() => {});
 
+    // ── Migrate: add 'bordir' to order_status check constraint ────────────────
+    await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_status_check`).catch(() => {});
+    await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_status_check CHECK(order_status IN ('waiting_payment','confirmed','bordir','packed','shipped','done','cancelled'))`).catch(() => {});
+
 
     // ── Indexes ───────────────────────────────────────────────────────────────
     const createIdx = (sql) => dbRun(sql).catch(() => {});
@@ -618,7 +622,7 @@ app.get('/api/products/popular', async (req, res) => {
 });
 
 // PUT /api/products/popular
-app.put('/api/products/popular', async (req, res) => {
+app.put('/api/products/popular', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length > 4)
@@ -660,7 +664,7 @@ app.get('/api/products/:id', async (req, res) => {
 });
 
 // POST /api/products
-app.post('/api/products', upload.any(), async (req, res) => {
+app.post('/api/products', requireAuth(['admin','manager']), upload.any(), async (req, res) => {
     try {
         const { sku, name, category, price, short_description, long_description,
             short_description_en, long_description_en,
@@ -748,7 +752,7 @@ app.post('/api/products', upload.any(), async (req, res) => {
 });
 
 // PUT /api/products/:id
-app.put('/api/products/:id', upload.any(), async (req, res) => {
+app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), async (req, res) => {
     try {
         const { name, category, price, short_description, long_description,
             short_description_en, long_description_en,
@@ -868,7 +872,7 @@ app.put('/api/products/:id', upload.any(), async (req, res) => {
 
 
 // DELETE /api/products/:id
-app.delete('/api/products/:id', async (req, res) => {
+app.delete('/api/products/:id', requireAuth(['admin','manager']), async (req, res) => {
     try {
         // GANTI: ? → $1
         await dbRun('DELETE FROM products WHERE id = $1', [req.params.id]);
@@ -920,7 +924,7 @@ app.get('/api/inventory/:product_id/check', async (req, res) => {
 });
 
 // PUT /api/inventory/single
-app.put('/api/inventory/single', async (req, res) => {
+app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { product_id, size, color, variant_type, stock } = req.body;
         // GANTI: ? → $1-$6 | ON CONFLICT syntax sama ✅
@@ -934,7 +938,7 @@ app.put('/api/inventory/single', async (req, res) => {
 });
 
 // PUT /api/inventory (bulk)
-app.put('/api/inventory', async (req, res) => {
+app.put('/api/inventory', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { updates } = req.body;
         for (const u of updates) {
@@ -951,7 +955,7 @@ app.put('/api/inventory', async (req, res) => {
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
 
-app.get('/api/stats/overview', async (req, res) => {
+app.get('/api/stats/overview', requireAuth(), async (req, res) => {
     try {
         const totalProducts = await dbGet("SELECT COUNT(*) as count FROM products WHERE status != 'draft'");
         const totalOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status != 'cancelled'");
@@ -987,7 +991,7 @@ app.get('/api/stats/overview', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/orders/stats', async (req, res) => {
+app.get('/api/orders/stats', requireAuth(), async (req, res) => {
     try {
         const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status != 'cancelled'");
         const paidOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
@@ -1038,7 +1042,7 @@ app.get('/api/shipping-cost', (req, res) => {
 
 // ── ORDERS ────────────────────────────────────────────────────────────────────
 
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders', requireAuth(), async (req, res) => {
     try {
         const { status, payment_status } = req.query;
         let sql = 'SELECT * FROM orders WHERE 1=1';
@@ -1062,7 +1066,7 @@ app.get('/api/orders', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/orders/:id', async (req, res) => {
+app.get('/api/orders/:id', requireAuth(), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -1224,7 +1228,7 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // PUT /api/orders/:id/confirm-payment  (multipart: payment_proof photo)
-app.put('/api/orders/:id/confirm-payment', upload.single('payment_proof'), async (req, res) => {
+app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upload.single('payment_proof'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Foto bukti pembayaran wajib diupload' });
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
@@ -1274,7 +1278,7 @@ app.put('/api/orders/:id/confirm-payment', upload.single('payment_proof'), async
 });
 
 // PUT /api/orders/:id/bordir-done  (multipart: bordir_proof photo)
-app.put('/api/orders/:id/bordir-done', upload.single('bordir_proof'), async (req, res) => {
+app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.single('bordir_proof'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Foto bukti bordir selesai wajib diupload' });
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
@@ -1298,7 +1302,7 @@ app.put('/api/orders/:id/bordir-done', upload.single('bordir_proof'), async (req
 });
 
 // PUT /api/orders/:id/pack  (multipart: pack_proof photo)
-app.put('/api/orders/:id/pack', upload.single('pack_proof'), async (req, res) => {
+app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single('pack_proof'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Foto bukti pengemasan wajib diupload' });
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
@@ -1380,7 +1384,7 @@ app.get('/api/orders/:id/photos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/orders/:id/status', async (req, res) => {
+app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { order_status } = req.body;
         const valid = ['waiting_payment', 'confirmed', 'packed', 'shipped', 'done', 'cancelled', 'bordir'];
@@ -1394,7 +1398,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
 });
 
 // PUT /api/orders/:id/request-logo — mark logo requested + send WA to customer
-app.put('/api/orders/:id/request-logo', async (req, res) => {
+app.put('/api/orders/:id/request-logo', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
