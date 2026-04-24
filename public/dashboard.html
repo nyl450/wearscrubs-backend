@@ -29,6 +29,37 @@
         .pop-card.selected { border-color: rgba(99,102,241,0.7); background: rgba(99,102,241,0.08); }
         .chart-tab-btn.active { background: white; color: black; }
 
+        /* ═══ SIDEBAR TOGGLE & MOBILE ═══ */
+        #sidebar {
+            transition: transform 0.25s ease, width 0.25s ease;
+            width: 13rem;
+        }
+        #sidebar-overlay {
+            display: none;
+            position: fixed; inset: 0; z-index: 40;
+            background: rgba(0,0,0,0.55);
+        }
+        #sidebar-overlay.active { display: block; }
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed; top: 64px; left: 0; bottom: 0;
+                z-index: 50; transform: translateX(-100%);
+            }
+            #sidebar.open { transform: translateX(0); }
+            #sidebar-overlay.active { display: block; }
+            #main-content { width: 100% !important; }
+        }
+        @media (min-width: 769px) {
+            #sidebar { position: relative; transform: none !important; }
+            #sidebar.collapsed { width: 0; overflow: hidden; border: none; }
+            #sidebar-overlay { display: none !important; }
+        }
+        /* Mobile responsive fixes */
+        @media (max-width: 640px) {
+            .module-section, [id^="module-"] { padding: 1rem !important; }
+            .grid-cols-2 { grid-template-columns: 1fr !important; }
+        }
+
         /* ═══════════════════════════════════════════════════════════
            INVOICE STYLES
         ═══════════════════════════════════════════════════════════ */
@@ -94,10 +125,18 @@
 <body class="bg-darkbg text-white min-h-screen">
 
 <!-- HEADER -->
-<header class="bg-darkcard border-b border-darkborder sticky top-0 z-50 h-16 flex items-center px-6">
+<header class="bg-darkcard border-b border-darkborder sticky top-0 z-50 h-16 flex items-center px-4 gap-3">
+    <!-- Hamburger -->
+    <button id="sidebar-toggle-btn" onclick="toggleSidebar()"
+        class="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 border border-white/8 flex flex-col items-center justify-center gap-1.5 transition-all shrink-0"
+        title="Toggle Menu" aria-label="Toggle sidebar">
+        <span class="block w-4 h-0.5 bg-white/60 rounded-full transition-all"></span>
+        <span class="block w-4 h-0.5 bg-white/60 rounded-full transition-all"></span>
+        <span class="block w-3 h-0.5 bg-white/60 rounded-full transition-all"></span>
+    </button>
     <div class="flex items-center gap-3 flex-1">
         <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto object-contain">
-        <span class="text-xs font-bold tracking-widest text-white/30 uppercase ml-2 hidden sm:block">Admin Portal</span>
+        <span class="text-xs font-bold tracking-widest text-white/30 uppercase ml-1 hidden sm:block">Admin Portal</span>
     </div>
     <div class="flex items-center gap-4">
         <div id="header-pending-badge" class="hidden items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-full">
@@ -120,10 +159,13 @@
     </div>
 </header>
 
-<div class="flex h-[calc(100vh-64px)]">
+<!-- Sidebar Overlay (mobile) -->
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<div class="flex h-[calc(100vh-64px)] overflow-hidden">
 
 <!-- SIDEBAR -->
-<aside class="w-52 bg-darkcard border-r border-darkborder flex flex-col shrink-0 overflow-y-auto">
+<aside id="sidebar" class="bg-darkcard border-r border-darkborder flex flex-col shrink-0 overflow-y-auto overflow-x-hidden">
     <nav class="p-3 flex-1 space-y-0.5 pt-4">
         <button onclick="showModule('overview')" class="sidebar-btn active w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="overview">
             <i class="fa-solid fa-chart-line w-4 text-xs"></i> Overview
@@ -155,7 +197,7 @@
 </aside>
 
 <!-- MAIN -->
-<main class="flex-1 overflow-y-auto">
+<main id="main-content" class="flex-1 overflow-y-auto min-w-0">
 
     <!-- OVERVIEW -->
     <div id="module-overview" class="p-6 space-y-6">
@@ -297,84 +339,129 @@
     </div>
 
     <!-- MODULE: INPUT ORDER MANUAL WA -->
-    <section id="module-manual-order" class="module-section hidden flex-1 overflow-y-auto p-6 space-y-6">
-      <div class="max-w-2xl mx-auto">
-        <div class="flex items-center gap-3 mb-6">
-          <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
-            <i class="fa-brands fa-whatsapp text-green-400"></i>
+    <section id="module-manual-order" class="module-section hidden p-4 sm:p-6">
+      <div class="max-w-2xl mx-auto space-y-5">
+
+        <!-- Page Header -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0">
+            <i class="fa-brands fa-whatsapp text-green-400 text-lg"></i>
           </div>
           <div>
-            <h2 class="text-lg font-bold text-white">Input Order WhatsApp</h2>
-            <p class="text-xs text-white/40">Catat pesanan dari dokter yang order via WA</p>
+            <h2 class="text-base font-bold text-white">Input Order WhatsApp</h2>
+            <p class="text-xs text-white/40 mt-0.5">Catat pesanan dari dokter yang order via WA</p>
           </div>
         </div>
-        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
-          <div>
-            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Data Pelanggan</p>
-            <div class="space-y-3">
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Nama Dokter / Pelanggan <span class="text-red-400">*</span></label><input type="text" id="wa-customer-name" placeholder="Dr. Budi Santoso" /></div>
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Nomor WhatsApp <span class="text-red-400">*</span></label><input type="text" id="wa-customer-phone" placeholder="08xxxxxxxxxx" /></div>
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Alamat Lengkap <span class="text-red-400">*</span></label><textarea id="wa-customer-address" rows="2" placeholder="Jl. Sudirman No. 10..."></textarea></div>
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Kota Pengiriman <span class="text-red-400">*</span></label><select id="wa-shipping-city"><option value="">-- Pilih Kota --</option></select></div>
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Ongkos Kirim (Rp)</label><input type="number" id="wa-shipping-cost" placeholder="0" min="0" /></div>
+
+        <!-- Form Card -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl divide-y divide-white/5">
+
+          <!-- SECTION: Data Pelanggan -->
+          <div class="p-5 space-y-4">
+            <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Data Pelanggan</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Nama Dokter / Pelanggan <span class="text-red-400">*</span></label>
+                <input type="text" id="wa-customer-name" placeholder="Dr. Budi Santoso" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Nomor WhatsApp <span class="text-red-400">*</span></label>
+                <input type="text" id="wa-customer-phone" placeholder="08xxxxxxxxxx" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Kota Pengiriman <span class="text-red-400">*</span></label>
+                <select id="wa-shipping-city"><option value="">-- Pilih Kota --</option></select>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Alamat Lengkap <span class="text-red-400">*</span></label>
+                <textarea id="wa-customer-address" rows="2" placeholder="Jl. Sudirman No. 10, Jakarta Pusat..."></textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Ongkos Kirim (Rp)</label>
+                <input type="number" id="wa-shipping-cost" placeholder="0" min="0" oninput="waUpdateTotal()" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Metode Pembayaran</label>
+                <select id="wa-payment-method">
+                  <option value="">-- Pilih --</option>
+                  <option value="BCA">Transfer BCA</option>
+                  <option value="BRI">Transfer BRI</option>
+                  <option value="Mandiri">Transfer Mandiri</option>
+                  <option value="BNI">Transfer BNI</option>
+                  <option value="QRIS">QRIS</option>
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-white/55 mb-1.5">Catatan (opsional)</label>
+                <textarea id="wa-notes" rows="2" placeholder="Misal: minta packing bubble wrap extra"></textarea>
+              </div>
             </div>
           </div>
-          <hr class="border-white/5" />
-          <div>
-            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Produk Dipesan</p>
+
+          <!-- SECTION: Produk Dipesan -->
+          <div class="p-5 space-y-3">
+            <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Produk Dipesan</p>
             <div id="wa-items-container" class="space-y-3"></div>
-            <button onclick="waAddItem()" class="mt-3 w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/30 text-sm font-medium transition-all flex items-center justify-center gap-2">
+            <button onclick="waAddItem()" class="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-sm font-medium transition-all flex items-center justify-center gap-2">
               <i class="fa-solid fa-plus text-xs"></i> Tambah Produk
             </button>
           </div>
-          <hr class="border-white/5" />
-          <div>
-            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Pembayaran</p>
-            <div class="space-y-3">
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Metode Pembayaran</label><select id="wa-payment-method"><option value="">-- Pilih --</option><option value="BCA">Transfer BCA</option><option value="BRI">Transfer BRI</option><option value="Mandiri">Transfer Mandiri</option><option value="BNI">Transfer BNI</option><option value="QRIS">QRIS</option></select></div>
-              <div><label class="text-xs font-medium text-white/60 mb-1 block">Catatan (opsional)</label><textarea id="wa-notes" rows="2" placeholder="Misal: minta packing bubble wrap extra"></textarea></div>
+
+          <!-- SECTION: Foto & Bordir -->
+          <div class="p-5 space-y-4">
+            <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Lampiran Invoice (Opsional)</p>
+            <!-- Foto Produk -->
+            <div>
+              <label class="block text-xs font-medium text-white/55 mb-1.5">Foto Produk <span class="text-white/25 font-normal">(max 4)</span></label>
+              <div id="wa-photo-previews" class="grid grid-cols-4 gap-2 mb-2 empty:hidden"></div>
+              <label class="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-image"></i> Pilih Foto Produk
+                <input type="file" id="wa-product-photos" accept="image/*" multiple class="hidden" onchange="waHandleProductPhotos(this)" />
+              </label>
+            </div>
+            <!-- Referensi Bordir (conditional) -->
+            <div id="wa-bordir-ref-section" class="hidden">
+              <label class="block text-xs font-medium text-white/55 mb-1.5">Referensi Bordir <span class="text-white/25 font-normal">(logo/nama)</span></label>
+              <div id="wa-bordir-ref-preview" class="mb-2"></div>
+              <label class="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-upload"></i> Upload Gambar Referensi
+                <input type="file" id="wa-bordir-ref-photo" accept="image/*" class="hidden" onchange="waHandleBordirRef(this)" />
+              </label>
             </div>
           </div>
-          <hr class="border-white/5" />
-          <!-- FOTO PRODUK UNTUK INVOICE -->
-          <div>
-            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">Foto Produk (Opsional)</p>
-            <p class="text-xs text-white/30 mb-3">Upload foto produk untuk ditampilkan di invoice (max 4 foto)</p>
-            <div id="wa-photo-previews" class="grid grid-cols-4 gap-2 mb-3"></div>
-            <label class="w-full py-3 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/30 text-sm font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
-              <i class="fa-solid fa-image text-xs"></i> Pilih Foto Produk
-              <input type="file" id="wa-product-photos" accept="image/*" multiple class="hidden" onchange="waHandleProductPhotos(this)" />
-            </label>
-          </div>
-          <!-- REFERENSI BORDIR (conditional) -->
-          <div id="wa-bordir-ref-section" class="hidden">
-            <hr class="border-white/5 mb-4" />
-            <p class="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">Referensi Bordir</p>
-            <p class="text-xs text-white/30 mb-3">Upload foto nama/logo yang ingin dibordir (untuk invoice)</p>
-            <div id="wa-bordir-ref-preview" class="mb-3"></div>
-            <label class="w-full py-3 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/30 text-sm font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
-              <i class="fa-solid fa-upload text-xs"></i> Upload Gambar Referensi Bordir
-              <input type="file" id="wa-bordir-ref-photo" accept="image/*" class="hidden" onchange="waHandleBordirRef(this)" />
-            </label>
-          </div>
-          <div class="bg-white/5 rounded-xl p-4 flex items-center justify-between">
-            <span class="text-sm text-white/60 font-medium">Total Estimasi</span>
-            <span id="wa-total-preview" class="text-lg font-bold text-white">Rp 0</span>
-          </div>
-          <button onclick="waSubmitOrder()" id="wa-submit-btn" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">
-            <i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA
-          </button>
-        </div>
-        <div id="wa-result-panel" class="hidden bg-darkcard border border-green-500/20 rounded-2xl p-6 space-y-4 mt-6">
-          <div class="flex items-center gap-2 text-green-400 font-bold"><i class="fa-solid fa-circle-check"></i><span>Order Berhasil Dicatat!</span></div>
-          <div class="bg-white/5 rounded-xl p-4"><p class="text-xs text-white/40 mb-1">Kode Invoice</p><p id="wa-result-code" class="text-2xl font-bold text-white tracking-wider"></p></div>
-          <div class="bg-green-950/30 border border-green-500/10 rounded-xl p-4"><p class="text-xs text-white/40 mb-2 font-medium">Pesan WA Siap Kirim</p><pre id="wa-result-message" class="text-sm text-white/80 whitespace-pre-wrap font-mono leading-relaxed"></pre></div>
-          <div class="flex gap-3">
-            <button onclick="waCopyMessage()" class="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Pesan WA</button>
-            <button onclick="openInvoiceModal(window.waLastOrderId, waProductPhotoBase64s, waBordirRefBase64)" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">📄 Print Invoice</button>
-            <button onclick="waResetForm()" class="py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 font-medium text-sm transition-all">Order Baru</button>
+
+          <!-- Total + Submit -->
+          <div class="p-5 space-y-3">
+            <div class="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
+              <span class="text-sm text-white/60 font-medium">Total Estimasi</span>
+              <span id="wa-total-preview" class="text-xl font-bold text-white">Rp 0</span>
+            </div>
+            <button onclick="waSubmitOrder()" id="wa-submit-btn" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">
+              <i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA
+            </button>
           </div>
         </div>
+
+        <!-- Result Panel -->
+        <div id="wa-result-panel" class="hidden bg-darkcard border border-green-500/20 rounded-2xl p-5 space-y-4">
+          <div class="flex items-center gap-2 text-green-400 font-bold text-sm">
+            <i class="fa-solid fa-circle-check"></i><span>Order Berhasil Dicatat!</span>
+          </div>
+          <div class="bg-white/5 rounded-xl px-4 py-3">
+            <p class="text-[10px] text-white/40 mb-1 uppercase tracking-widest">Kode Invoice</p>
+            <p id="wa-result-code" class="text-xl font-bold text-white tracking-wider"></p>
+          </div>
+          <div class="bg-green-950/30 border border-green-500/10 rounded-xl p-4">
+            <p class="text-[10px] text-white/40 mb-2 font-bold uppercase tracking-widest">Pesan WA Siap Kirim</p>
+            <pre id="wa-result-message" class="text-sm text-white/80 whitespace-pre-wrap font-mono leading-relaxed"></pre>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button onclick="waCopyMessage()" class="py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Pesan WA</button>
+            <button onclick="openInvoiceModal(window.waLastOrderId, waProductPhotoBase64s, waBordirRefBase64)" class="py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">📄 Print Invoice</button>
+            <button onclick="waResetForm()" class="py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/70 font-medium text-sm transition-all">Order Baru</button>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -2825,6 +2912,34 @@ function waCheckBordirSection() {
     const section = document.getElementById('wa-bordir-ref-section');
     if (section) section.classList.toggle('hidden', !hasBordir);
 }
+
+// ── Sidebar Toggle (Hamburger) ────────────────────────────────────────────────
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+        const isOpen = sidebar.classList.contains('open');
+        sidebar.classList.toggle('open', !isOpen);
+        overlay.classList.toggle('active', !isOpen);
+    } else {
+        sidebar.classList.toggle('collapsed');
+    }
+}
+function closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+}
+// Close sidebar on mobile when a menu item is clicked
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('#sidebar .sidebar-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (window.innerWidth <= 768) closeSidebar();
+        });
+    });
+});
 
 </script>
 </body>
