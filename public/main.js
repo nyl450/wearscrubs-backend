@@ -270,6 +270,7 @@ const WS_LANG_MAP = {
     'news-3.html':       'news-3-en.html',
     'news-4.html':       'news-4-en.html',
     'payments-shipping.html': 'payments-shipping-en.html',
+    'gown.html':             'gown-en.html',
     'index-en.html':     'index.html',
     'scrub-top-en.html': 'scrub-top.html',
     'scrub-pants-en.html':'scrub-pants.html',
@@ -285,6 +286,7 @@ const WS_LANG_MAP = {
     'news-3-en.html':    'news-3.html',
     'news-4-en.html':    'news-4.html',
     'payments-shipping-en.html': 'payments-shipping.html',
+    'gown-en.html':          'gown.html',
 };
 
 (function initLanguage() {
