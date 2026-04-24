@@ -1399,11 +1399,6 @@ app.put('/api/orders/:id/request-logo', async (req, res) => {
 });
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  STATIC SERVING
-// ═══════════════════════════════════════════════════════════════════════════════
-const websiteDir = path.resolve(__dirname, '..');
-app.use(express.static(websiteDir));
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
