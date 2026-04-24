@@ -101,6 +101,10 @@ function requireAuth(roles = []) {
     };
 }
 
+// ─── Static: serve website dari folder public/ ────────────────────────────────
+const websiteDir = path.join(__dirname, 'public');
+app.use(express.static(websiteDir));
+
 // ─── Multer (memory storage → Supabase Storage) ───────────────────────────────
 // Tetap serve /uploads untuk backward-compat dengan foto lama di DB
 const uploadsDir = path.resolve(__dirname, 'uploads');
