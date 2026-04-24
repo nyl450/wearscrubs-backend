@@ -272,6 +272,7 @@ async function initDB() {
         customer_address TEXT NOT NULL,
         shipping_city TEXT DEFAULT '',
         shipping_courier TEXT DEFAULT '',
+        shipping_weight_kg INTEGER DEFAULT 0,
         shipping_cost INTEGER NOT NULL DEFAULT 0,
         total_amount INTEGER NOT NULL,
         embroidery_details TEXT DEFAULT NULL,
@@ -285,6 +286,7 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_city TEXT DEFAULT ''`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_courier TEXT DEFAULT ''`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_cost INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_weight_kg INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS embroidery_details TEXT DEFAULT NULL`);
 
     // ── Order Items ───────────────────────────────────────────────────────────
@@ -1089,6 +1091,8 @@ app.post('/api/orders', async (req, res) => {
         const {
             customer_name, customer_phone, customer_address, items, notes,
             shipping_city, shipping_cost, embroidery_details,
+            shipping_courier: req_shipping_courier,
+            shipping_weight_kg,
             order_source,    // 'website' atau 'whatsapp', default 'website'
             payment_method,  // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
             discount_percent // 0, 5, atau 30 — hanya untuk WA order
@@ -1126,9 +1130,11 @@ app.post('/api/orders', async (req, res) => {
         const discountLabel = safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null;
         const total = productTotal - discountAmount + shippingCost;
 
-        // Determine courier from city
+        // Courier dipilih manual dari form, fallback ke logika kota jika tidak diisi
         const cityInfo = CITIES.find(c => c.name === shipping_city);
-        const courier = cityInfo ? (cityInfo.is_dki ? 'J&T Reguler' : 'Lion Parcel') : 'J&T Reguler';
+        const autoCourier = cityInfo ? (cityInfo.is_dki ? 'J&T' : 'Lion Parcel') : 'J&T';
+        const courier = (req_shipping_courier && req_shipping_courier.trim()) ? req_shipping_courier.trim() : autoCourier;
+        const weightKg = parseInt(shipping_weight_kg || 0);
 
         // Detect bordir flags from items for order-level tracking
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
@@ -1137,12 +1143,12 @@ app.post('/api/orders', async (req, res) => {
         const orderCode = generateOrderCode(order_source || 'website');
         const orderResult = await dbRun(
             `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
-              shipping_city, shipping_courier, shipping_cost, total_amount, embroidery_details,
-              has_bordir_logo, has_bordir_nama, notes, order_source, payment_method,
-              discount_percent, discount_amount, discount_label)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+              shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
+              embroidery_details, has_bordir_logo, has_bordir_nama, notes, order_source,
+              payment_method, discount_percent, discount_amount, discount_label)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
             [orderCode, customer_name, customer_phone, customer_address,
-             shipping_city || '', courier, shippingCost, total,
+             shipping_city || '', courier, weightKg, shippingCost, total,
              embroidery_details ? JSON.stringify(embroidery_details) : null,
              hasBordirLogo, hasBordirNama,
              notes || '',

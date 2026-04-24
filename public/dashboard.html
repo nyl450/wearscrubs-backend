@@ -382,6 +382,22 @@
                 <label class="block text-xs font-medium text-white/55 mb-1.5">Alamat Lengkap <span class="text-red-400">*</span></label>
                 <textarea id="wa-customer-address" rows="2" placeholder="Jl. Sudirman No. 10, Jakarta Pusat..."></textarea>
               </div>
+              <!-- Berat + Kurir row -->
+              <div>
+                  <label class="block text-xs font-medium text-white/55 mb-1.5">Berat Paket (kg)</label>
+                  <input type="number" id="wa-shipping-weight" placeholder="1" min="0" step="0.5" value="1" class="text-sm" />
+              </div>
+              <div>
+                  <label class="block text-xs font-medium text-white/55 mb-1.5">Ekspedisi</label>
+                  <select id="wa-shipping-courier" class="text-sm">
+                      <option value="">-- Pilih Ekspedisi --</option>
+                      <option value="J&T">J&T</option>
+                      <option value="JNE">JNE</option>
+                      <option value="Lion Parcel">Lion Parcel</option>
+                      <option value="Lion Parcel Cargo">Lion Parcel Cargo</option>
+                      <option value="Sentral Cargo">Sentral Cargo</option>
+                  </select>
+              </div>
               <div>
                 <label class="block text-xs font-medium text-white/55 mb-1.5">Ongkos Kirim (Rp)</label>
                 <input type="number" id="wa-shipping-cost" placeholder="0" min="0" oninput="waUpdateTotal()" />
@@ -2698,6 +2714,8 @@ async function waSubmitOrder() {
     const customerAddress = document.getElementById('wa-customer-address').value.trim();
     const shippingCity    = document.getElementById('wa-shipping-city').value;
     const shippingCost    = parseInt(document.getElementById('wa-shipping-cost').value || 0);
+    const shippingCourier = document.getElementById('wa-shipping-courier')?.value || '';
+    const shippingWeight  = parseFloat(document.getElementById('wa-shipping-weight')?.value || 1);
     const paymentMethod   = document.getElementById('wa-payment-method').value;
     const notes           = document.getElementById('wa-notes').value.trim();
 
@@ -2730,7 +2748,7 @@ async function waSubmitOrder() {
         const res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
-            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, notes, order_source: 'whatsapp', payment_method: paymentMethod, discount_percent: waSelectedDiscount, items })
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: 'whatsapp', payment_method: paymentMethod, discount_percent: waSelectedDiscount, items })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
@@ -2758,7 +2776,8 @@ async function waSubmitOrder() {
             `Pesanan Anda sudah kami catat.\n\n` +
             `🧾 *Invoice: ${data.order_code}*\n\n` +
             `📦 Detail Produk:\n${itemLines}\n\n` +
-            `🚚 Ongkir (${data.courier}): Rp ${Number(data.shipping_cost).toLocaleString('id-ID')}\n` +
+            `🚚 Ekspedisi: ${shippingCourier || data.courier || '-'} (${shippingWeight} kg)\n` +
+            `📦 Ongkir: Rp ${Number(data.shipping_cost).toLocaleString('id-ID')}\n` +
             discountLine +
             `💰 *TOTAL: Rp ${Number(data.total_amount).toLocaleString('id-ID')}*` +
             (paymentMethod ? `\n💳 Metode: ${paymentMethod}` : '') +
@@ -2788,6 +2807,10 @@ function waResetForm() {
     ['wa-customer-name','wa-customer-phone','wa-customer-address','wa-shipping-cost','wa-payment-method','wa-notes']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     document.getElementById('wa-shipping-city').value = '';
+    const wCourierEl = document.getElementById('wa-shipping-courier');
+    if (wCourierEl) wCourierEl.value = '';
+    const wWeightEl = document.getElementById('wa-shipping-weight');
+    if (wWeightEl) wWeightEl.value = '1';
     document.getElementById('wa-items-container').innerHTML = '';
     document.getElementById('wa-total-preview').textContent = 'Rp 0';
     document.getElementById('wa-result-panel').classList.add('hidden');
@@ -2857,7 +2880,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const discountRowHTML = discountAmt > 0
         ? `<tr class="totals-row" style="color:#16a34a;"><td colspan="3" style="text-align:right;font-weight:500;">🏷️ ${discountLbl}</td><td style="font-weight:600;">-${fmtRp(discountAmt)}</td></tr>`
         : '';
-    const ongkirRow = `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
+    const weightKg = order.shipping_weight_kg || 0;
+    const weightLabel = weightKg > 0 ? ` · ${weightKg} kg` : '';
+    const ongkirRow = `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}${weightLabel}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
 
     const photosHTML = (extraPhotos && extraPhotos.length > 0)
         ? `<div class="invoice-photos"><div class="section-label">Referensi Produk</div><div class="photos-grid">${extraPhotos.map(s=>`<img src="${s}" alt="Foto" />`).join('')}</div></div>`
