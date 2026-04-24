@@ -21,8 +21,8 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         .photo-drop-zone { border: 2px dashed rgba(255,255,255,0.12); transition: all 0.2s; }
         .photo-drop-zone:hover { border-color: rgba(99,102,241,0.6); background: rgba(99,102,241,0.05); }
-        input[type=text], input[type=number], textarea, select { background: #1a1a1a; border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 0.75rem; padding: 0.65rem 1rem; font-size: 0.875rem; width: 100%; outline: none; transition: all 0.2s; }
-        input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: rgba(99,102,241,0.7); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+        input[type=text], input[type=number], textarea, select { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: white; border-radius: 0.75rem; padding: 0.65rem 1rem; font-size: 0.875rem; width: 100%; outline: none; transition: border-color 0.15s, background 0.15s; }
+        input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.07); box-shadow: none; }
         select option { background: #1a1a1a; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         .pop-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
@@ -120,6 +120,22 @@
             .invoice-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .no-print { display: none !important; }
         }
+    /* WA Order Form — UI Enhancements */
+    .wa-section-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); margin-right: 7px; vertical-align: middle; }
+    .wa-item-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.06); padding: 3px 8px; border-radius: 6px; }
+    .wa-trash-btn { font-size: 11px; color: rgba(248,113,113,0.5); cursor: pointer; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(248,113,113,0.15); background: rgba(248,113,113,0.05); transition: all 0.15s; }
+    .wa-trash-btn:hover { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.1); }
+    .wa-bordir-pill { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.03); cursor: pointer; transition: border-color 0.15s, background 0.15s; user-select: none; }
+    .wa-bordir-pill:hover { border-color: rgba(255,255,255,0.18); }
+    .wa-bordir-pill.active { border-color: rgba(74,222,128,0.35); background: rgba(74,222,128,0.07); }
+    .wa-bordir-box { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.2); background: transparent; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, background 0.15s; }
+    .wa-bordir-pill.active .wa-bordir-box { border-color: #4ade80; background: #4ade80; }
+    .wa-bordir-box::after { content: ''; display: none; width: 5px; height: 8px; border: 1.5px solid black; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); }
+    .wa-bordir-pill.active .wa-bordir-box::after { display: block; }
+    .wa-bordir-text { font-size: 12px; color: rgba(255,255,255,0.6); }
+    .wa-bordir-price { font-size: 10px; color: rgba(255,255,255,0.25); margin-left: auto; }
+    .wa-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 6px; display: block; }
+    .wa-optional { font-weight: 400; color: rgba(255,255,255,0.25); }
     </style>
 </head>
 <body class="bg-darkbg text-white min-h-screen">
@@ -364,31 +380,31 @@
 
           <!-- SECTION: Data Pelanggan -->
           <div class="p-5 space-y-4">
-            <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Data Pelanggan</p>
+            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Data Pelanggan</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="sm:col-span-2">
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Nama Dokter / Pelanggan <span class="text-red-400">*</span></label>
+                <label class="wa-field-label">Nama Dokter / Pelanggan <span class="text-red-400">*</span></label>
                 <input type="text" id="wa-customer-name" placeholder="Dr. Budi Santoso" />
               </div>
               <div>
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Nomor WhatsApp <span class="text-red-400">*</span></label>
+                <label class="wa-field-label">Nomor WhatsApp <span class="text-red-400">*</span></label>
                 <input type="text" id="wa-customer-phone" placeholder="08xxxxxxxxxx" />
               </div>
               <div>
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Kota Pengiriman <span class="text-red-400">*</span></label>
+                <label class="wa-field-label">Kota Pengiriman <span class="text-red-400">*</span></label>
                 <select id="wa-shipping-city"><option value="">-- Pilih Kota --</option></select>
               </div>
               <div class="sm:col-span-2">
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Alamat Lengkap <span class="text-red-400">*</span></label>
+                <label class="wa-field-label">Alamat Lengkap <span class="text-red-400">*</span></label>
                 <textarea id="wa-customer-address" rows="2" placeholder="Jl. Sudirman No. 10, Jakarta Pusat..."></textarea>
               </div>
               <!-- Berat + Kurir row -->
               <div>
-                  <label class="block text-xs font-medium text-white/55 mb-1.5">Berat Paket (kg)</label>
+                  <label class="wa-field-label">Berat Paket (kg)</label>
                   <input type="number" id="wa-shipping-weight" placeholder="1" min="0" step="0.5" value="1" class="text-sm" />
               </div>
               <div>
-                  <label class="block text-xs font-medium text-white/55 mb-1.5">Ekspedisi</label>
+                  <label class="wa-field-label">Ekspedisi</label>
                   <select id="wa-shipping-courier" class="text-sm">
                       <option value="">-- Pilih Ekspedisi --</option>
                       <option value="J&T">J&T</option>
@@ -399,11 +415,11 @@
                   </select>
               </div>
               <div>
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Ongkos Kirim (Rp)</label>
+                <label class="wa-field-label">Ongkos Kirim (Rp)</label>
                 <input type="number" id="wa-shipping-cost" placeholder="0" min="0" oninput="waUpdateTotal()" />
               </div>
               <div>
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Metode Pembayaran</label>
+                <label class="wa-field-label">Metode Pembayaran</label>
                 <select id="wa-payment-method">
                   <option value="">-- Pilih --</option>
                   <option value="BCA">Transfer BCA</option>
@@ -414,7 +430,7 @@
                 </select>
               </div>
               <div class="sm:col-span-2">
-                <label class="block text-xs font-medium text-white/55 mb-1.5">Catatan (opsional)</label>
+                <label class="wa-field-label">Catatan <span class="wa-optional">(opsional)</span></label>
                 <textarea id="wa-notes" rows="2" placeholder="Misal: minta packing bubble wrap extra"></textarea>
               </div>
             </div>
@@ -422,7 +438,7 @@
 
           <!-- SECTION: Produk Dipesan -->
           <div class="p-5 space-y-3">
-            <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Produk Dipesan</p>
+            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Produk Dipesan</p>
             <div id="wa-items-container" class="space-y-3"></div>
             <button onclick="waAddItem()" class="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-sm font-medium transition-all flex items-center justify-center gap-2">
               <i class="fa-solid fa-plus text-xs"></i> Tambah Produk
@@ -432,7 +448,7 @@
           <!-- SECTION: Diskon -->
           <div class="p-5 space-y-3">
             <div class="flex items-center justify-between">
-              <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Diskon (Opsional)</p>
+              <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Diskon (Opsional)</p>
               <span class="text-[10px] text-white/20">Hanya berlaku untuk harga produk</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
@@ -468,7 +484,7 @@
 
           <!-- SECTION: Foto & Bordir -->
           <div class="p-5 space-y-4">
-            <p class="text-[10px] font-bold text-white/35 uppercase tracking-widest">Lampiran Invoice (Opsional)</p>
+            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Lampiran Invoice (Opsional)</p>
             <!-- Foto Produk -->
             <div>
               <label class="block text-xs font-medium text-white/55 mb-1.5">Foto Produk <span class="text-white/25 font-normal">(max 4)</span></label>
@@ -2587,28 +2603,59 @@ function waAddItem() {
     div.id = `wa-item-${idx}`;
     div.className = 'bg-white/5 border border-white/8 rounded-xl p-4 space-y-3 relative';
     div.innerHTML = `
-        <div class="flex items-center justify-between mb-1">
-            <p class="text-xs font-bold text-white/50">Item #${idx}</p>
-            ${idx > 1 ? `<button onclick="waRemoveItem(${idx})" class="text-red-400/60 hover:text-red-400 text-xs transition-colors"><i class="fa-solid fa-trash"></i></button>` : ''}
+        <div class="flex items-center justify-between mb-3">
+            <span class="wa-item-badge">Item #${idx}</span>
+            ${idx > 1 ? `<button onclick="waRemoveItem(${idx})" class="wa-trash-btn">✕ Hapus</button>` : ''}
         </div>
-        <div>
-            <label class="text-xs text-white/50 mb-1 block">Produk</label>
-            <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})" class="text-sm">
-                <option value="">-- Pilih Produk --</option>
-                ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}">${p.name} — Rp ${Number(p.price).toLocaleString('id-ID')}</option>`).join('')}
-            </select>
-        </div>
-        <div class="grid grid-cols-3 gap-2">
-            <div><label class="text-xs text-white/50 mb-1 block">Warna</label><select id="wa-color-${idx}" onchange="waUpdateTotal()" class="text-sm"><option value="">--</option></select></div>
-            <div><label class="text-xs text-white/50 mb-1 block">Variant</label><select id="wa-variant-${idx}" onchange="waUpdateTotal()" class="text-sm"><option value="">--</option></select></div>
-            <div><label class="text-xs text-white/50 mb-1 block">Ukuran</label><select id="wa-size-${idx}" onchange="waUpdateTotal()" class="text-sm"><option value="">--</option></select></div>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-            <div><label class="text-xs text-white/50 mb-1 block">Jumlah</label><input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waUpdateTotal()" class="text-sm" /></div>
-            <div><label class="text-xs text-white/50 mb-1 block">Bordir</label>
-                <div class="flex gap-3 mt-2">
-                    <label class="flex items-center gap-1.5 text-xs text-white/60 cursor-pointer"><input type="checkbox" id="wa-bordir-nama-${idx}" onchange="waUpdateTotal()" class="rounded" /> Nama (+20rb)</label>
-                    <label class="flex items-center gap-1.5 text-xs text-white/60 cursor-pointer"><input type="checkbox" id="wa-bordir-logo-${idx}" onchange="waUpdateTotal()" class="rounded" /> Logo (+30rb)</label>
+        <div class="space-y-2.5">
+            <div>
+                <label class="wa-field-label">Produk</label>
+                <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})">
+                    <option value="">-- Pilih Produk --</option>
+                    ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}">${p.name} — Rp ${Number(p.price).toLocaleString('id-ID')}</option>`).join('')}
+                </select>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="wa-field-label">Warna</label>
+                    <select id="wa-color-${idx}" onchange="waUpdateTotal()" style="font-size:12px">
+                        <option value="">--</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="wa-field-label">Variant</label>
+                    <select id="wa-variant-${idx}" onchange="waUpdateTotal()" style="font-size:12px">
+                        <option value="">--</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="wa-field-label">Ukuran</label>
+                    <select id="wa-size-${idx}" onchange="waUpdateTotal()" style="font-size:12px">
+                        <option value="">--</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 items-end">
+                <div>
+                    <label class="wa-field-label">Jumlah</label>
+                    <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waUpdateTotal()" />
+                </div>
+                <div>
+                    <label class="wa-field-label">Bordir</label>
+                    <div class="grid grid-cols-2 gap-1.5 mt-0.5">
+                        <div class="wa-bordir-pill" id="wa-bordir-nama-pill-${idx}" onclick="waToggleBordir(${idx},'nama')">
+                            <span class="wa-bordir-box" id="wa-bordir-nama-box-${idx}"></span>
+                            <span class="wa-bordir-text">Nama</span>
+                            <span class="wa-bordir-price">+20rb</span>
+                        </div>
+                        <div class="wa-bordir-pill" id="wa-bordir-logo-pill-${idx}" onclick="waToggleBordir(${idx},'logo')">
+                            <span class="wa-bordir-box" id="wa-bordir-logo-box-${idx}"></span>
+                            <span class="wa-bordir-text">Logo</span>
+                            <span class="wa-bordir-price">+30rb</span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="wa-bordir-nama-${idx}" value="false" />
+                    <input type="hidden" id="wa-bordir-logo-${idx}" value="false" />
                 </div>
             </div>
         </div>`;
@@ -2619,6 +2666,17 @@ function waRemoveItem(idx) {
     const el = document.getElementById(`wa-item-${idx}`);
     if (el) el.remove();
     waUpdateTotal();
+}
+
+function waToggleBordir(idx, type) {
+    const pill = document.getElementById(`wa-bordir-${type}-pill-${idx}`);
+    const hidden = document.getElementById(`wa-bordir-${type}-${idx}`);
+    if (!pill || !hidden) return;
+    const isActive = pill.classList.contains('active');
+    pill.classList.toggle('active', !isActive);
+    hidden.value = !isActive ? 'true' : 'false';
+    waUpdateTotal();
+    waCheckBordirSection();
 }
 
 async function waOnProductChange(idx) {
@@ -2680,8 +2738,8 @@ function waUpdateTotal() {
         if (!prodEl || !prodEl.value) return;
         const price = parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
-        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.checked ? 20000 : 0;
-        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.checked ? 30000 : 0;
+        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? 20000 : 0;
+        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? 30000 : 0;
         productTotal += (price + bordirNama + bordirLogo) * qty;
     });
     const ongkir = parseInt(document.getElementById('wa-shipping-cost')?.value || 0);
@@ -2735,8 +2793,8 @@ async function waSubmitOrder() {
             variant_type: document.getElementById(`wa-variant-${idx}`)?.value || 'null',
             size:         document.getElementById(`wa-size-${idx}`)?.value,
             quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
-            bordir_nama:  document.getElementById(`wa-bordir-nama-${idx}`)?.checked || false,
-            bordir_logo:  document.getElementById(`wa-bordir-logo-${idx}`)?.checked || false,
+            bordir_nama:  document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true',
+            bordir_logo:  document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true',
         });
     }
     if (items.length === 0) { alert('Tambahkan minimal satu produk.'); return; }
@@ -2811,6 +2869,11 @@ function waResetForm() {
     if (wCourierEl) wCourierEl.value = '';
     const wWeightEl = document.getElementById('wa-shipping-weight');
     if (wWeightEl) wWeightEl.value = '1';
+    // Reset semua pill bordir
+    document.querySelectorAll('[id^="wa-bordir-nama-pill-"], [id^="wa-bordir-logo-pill-"]')
+        .forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('[id^="wa-bordir-nama-"], [id^="wa-bordir-logo-"]')
+        .forEach(el => { if (el.tagName === 'INPUT') el.value = 'false'; });
     document.getElementById('wa-items-container').innerHTML = '';
     document.getElementById('wa-total-preview').textContent = 'Rp 0';
     document.getElementById('wa-result-panel').classList.add('hidden');
@@ -3047,7 +3110,8 @@ function waHandleBordirRef(input) {
 function waCheckBordirSection() {
     const container = document.getElementById('wa-items-container');
     if (!container) return;
-    const hasBordir = container.querySelector('input[id^="wa-bordir-nama-"]:checked, input[id^="wa-bordir-logo-"]:checked');
+    const hasBordir = [...container.querySelectorAll('input[id^="wa-bordir-nama-"], input[id^="wa-bordir-logo-"]')]
+        .some(el => el.value === 'true');
     const section = document.getElementById('wa-bordir-ref-section');
     if (section) section.classList.toggle('hidden', !hasBordir);
 }
