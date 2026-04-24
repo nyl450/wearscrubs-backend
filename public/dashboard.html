@@ -292,7 +292,13 @@
                             <th class="px-5 py-3 text-center">Simpan</th>
                         </tr>
                     </thead>
-                    <tbody id="inventory-tbody" class="divide-y divide-darkborder"></tbody>
+                    <tbody id="inventory-tbody" class="divide-y divide-darkborder">
+                        <tr id="inventory-empty-row">
+                            <td colspan="6" style="text-align:center; padding:2rem; color:#888;">
+                                Belum ada data inventori. Tambah produk terlebih dahulu.
+                            </td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -326,14 +332,14 @@
             </div>
         </div>
         <div class="flex gap-2 flex-wrap">
-            <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black">Semua</button>
-            <button onclick="filterOrders('pending')" data-tab="pending" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">⏳ Belum Bayar</button>
-            <button onclick="filterOrders('paid')" data-tab="paid" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">✅ Dikonfirmasi</button>
-            <button onclick="filterOrders('bordir')" data-tab="bordir" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🧵 Bordir</button>
-            <button onclick="filterOrders('packed')" data-tab="packed" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">📦 Dikemas</button>
-            <button onclick="filterOrders('shipped')" data-tab="shipped" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🚚 Dikirim</button>
-            <button onclick="filterOrders('done')" data-tab="done" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">✔ Selesai</button>
-            <button onclick="filterOrders('cancelled')" data-tab="cancelled" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">❌ Dibatalkan</button>
+            <button onclick="filterOrders('all')" data-tab="all" aria-label="Filter: Semua" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black">Semua</button>
+            <button onclick="filterOrders('pending')" data-tab="pending" aria-label="Filter: Belum Bayar" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">⏳ Belum Bayar</button>
+            <button onclick="filterOrders('paid')" data-tab="paid" aria-label="Filter: Dikonfirmasi" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">✅ Dikonfirmasi</button>
+            <button onclick="filterOrders('bordir')" data-tab="bordir" aria-label="Filter: Bordir" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🧵 Bordir</button>
+            <button onclick="filterOrders('packed')" data-tab="packed" aria-label="Filter: Dikemas" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">📦 Dikemas</button>
+            <button onclick="filterOrders('shipped')" data-tab="shipped" aria-label="Filter: Dikirim" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">🚚 Dikirim</button>
+            <button onclick="filterOrders('done')" data-tab="done" aria-label="Filter: Selesai" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">✔ Selesai</button>
+            <button onclick="filterOrders('cancelled')" data-tab="cancelled" aria-label="Filter: Dibatalkan" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5">❌ Dibatalkan</button>
         </div>
         <div id="orders-list" class="space-y-3"></div>
     </div>
@@ -609,7 +615,7 @@
                     <input type="password" id="um-password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30" placeholder="••••••••">
                     <button type="button" onclick="togglePw('um-password',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"><i class="fa-solid fa-eye text-xs"></i></button>
                 </div>
-                <p id="um-pw-edit-note" class="hidden text-xs text-white/30 mt-1">Kosongkan jika tidak ingin mengubah password</p>
+                <p id="um-pw-edit-note" class="hidden text-xs text-white/30 mt-1">Minimal 8 karakter</p>
             </div>
             <!-- Role -->
             <div>
