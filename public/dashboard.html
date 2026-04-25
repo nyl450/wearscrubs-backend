@@ -2409,17 +2409,23 @@ async function viewOrder(id) {
                     ${o.bordir_logo_requested ? '✓ Logo Sudah Diminta' : '⚠️ Minta Logo ke Customer'}
                 </a>` : ''}
             </div>
-            ${bordirDetails.map(e => `
+            ${bordirDetails.map(e => {
+                const posLbl = e.position === 'kanan' ? 'Kanan Dada' : e.position === 'kiri' ? 'Kiri Dada' : '';
+                return `
             <div class="flex items-start gap-3 py-2.5 border-b border-purple-500/10 last:border-0">
                 <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0
                     ${e.type==='logo' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-200'}">
                     ${e.type==='logo' ? '🎨 Logo' : '✏️ Nama'}
                 </span>
-                <div>
-                    <p class="text-[10px] text-white/40">${e.item_label}</p>
-                    <p class="text-sm font-semibold">${e.value}</p>
+                <div class="min-w-0 flex-1">
+                    <p class="text-[10px] text-white/40">${e.item_label||''}</p>
+                    <p class="text-sm font-semibold">${e.value||''}</p>
+                    <div class="flex flex-wrap gap-x-3 mt-1">
+                        ${e.color ? `<p class="text-[11px] text-white/40">🎨 Benang: <span class="text-white/60">${e.color}</span></p>` : ''}
+                        ${posLbl  ? `<p class="text-[11px] text-white/40">📍 Posisi: <span class="text-white/60">${posLbl}</span></p>` : ''}
+                    </div>
                 </div>
-            </div>`).join('')}
+            </div>`;}).join('')}
             ${hasBordir ? `
             <div class="mt-3 pt-3 border-t border-purple-500/15 flex items-center gap-2 text-[11px] text-purple-300/70">
                 <i class="fa-regular fa-clock"></i>
@@ -3106,6 +3112,52 @@ function waAddItem() {
                     <input type="hidden" id="wa-bordir-logo-${idx}" value="false" />
                 </div>
             </div>
+            <!-- Sub-form Bordir Nama -->
+            <div id="wa-bordir-nama-fields-${idx}" class="hidden mt-2 p-3 rounded-xl space-y-2" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
+                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(196,181,253,0.8);">✏️ Detail Bordir Nama</p>
+                <div>
+                    <label class="wa-field-label">Nama yang dibordir <span style="color:#f87171">*</span></label>
+                    <input type="text" id="wa-bordir-nama-text-${idx}" placeholder="dr. James, M.Ked — perhatikan ejaan & huruf kapital" style="font-size:12px" />
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="wa-field-label">Warna Benang</label>
+                        <input type="text" id="wa-bordir-nama-color-${idx}" placeholder="Putih, hitam, merah..." style="font-size:12px" />
+                    </div>
+                    <div>
+                        <label class="wa-field-label">Posisi di Dada</label>
+                        <select id="wa-bordir-nama-pos-${idx}" style="font-size:12px">
+                            <option value="kanan">Kanan Dada</option>
+                            <option value="kiri">Kiri Dada</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- Sub-form Bordir Logo -->
+            <div id="wa-bordir-logo-fields-${idx}" class="hidden mt-2 p-3 rounded-xl space-y-2" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);">
+                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(147,197,253,0.8);">🎨 Detail Bordir Logo</p>
+                <div>
+                    <label class="wa-field-label">Upload Logo <span class="wa-optional">(PNG/JPG)</span></label>
+                    <label class="w-full py-2.5 rounded-xl border border-dashed flex items-center justify-center gap-2 cursor-pointer text-xs font-medium transition" style="border-color:rgba(255,255,255,0.12);color:rgba(255,255,255,0.4);">
+                        <i class="fa-solid fa-upload"></i> Pilih File
+                        <input type="file" id="wa-bordir-logo-file-${idx}" accept="image/*" class="hidden" onchange="waHandleLogoFile(this,${idx})" />
+                    </label>
+                    <div id="wa-bordir-logo-preview-${idx}" class="hidden mt-1.5"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="wa-field-label">Warna Benang</label>
+                        <input type="text" id="wa-bordir-logo-color-${idx}" placeholder="Putih, hitam..." style="font-size:12px" />
+                    </div>
+                    <div>
+                        <label class="wa-field-label">Posisi di Dada</label>
+                        <select id="wa-bordir-logo-pos-${idx}" style="font-size:12px">
+                            <option value="kiri">Kiri Dada</option>
+                            <option value="kanan">Kanan Dada</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
         </div>`;
     container.appendChild(div);
 }
@@ -3117,14 +3169,47 @@ function waRemoveItem(idx) {
 }
 
 function waToggleBordir(idx, type) {
-    const pill = document.getElementById(`wa-bordir-${type}-pill-${idx}`);
+    const pill   = document.getElementById(`wa-bordir-${type}-pill-${idx}`);
     const hidden = document.getElementById(`wa-bordir-${type}-${idx}`);
+    const fields = document.getElementById(`wa-bordir-${type}-fields-${idx}`);
     if (!pill || !hidden) return;
-    const isActive = pill.classList.contains('active');
-    pill.classList.toggle('active', !isActive);
-    hidden.value = !isActive ? 'true' : 'false';
+    const nowActive = !pill.classList.contains('active');
+    pill.classList.toggle('active', nowActive);
+    hidden.value = nowActive ? 'true' : 'false';
+    if (fields) fields.classList.toggle('hidden', !nowActive);
+
+    // Auto-set default positions to avoid conflict when both are active
+    const namaActive = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
+    const logoActive = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
+    if (namaActive && logoActive) {
+        const namaPos = document.getElementById(`wa-bordir-nama-pos-${idx}`);
+        const logoPos = document.getElementById(`wa-bordir-logo-pos-${idx}`);
+        if (namaPos && logoPos && namaPos.value === logoPos.value) {
+            // Newly activated type gets the opposite position
+            if (type === 'logo') logoPos.value = namaPos.value === 'kanan' ? 'kiri' : 'kanan';
+            else namaPos.value = logoPos.value === 'kanan' ? 'kiri' : 'kanan';
+        }
+    }
     waUpdateTotal();
     waCheckBordirSection();
+}
+
+let waBordirLogoFiles = {}; // idx → base64 per item
+
+function waHandleLogoFile(input, idx) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        waBordirLogoFiles[idx] = e.target.result;
+        waBordirRefBase64 = e.target.result; // also keep global for invoice
+        const prev = document.getElementById(`wa-bordir-logo-preview-${idx}`);
+        if (prev) {
+            prev.classList.remove('hidden');
+            prev.innerHTML = `<img src="${e.target.result}" style="max-height:80px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
+        }
+    };
+    reader.readAsDataURL(file);
 }
 
 async function waOnProductChange(idx) {
@@ -3231,20 +3316,54 @@ async function waSubmitOrder() {
 
     const container = document.getElementById('wa-items-container');
     const items = [];
+    const embroideryDetails = [];
+    const posErrors = [];
+
     for (const item of container.querySelectorAll('[id^="wa-item-"]')) {
         const idx       = item.id.replace('wa-item-', '');
         const productId = document.getElementById(`wa-prod-${idx}`)?.value;
         if (!productId) continue;
+        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
+        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
+
         items.push({
             product_id:   parseInt(productId),
             color:        document.getElementById(`wa-color-${idx}`)?.value,
             variant_type: document.getElementById(`wa-variant-${idx}`)?.value || 'null',
             size:         document.getElementById(`wa-size-${idx}`)?.value,
             quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
-            bordir_nama:  document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true',
-            bordir_logo:  document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true',
+            bordir_nama:  bordirNama,
+            bordir_logo:  bordirLogo,
         });
+
+        if (bordirNama || bordirLogo) {
+            const prodEl    = document.getElementById(`wa-prod-${idx}`);
+            const prodName  = prodEl?.options[prodEl.selectedIndex]?.text || 'Produk';
+            const color     = document.getElementById(`wa-color-${idx}`)?.value || '';
+            const size      = document.getElementById(`wa-size-${idx}`)?.value || '';
+            const itemLabel = `${prodName} (${color}, ${size})`;
+
+            let namaPos = null, logoPos = null;
+
+            if (bordirNama) {
+                const namaText  = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
+                const namaColor = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
+                namaPos = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                if (!namaText) { posErrors.push(`Nama bordir untuk ${prodName} belum diisi.`); continue; }
+                embroideryDetails.push({ type: 'nama', item_label: itemLabel, value: namaText, color: namaColor, position: namaPos });
+            }
+            if (bordirLogo) {
+                const logoColor = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
+                logoPos = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                embroideryDetails.push({ type: 'logo', item_label: itemLabel, value: 'Logo dikirim via WA', color: logoColor, position: logoPos });
+            }
+            // Validate: both bordir → positions must differ
+            if (bordirNama && bordirLogo && namaPos && logoPos && namaPos === logoPos) {
+                posErrors.push(`${prodName}: Posisi bordir nama dan logo tidak boleh sama. Satu harus kanan, satunya kiri.`);
+            }
+        }
     }
+    if (posErrors.length > 0) { alert('⚠️ Cek detail bordir:\n\n' + posErrors.join('\n')); return; }
     if (items.length === 0) { alert('Tambahkan minimal satu produk.'); return; }
 
     btn.disabled = true;
@@ -3254,7 +3373,7 @@ async function waSubmitOrder() {
         const res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
-            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: 'whatsapp', payment_method: paymentMethod, discount_percent: waSelectedDiscount, items })
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: 'whatsapp', payment_method: paymentMethod, discount_percent: waSelectedDiscount, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
@@ -3271,6 +3390,14 @@ async function waSubmitOrder() {
             return line;
         }).join('\n');
 
+        const bordirLines = embroideryDetails.length
+            ? `\n\n🧵 *Detail Bordir:*\n` + embroideryDetails.map(e => {
+                const posLabel = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                if (e.type === 'nama') return `✏️ Nama: *${e.value}* | Benang: ${e.color||'-'} | Posisi: ${posLabel}`;
+                return `🎨 Logo: ${e.value} | Benang: ${e.color||'-'} | Posisi: ${posLabel}`;
+              }).join('\n')
+            : '';
+
         const discAmtFromServer = data.discount_amount || 0;
         const discLblFromServer = data.discount_label || '';
         const discountLine = discAmtFromServer > 0
@@ -3281,7 +3408,8 @@ async function waSubmitOrder() {
             `Halo ${customerName} 👋\n\n` +
             `Pesanan Anda sudah kami catat.\n\n` +
             `🧾 *Invoice: ${data.order_code}*\n\n` +
-            `📦 Detail Produk:\n${itemLines}\n\n` +
+            `📦 Detail Produk:\n${itemLines}` +
+            bordirLines + `\n\n` +
             `🚚 Ekspedisi: ${shippingCourier || data.courier || '-'} (${shippingWeight} kg)\n` +
             `📦 Ongkir: Rp ${Number(data.shipping_cost).toLocaleString('id-ID')}\n` +
             discountLine +
@@ -3330,6 +3458,7 @@ function waResetForm() {
     // Reset foto
     waProductPhotoBase64s = [];
     waBordirRefBase64 = null;
+    waBordirLogoFiles = {};
     const prev = document.getElementById('wa-photo-previews');
     if (prev) prev.innerHTML = '';
     const bprev = document.getElementById('wa-bordir-ref-preview');
@@ -3338,6 +3467,9 @@ function waResetForm() {
     if (phInput) phInput.value = '';
     const brInput = document.getElementById('wa-bordir-ref-photo');
     if (brInput) brInput.value = '';
+    // Reset per-item logo previews and sub-forms
+    document.querySelectorAll('[id^="wa-bordir-logo-preview-"]').forEach(el => { el.innerHTML = ''; el.classList.add('hidden'); });
+    document.querySelectorAll('[id^="wa-bordir-nama-fields-"],[id^="wa-bordir-logo-fields-"]').forEach(el => el.classList.add('hidden'));
     window.waLastOrderId = null;
     // Reset diskon
     waSelectedDiscount = 0;
@@ -3374,8 +3506,19 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             <td>${qty}</td>
             <td>${fmtRp(unitPrice * qty)}</td>
         </tr>`;
-        if (item.bordir_nama) itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Nama</td><td>${fmtRp(20000)}</td><td>-</td><td>-</td></tr>`;
-        if (item.bordir_logo) itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Logo</td><td>${fmtRp(30000)}</td><td>-</td><td>-</td></tr>`;
+        if (item.bordir_nama || item.bordir_logo) {
+            const iLabel = `${item.product_name||''} (${item.color||''}, ${item.size||''})`;
+            const embNama = embDetails.find(e => e.type === 'nama' && e.item_label === iLabel);
+            const embLogo = embDetails.find(e => e.type === 'logo' && e.item_label === iLabel);
+            if (item.bordir_nama) {
+                const detail = embNama ? `: ${embNama.value}${embNama.color ? ' · benang '+embNama.color : ''}${embNama.position ? ' · '+(embNama.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}` : '';
+                itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Nama${detail}</td><td>${fmtRp(20000)}</td><td>-</td><td>-</td></tr>`;
+            }
+            if (item.bordir_logo) {
+                const detail = embLogo ? `${embLogo.color ? ' · benang '+embLogo.color : ''}${embLogo.position ? ' · '+(embLogo.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}` : '';
+                itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Logo${detail}</td><td>${fmtRp(30000)}</td><td>-</td><td>-</td></tr>`;
+            }
+        }
     });
     const shippingCost = order.shipping_cost || 0;
     const courier = order.shipping_courier || 'Kurir';
@@ -3401,16 +3544,72 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
     let bordirHTML = '';
     if ((order.has_bordir_nama || order.has_bordir_logo) && embDetails.length > 0) {
-        const rows = embDetails.map(emb => {
-            const det = emb.type === 'nama'
-                ? `<p><strong>Jenis:</strong> Bordir Nama</p><p><strong>Produk:</strong> ${emb.item_label||'-'}</p><p><strong>Nama:</strong> ${emb.value||'-'}</p>${emb.color?`<p><strong>Warna Benang:</strong> ${emb.color}</p>`:''} ${emb.position?`<p><strong>Posisi:</strong> ${emb.position}</p>`:''}`
-                : `<p><strong>Jenis:</strong> Bordir Logo</p><p><strong>Produk:</strong> ${emb.item_label||'-'}</p><p><strong>Keterangan:</strong> ${emb.value||'-'}</p>${emb.color?`<p><strong>Warna Benang:</strong> ${emb.color}</p>`:''}`;
-            const vis = bordirRefPhoto
-                ? `<img src="${bordirRefPhoto}" alt="Referensi Bordir" />`
-                : `<div class="bordir-placeholder">Referensi visual<br>akan dilampirkan<br>terpisah</div>`;
-            return `<tr><td class="bordir-detail">${det}</td><td class="bordir-visual">${vis}</td></tr>`;
-        }).join('');
-        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Detail Bordir</div><table><thead><tr><th style="width:55%">Detail Permintaan</th><th style="width:45%">Referensi Visual</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        const namaEntry = embDetails.find(e => e.type === 'nama');
+        const logoEntry = embDetails.find(e => e.type === 'logo');
+        const hasBoth   = namaEntry && logoEntry;
+
+        // Helper: render one visual cell
+        const renderVisCell = (emb) => {
+            if (emb.type === 'nama') {
+                const col = emb.color && emb.color.toLowerCase() !== 'putih' ? emb.color : '#1a1a1a';
+                const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;">
+                    <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${emb.value||''}</p>
+                    <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Tinggi ~1,2 cm · ${posLbl}</p>
+                </div>`;
+            } else {
+                const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                const imgTag = bordirRefPhoto
+                    ? `<img src="${bordirRefPhoto}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
+                    : `<div class="bordir-placeholder">Logo dikirim<br>via WA</div>`;
+                return `<div style="text-align:center;">${imgTag}<p style="font-size:10px;color:#aaa;margin:6px 0 0;">${posLbl}</p></div>`;
+            }
+        };
+
+        let tableBody = '';
+        if (hasBoth) {
+            // Combine detail column; split visual into kanan | kiri
+            const rightEmb = [namaEntry, logoEntry].find(e => e.position === 'kanan') || namaEntry;
+            const leftEmb  = [namaEntry, logoEntry].find(e => e.position === 'kiri')  || logoEntry;
+            const detNama = `<p style="margin:0 0 4px;"><strong>✏️ Bordir Nama</strong></p>
+                <p style="margin:2px 0;">Produk: ${namaEntry.item_label||'-'}</p>
+                <p style="margin:2px 0;">Nama: <strong>${namaEntry.value||'-'}</strong></p>
+                <p style="margin:2px 0;">Warna Benang: ${namaEntry.color||'-'}</p>
+                <p style="margin:2px 0;">Posisi: ${namaEntry.position==='kanan'?'Kanan':'Kiri'} Dada</p>
+                <p style="margin:2px 0;font-size:11px;color:#999;">Tinggi huruf ~1,2 cm</p>`;
+            const detLogo = `<p style="margin:10px 0 4px;border-top:1px solid #f0f0f0;padding-top:10px;"><strong>🎨 Bordir Logo</strong></p>
+                <p style="margin:2px 0;">Produk: ${logoEntry.item_label||'-'}</p>
+                <p style="margin:2px 0;">Warna Benang: ${logoEntry.color||'-'}</p>
+                <p style="margin:2px 0;">Posisi: ${logoEntry.position==='kanan'?'Kanan':'Kiri'} Dada</p>`;
+            const splitVis = `<table style="width:100%;border-collapse:collapse;">
+                <thead><tr>
+                    <th style="background:#f5f5f5;padding:6px 8px;font-size:10px;font-weight:600;color:#666;border-bottom:1px solid #e5e5e5;text-align:center;width:50%;">KANAN</th>
+                    <th style="background:#f5f5f5;padding:6px 8px;font-size:10px;font-weight:600;color:#666;border-bottom:1px solid #e5e5e5;border-left:1px solid #e5e5e5;text-align:center;width:50%;">KIRI</th>
+                </tr></thead>
+                <tbody><tr>
+                    <td style="padding:14px 10px;text-align:center;vertical-align:middle;">${renderVisCell(rightEmb)}</td>
+                    <td style="padding:14px 10px;text-align:center;vertical-align:middle;border-left:1px solid #e5e5e5;">${renderVisCell(leftEmb)}</td>
+                </tr></tbody>
+            </table>`;
+            tableBody = `<tr><td class="bordir-detail">${detNama}${detLogo}</td><td class="bordir-visual" style="padding:0;vertical-align:top;">${splitVis}</td></tr>`;
+        } else {
+            tableBody = embDetails.map(emb => {
+                const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                const det = emb.type === 'nama'
+                    ? `<p><strong>Jenis:</strong> Bordir Nama</p>
+                       <p><strong>Produk:</strong> ${emb.item_label||'-'}</p>
+                       <p><strong>Nama:</strong> <strong style="font-size:14px;">${emb.value||'-'}</strong></p>
+                       <p><strong>Warna Benang:</strong> ${emb.color||'-'}</p>
+                       <p><strong>Posisi:</strong> ${posLbl}</p>
+                       <p style="color:#999;font-size:11px;">Tinggi huruf ~1,2 cm · Panjang menyesuaikan</p>`
+                    : `<p><strong>Jenis:</strong> Bordir Logo</p>
+                       <p><strong>Produk:</strong> ${emb.item_label||'-'}</p>
+                       <p><strong>Warna Benang:</strong> ${emb.color||'-'}</p>
+                       <p><strong>Posisi:</strong> ${posLbl}</p>`;
+                return `<tr><td class="bordir-detail">${det}</td><td class="bordir-visual">${renderVisCell(emb)}</td></tr>`;
+            }).join('');
+        }
+        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Detail Bordir</div><table><thead><tr><th style="width:52%">Detail Permintaan</th><th style="width:48%">Mockup Visual</th></tr></thead><tbody>${tableBody}</tbody></table></div>`;
     }
 
     return `<div class="invoice-wrap">
