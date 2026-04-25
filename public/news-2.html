@@ -8,7 +8,7 @@
     <link rel="canonical" href="https://wearscrubs.id/news-2.html">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Berita | WearScrubs</title>
+    <title>Memilih Underscrub yang Tepat Sesuai Tipe Kulit | WearScrubs</title>
     <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -38,7 +38,7 @@
         class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10 transition-colors duration-300">
         <div class="container mx-auto px-6 py-4 flex items-center justify-between">
             <!-- Navigasi Kiri (Desktop only) -->
-            <nav class="hidden xl:flex items-center space-x-8 flex-1">
+            <nav class="hidden md:flex items-center space-x-8 flex-1">
                 <!-- Dropdown Belanja Semua -->
                 <div class="group relative py-4 -my-4 flex items-center cursor-default">
                     <span
@@ -67,14 +67,14 @@
             <div class="flex-shrink-0">
                 <a href="index.html" class="flex items-center justify-center">
                     <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs Logo"
-                        class="h-8 xl:h-10 w-auto object-contain block dark:hidden">
+                        class="h-8 md:h-10 w-auto object-contain block dark:hidden">
                     <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs Logo"
-                        class="h-8 xl:h-10 w-auto object-contain hidden dark:block">
+                        class="h-8 md:h-10 w-auto object-contain hidden dark:block">
                 </a>
             </div>
 
             <!-- Navigasi Kanan (Desktop) -->
-            <div class="hidden xl:flex items-center justify-end space-x-6 flex-1 text-sm">
+            <div class="hidden md:flex items-center justify-end space-x-6 flex-1 text-sm">
                 <!-- Tombol Mode Toggle -->
                 <button id="theme-toggle" data-theme-toggle
                     class="hidden lg:flex items-center bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
@@ -98,7 +98,7 @@
 
             <!-- Hamburger Button (Mobile only) -->
             <button id="mobile-menu-btn"
-                class="xl:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
+                class="md:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
                 aria-label="Buka menu">
                 <i id="hamburger-icon" class="fa-solid fa-bars text-xl"></i>
             </button>
@@ -107,59 +107,59 @@
 
     <!-- Mobile Drawer Overlay -->
     <div id="mobile-overlay"
-        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none xl:hidden"></div>
+        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden"></div>
 
     <!-- Mobile Drawer (slide-in dari kanan) -->
     <div id="mobile-drawer"
-        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
+        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
 
         <!-- Drawer Header -->
-        <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
-            <a href="index.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-6 w-auto block dark:hidden"></a>
-            <a href="index.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto hidden dark:block"></a>
-            <button id="mobile-close-btn" class="text-gray-400 hover:text-black dark:text-white/40 dark:hover:text-white transition-colors p-1 rounded-lg">
-                <i class="fa-solid fa-times text-lg"></i>
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-white/10">
+            <a href="index.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-7 w-auto block dark:hidden"></a>
+            <a href="index.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-7 w-auto hidden dark:block"></a>
+            <button id="mobile-close-btn" class="text-gray-500 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-times text-xl"></i>
             </button>
         </div>
 
         <!-- Drawer Nav Links -->
-        <nav class="flex-1 overflow-y-auto px-4 py-4">
-            <!-- Koleksi -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mb-1 px-3">Koleksi</p>
-            <a href="scrub-top.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Atasan Scrub
+        <nav class="flex-1 overflow-y-auto px-8 py-8 space-y-0">
+            <!-- Kategori Scrub -->
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mb-4">Koleksi</p>
+            <a href="scrub-top.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
+                Atasan Scrub
             </a>
-            <a href="scrub-pants.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Celana Scrub
+            <a href="scrub-pants.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
+                Celana Scrub
             </a>
-            <a href="scrub-caps.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Topi Scrub
-            </a>
-            <a href="gown.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Gown
+            <a href="scrub-caps.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
+                Topi Scrub
             </a>
 
             <!-- Lainnya -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Lainnya</p>
-            <a href="about-us.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Cerita Kami
-            </a>
-            <a href="contact.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Hubungi Kami
-            </a>
-
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Lainnya</p>
+            <a href="about-us.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Cerita Kami</a>
+            <a href="contact.html" class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Hubungi Kami</a>
             <!-- Keranjang -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Keranjang</p>
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Keranjang</p>
             <a href="cart.html" class="cart-btn w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
-                <div class="flex items-center gap-3">Keranjang Belanja
+                <div class="flex items-center">
+                    <i class="fa-solid fa-bag-shopping mr-3 text-gray-400"></i>
+                    Keranjang Belanja
                 </div>
                 <span class="cart-count bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
             </a>
 
             <!-- Bahasa -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-2 px-3">Bahasa</p>
-            <div class="flex gap-2">
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">Bahasa</p>
+            <div class="flex gap-3">
                 <a href="news-2.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
-                <a href="news-2-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
+                <a href="news-2-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
             </div>
         </nav>
 
         <!-- Drawer Footer: Dark Mode Toggle -->
-        <div class="px-4 py-4 border-t border-gray-100 dark:border-white/10">
+        <div class="px-8 py-6 border-t border-gray-100 dark:border-white/10">
             <button id="theme-toggle-mobile" data-theme-toggle
                 class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
                 <span id="theme-text-mobile" data-theme-text
@@ -172,11 +172,46 @@
             </button>
         </div>
     </div>
-<!-- Bagian Utama Hero -->
-    
-    <main class="min-h-screen bg-gray-50 dark:bg-darkbg py-24 transition-colors">
-        <div class="container mx-auto px-6 text-center">
-            <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white">Berita</h1>
+
+
+
+    <!-- Bagian Utama Hero -->
+    <main class="bg-gray-50 dark:bg-darkbg py-16 md:py-24 transition-colors">
+        <div class="container mx-auto px-6 max-w-3xl">
+            <nav class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-10">
+                <a href="index.html" class="hover:text-black dark:hover:text-white transition-colors">Beranda</a>
+                <span class="text-gray-300 dark:text-gray-600">/</span>
+                <span>Artikel</span>
+            </nav>
+            <p class="text-xs font-bold tracking-[0.2em] uppercase text-indigo-500 dark:text-indigo-400 mb-3">Tips &amp; Panduan</p>
+            <h1 class="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white mb-4 leading-tight">Memilih Underscrub yang Tepat Sesuai Tipe Kulit</h1>
+            <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 mb-10 pb-10 border-b border-gray-200 dark:border-white/10">
+                <span>20 Mar, 2025</span>
+                <span>·</span>
+                <span>oleh Tim Wearscrubs</span>
+            </div>
+            <div class="rounded-2xl overflow-hidden mb-10">
+                <img src="images/news/2.webp" alt="Memilih Underscrub yang Tepat Sesuai Tipe Kulit" class="w-full object-cover" loading="lazy">
+            </div>
+            <div class="space-y-6 text-gray-700 dark:text-gray-300 text-base leading-relaxed">
+                <p>Underscrub adalah lapisan pertama yang bersentuhan langsung dengan kulit Anda sepanjang shift. Salah memilih bahan bisa menyebabkan iritasi, ruam, atau ketidaknyamanan yang mengganggu konsentrasi kerja.</p>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white pt-4">Kulit Sensitif: Pilih Bahan Bambu atau Modal</h2>
+                <p>Bahan dari serat bambu atau modal dikenal hypoallergenic — bebas dari bahan kimia keras yang bisa memicu reaksi alergi. Permukaannya sangat halus dan lembut, ideal untuk kulit yang mudah merah atau gatal.</p>
+                <div class="bg-indigo-50 dark:bg-indigo-500/10 border-l-4 border-indigo-400 px-5 py-4 rounded-xl text-sm text-indigo-900 dark:text-indigo-200">💡 Hindari underscrub berbahan polyester 100% jika Anda memiliki kulit sensitif, karena bahan sintetis murni kurang bernapas.</div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white pt-4">Kulit Berminyak: Prioritaskan Breathability</h2>
+                <p>Untuk kulit berminyak, sirkulasi udara adalah kunci. Pilih underscrub berbahan katun Pima atau campuran katun-spandex yang memungkinkan keringat menguap lebih cepat, sehingga pori-pori tidak tersumbat selama shift panjang.</p>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white pt-4">Kulit Kering: Cari Bahan yang Melembabkan</h2>
+                <p>Bahan microfiber berkualitas tinggi atau jersey viscose mampu mempertahankan kelembaban alami kulit. Beberapa merek premium bahkan menginfus serat dengan pelembab untuk perlindungan tambahan.</p>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white pt-4">Kulit Normal: Fleksibilitas adalah Keunggulan</h2>
+                <p>Jika tipe kulit Anda normal, Anda memiliki kebebasan lebih dalam memilih. Fokuskan perhatian pada fitur tambahan seperti kompresi ringan untuk membantu sirkulasi darah, atau teknologi anti-bau untuk shift yang panjang.</p>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white pt-4">Cara Perawatan yang Benar</h2>
+                <p>Berapapun harga underscrub Anda, perawatan yang salah akan merusak serat dan mengurangi kenyamanannya. Cuci dengan air dingin, hindari pemutih, dan jangan menggunakan pengering suhu tinggi untuk menjaga elastisitas bahan.</p>
+            </div>
+            <div class="mt-16 pt-8 border-t border-gray-200 dark:border-white/10">
+                <a href="index.html" class="inline-flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors">
+                    <i class="fa-solid fa-arrow-left text-xs"></i> Kembali ke Beranda
+                </a>
+            </div>
         </div>
     </main>
 
@@ -258,7 +293,13 @@
                 class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
                 <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400">&copy;
                     2026 WearScrubs. Hak Cipta Dilindungi.</p>
-                
+                <div class="flex space-x-6 items-center flex-wrap justify-center gap-y-4">
+                    <a href="#"
+                        class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Privasi</a>
+                    <a href="#"
+                        class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Syarat</a>
+
+                </div>
             </div>
         </div>
     </footer>

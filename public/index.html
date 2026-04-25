@@ -9,16 +9,16 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WearScrubs | Pakaian Medis Premium</title>
-    <meta name="description" content="WearScrubs Ã¯Â¿Â½ Scrub medis premium untuk tenaga kesehatan Indonesia. Tersedia Scrub Top, Celana Scrub, dan Topi Scrub dengan pilihan bordir nama & logo. Material HeiQ Dymatic.">
+    <meta name="description" content="WearScrubs ï¿½ Scrub medis premium untuk tenaga kesehatan Indonesia. Tersedia Scrub Top, Celana Scrub, dan Topi Scrub dengan pilihan bordir nama & logo. Material HeiQ Dymatic.">
     <meta property="og:title" content="WearScrubs | Pakaian Medis Premium Indonesia">
-    <meta property="og:description" content="WearScrubs Ã¯Â¿Â½ Scrub medis premium untuk tenaga kesehatan Indonesia. Tersedia Scrub Top, Celana Scrub, dan Topi Scrub dengan pilihan bordir nama & logo. Material HeiQ Dymatic.">
+    <meta property="og:description" content="WearScrubs ï¿½ Scrub medis premium untuk tenaga kesehatan Indonesia. Tersedia Scrub Top, Celana Scrub, dan Topi Scrub dengan pilihan bordir nama & logo. Material HeiQ Dymatic.">
     <meta property="og:image" content="https://wearscrubs.id/images/logo/logo%20ws%20white%20250x55.png">
     <meta property="og:url" content="https://wearscrubs.id/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="WearScrubs">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="WearScrubs | Pakaian Medis Premium Indonesia">
-    <meta name="twitter:description" content="WearScrubs Ã¯Â¿Â½ Scrub medis premium untuk tenaga kesehatan Indonesia. Tersedia Scrub Top, Celana Scrub, dan Topi Scrub dengan pilihan bordir nama & logo. Material HeiQ Dymatic.">
+    <meta name="twitter:description" content="WearScrubs ï¿½ Scrub medis premium untuk tenaga kesehatan Indonesia. Tersedia Scrub Top, Celana Scrub, dan Topi Scrub dengan pilihan bordir nama & logo. Material HeiQ Dymatic.">
     <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -93,7 +93,7 @@
             <!-- SEO H1 -->
             <h1 class="sr-only">WearScrubs - Pakaian Medis & Scrub Premium Terbaik di Indonesia | Anti-Bakteri & Stylish</h1>
             <!-- Navigasi Kiri (Desktop only) -->
-            <nav class="hidden xl:flex items-center space-x-8 flex-1">
+            <nav class="hidden md:flex items-center space-x-8 flex-1">
                 <!-- Dropdown Belanja Semua -->
                 <div class="group relative py-4 -my-4 flex items-center cursor-default">
                     <span
@@ -132,17 +132,16 @@
             <div class="flex-shrink-0">
                 <a href="index.html" class="flex items-center justify-center">
                     <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs Logo"
-                        class="h-8 xl:h-10 w-auto object-contain block dark:hidden">
+                        class="h-8 md:h-10 w-auto object-contain block dark:hidden">
                     <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs Logo"
-                        class="h-8 xl:h-10 w-auto object-contain hidden dark:block">
+                        class="h-8 md:h-10 w-auto object-contain hidden dark:block">
                 </a>
             </div>
 
             <!-- Navigasi Kanan (Desktop) -->
-            <div class="hidden xl:flex items-center justify-end space-x-6 flex-1 text-sm">
+            <div class="hidden md:flex items-center justify-end space-x-6 flex-1 text-sm">
                 <!-- Tombol Mode Toggle -->
                 <button id="theme-toggle" data-theme-toggle
-                    aria-label="Toggle mode gelap"
                     class="hidden lg:flex items-center bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
                     <span id="theme-text" data-theme-text
                         class="text-[10px] mr-2 text-gray-500 dark:text-gray-400 font-bold group-hover:text-black dark:group-hover:text-white transition-colors">MODE
@@ -155,7 +154,6 @@
                 </button>
                 
                 <button
-                    aria-label="Keranjang belanja, 0 item"
                     class="text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white flex items-center transition-colors">
                     <span class="mr-2 uppercase text-[12px] tracking-widest font-medium">Keranjang</span>
                     <span
@@ -165,7 +163,7 @@
 
             <!-- Hamburger Button (Mobile only) -->
             <button id="mobile-menu-btn"
-                class="xl:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
+                class="md:hidden flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
                 aria-label="Buka menu">
                 <i id="hamburger-icon" class="fa-solid fa-bars text-xl"></i>
             </button>
@@ -174,63 +172,77 @@
 
     <!-- Mobile Drawer Overlay -->
     <div id="mobile-overlay"
-        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none xl:hidden"></div>
+        class="fixed inset-0 bg-black/50 z-[998] transition-opacity duration-300 opacity-0 pointer-events-none md:hidden">
+    </div>
 
     <!-- Mobile Drawer (slide-in dari kanan) -->
     <div id="mobile-drawer"
-        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
+        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col md:hidden shadow-2xl">
 
         <!-- Drawer Header -->
-        <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
-            <a href="index.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-6 w-auto block dark:hidden"></a>
-            <a href="index.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto hidden dark:block"></a>
-            <button id="mobile-close-btn" class="text-gray-400 hover:text-black dark:text-white/40 dark:hover:text-white transition-colors p-1 rounded-lg">
-                <i class="fa-solid fa-times text-lg"></i>
+        <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-white/10">
+            <a href="index.html"><img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-7 w-auto block dark:hidden"></a>
+            <a href="index.html"><img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-7 w-auto hidden dark:block"></a>
+            <button id="mobile-close-btn"
+                class="text-gray-500 hover:text-black dark:hover:text-white transition-colors">
+                <i class="fa-solid fa-times text-xl"></i>
             </button>
         </div>
 
         <!-- Drawer Nav Links -->
-        <nav class="flex-1 overflow-y-auto px-4 py-4">
-            <!-- Koleksi -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mb-1 px-3">Koleksi</p>
-            <a href="scrub-top.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Atasan Scrub
+        <nav class="flex-1 overflow-y-auto px-8 py-8 space-y-0">
+            <!-- Kategori Scrub -->
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mb-4">Koleksi
+            </p>
+            <a href="scrub-top.html"
+                class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
+                Atasan Scrub
             </a>
-            <a href="scrub-pants.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Celana Scrub
+            <a href="scrub-top.html"
+                class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
+                Celana Scrub
             </a>
-            <a href="scrub-caps.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Topi Scrub
-            </a>
-            <a href="gown.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Gown
+            <a href="scrub-top.html"
+                class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">
+                Topi Scrub
             </a>
 
             <!-- Lainnya -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Lainnya</p>
-            <a href="about-us.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Cerita Kami
-            </a>
-            <a href="contact.html" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Hubungi Kami
-            </a>
-
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">
+                Lainnya</p>
+            <a href="about-us.html"
+                class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Cerita Kami</a>
+            <a href="contact.html"
+                class="mobile-nav-link flex items-center py-4 border-b border-gray-100 dark:border-white/5 text-base font-semibold text-gray-900 dark:text-white hover:text-gray-500 dark:hover:text-gray-300 transition-colors tracking-wide">Hubungi Kami</a>
             <!-- Keranjang -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3">Keranjang</p>
-            <a href="cart.html" class="cart-btn w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
-                <div class="flex items-center gap-3">Keranjang Belanja
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">
+                Keranjang</p>
+            <button
+                class="w-full flex items-center justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-800 dark:text-white">
+                <div class="flex items-center">
+                    <i class="fa-solid fa-bag-shopping mr-3 text-gray-400"></i>
+                    Keranjang Belanja
                 </div>
-                <span class="cart-count bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
-            </a>
+                <span
+                    class="bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">0</span>
+            </button>
 
             <!-- Bahasa -->
-            <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-2 px-3">Bahasa</p>
-            <div class="flex gap-2">
+            <p class="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-gray-500 mt-8 mb-4">
+                Bahasa</p>
+            <div class="flex gap-3">
                 <a href="index.html" data-lang-id class="flex-1 text-center py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold">ID</a>
-                <a href="index-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/60 text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
+                <a href="index-en.html" data-lang-en class="flex-1 text-center py-2.5 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">EN</a>
             </div>
         </nav>
 
         <!-- Drawer Footer: Dark Mode Toggle -->
-        <div class="px-4 py-4 border-t border-gray-100 dark:border-white/10">
+        <div class="px-8 py-6 border-t border-gray-100 dark:border-white/10">
             <button id="theme-toggle-mobile" data-theme-toggle
                 class="w-full flex items-center justify-between bg-gray-100 dark:bg-white/5 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 cursor-pointer transition-colors group">
                 <span id="theme-text-mobile" data-theme-text
-                    class="text-[10px] text-gray-500 dark:text-gray-400 font-bold group-hover:text-black dark:group-hover:text-white transition-colors">MODE GELAP</span>
+                    class="text-[10px] text-gray-500 dark:text-gray-400 font-bold group-hover:text-black dark:group-hover:text-white transition-colors">MODE
+                    GELAP</span>
                 <div class="w-8 h-4 bg-gray-300 dark:bg-white/20 rounded-full relative transition-colors">
                     <div id="theme-thumb-mobile" data-theme-thumb
                         class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform transform translate-x-4">
@@ -239,7 +251,10 @@
             </button>
         </div>
     </div>
-<!-- Bagian Utama Hero -->
+
+
+
+    <!-- Bagian Utama Hero -->
     <main>
         <div class="hero-container flex flex-col md:flex-row w-full">
 
@@ -368,7 +383,7 @@
                 </div>
                 <script>
                 (async () => {
-                    const WS_API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : '';
+                    const WS_API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://wearscrubs-production.up.railway.app';
                     const COLOR_HEX_POP = {
                         'black':'#000000','beige':'#d7c5a9','olive':'#696250',
                         'charcoal-grey':'#5f5051','light-grey':'#898391','maroon':'#6c1b22',
@@ -416,7 +431,7 @@
                                     </div>
                                     <div class="flex items-center gap-1.5 flex-wrap">
                                         ${swatches}${extraColors}
-                                        ${colors.length === 0 ? '<span class="text-[9px] text-gray-300 dark:text-white/20">â€”</span>' : ''}
+                                        ${colors.length === 0 ? '<span class="text-[9px] text-gray-300 dark:text-white/20">—</span>' : ''}
                                     </div>
                                 </div>
                             </a>`;
@@ -462,9 +477,9 @@
                     class="catalog-content grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 animate-[fadeIn_0.5s_ease-in-out]">
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Alex SS Light Grey/6.png" alt="Alex Primary" loading="lazy"
+                        <img src="images/Alex SS Light Grey/6.png" alt="Alex Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Alex SS Light Grey/7.png" alt="Alex Secondary" loading="lazy"
+                        <img src="images/Alex SS Light Grey/7.png" alt="Alex Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -474,9 +489,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Ally SS Beige/6.png" alt="Ally Primary" loading="lazy"
+                        <img src="images/Ally SS Beige/6.png" alt="Ally Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Ally SS Beige/7.png" alt="Ally Secondary" loading="lazy"
+                        <img src="images/Ally SS Beige/7.png" alt="Ally Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -486,9 +501,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Arden SS Maroon/6.png" alt="Arden Primary" loading="lazy"
+                        <img src="images/Arden SS Maroon/6.png" alt="Arden Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Arden SS Maroon/7.png" alt="Arden Secondary" loading="lazy"
+                        <img src="images/Arden SS Maroon/7.png" alt="Arden Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -498,9 +513,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Kai SS Purple/6.png" alt="Kai Primary" loading="lazy"
+                        <img src="images/Kai SS Purple/6.png" alt="Kai Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Kai SS Purple/7.png" alt="Kai Secondary" loading="lazy"
+                        <img src="images/Kai SS Purple/7.png" alt="Kai Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -510,9 +525,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Matteo LS Black/6.png" alt="Matteo Primary" loading="lazy"
+                        <img src="images/Matteo LS Black/6.png" alt="Matteo Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Matteo LS Black/7.png" alt="Matteo Secondary" loading="lazy"
+                        <img src="images/Matteo LS Black/7.png" alt="Matteo Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -522,9 +537,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Minna Olive LS/5.png" alt="Minna Primary" loading="lazy"
+                        <img src="images/Minna Olive LS/5.png" alt="Minna Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Minna Olive LS/6.png" alt="Minna Secondary" loading="lazy"
+                        <img src="images/Minna Olive LS/6.png" alt="Minna Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -534,9 +549,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Nora SS Charcoal Grey/6.png" alt="Nora Primary" loading="lazy"
+                        <img src="images/Nora SS Charcoal Grey/6.png" alt="Nora Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Nora SS Charcoal Grey/7.png" alt="Nora Secondary" loading="lazy"
+                        <img src="images/Nora SS Charcoal Grey/7.png" alt="Nora Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -546,9 +561,9 @@
                     </div>
                     <div onclick="window.location.href='scrub-top.html'"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] group shadow-sm hover:shadow-xl transition-shadow bg-gray-100 dark:bg-darkcard cursor-pointer">
-                        <img src="images/Taylor SS Turquoise/6.png" alt="Taylor Primary" loading="lazy"
+                        <img src="images/Taylor SS Turquoise/6.png" alt="Taylor Primary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:opacity-0 group-hover:scale-105 z-10 w-[101%] h-[101%] max-w-[101%]">
-                        <img src="images/Taylor SS Turquoise/7.png" alt="Taylor Secondary" loading="lazy"
+                        <img src="images/Taylor SS Turquoise/7.png" alt="Taylor Secondary"
                             class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0 w-[101%] h-[101%] max-w-[101%]">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end justify-center pb-6 z-20 pointer-events-none">
@@ -789,19 +804,20 @@
             <div class="container mx-auto px-6">
                 <!-- Banner Image -->
                 <div
-                    class="relative w-full h-[360px] md:h-[400px] rounded-2xl overflow-hidden mb-20 group cursor-pointer shadow-xl">
+                    class="relative w-full h-[300px] md:h-[400px] rounded-2xl overflow-hidden mb-20 group cursor-pointer shadow-xl">
                     <img src="images/background%20active%20scrubs.png" alt="Activewear Banner"
                         class="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700">
                     <div class="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-center p-6">
                         <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-white/80 mb-3">Eksklusif</p>
                         <h2 class="text-3xl md:text-4xl font-extrabold text-white mb-4 tracking-tight">Apa itu
                             ACTIVESCRUBS?</h2>
-                        <p class="text-sm text-white/90 mb-4 md:mb-8 max-w-3xl leading-relaxed">Activescrub
+                        <p class="text-sm text-white/90 mb-8 max-w-3xl leading-relaxed">Activescrub
                             dirancang untuk meningkatkan kualitas kehidupan kerja sehari-hari. Sederhana, tahan lama,
-                            dan berkualitas tinggi, produk ini memadukan fungsi praktis dengan sentuhan estetikaâ€”cerdas
+                            dan berkualitas tinggi, produk ini memadukan fungsi praktis dengan sentuhan estetika—cerdas
                             dalam detail, memperhatikan kebutuhan sehari-hari, dan terus berkembang.</p>
                         <a href="scrub-top.html"
-                            class="border border-white hover:bg-white hover:text-black text-white px-6 py-3 text-sm font-bold rounded-xl transition-colors backdrop-blur-sm bg-white/10 whitespace-nowrap">Belanja Sekarang</a>
+                            class="border border-white hover:bg-white hover:text-black text-white px-8 py-3 text-sm font-bold rounded-xl transition-colors backdrop-blur-sm bg-white/10">Belanja
+                            Sekarang</a>
                     </div>
                 </div>
 
@@ -818,7 +834,7 @@
                                 Standar Baru Scrub</h2>
                             <p class="text-sm text-gray-600 dark:text-white/80 leading-relaxed">
                                 <b>Pakaian medis dan seragam kesehatan premium</b> yang memadukan desain modern,
-                                teknologi bahan inovatif, dan kenyamanan profesional â€” membantu para tenaga kesehatan
+                                teknologi bahan inovatif, dan kenyamanan profesional — membantu para tenaga kesehatan
                                 bekerja dengan percaya diri sepanjang hari.
                             </p>
                         </div>
@@ -832,7 +848,8 @@
                             <div>
                                 <h4 class="text-sm md:text-base font-semibold text-gray-900 dark:text-white mb-1.5">
                                     Teknologi Anti Air</h4>
-                                <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Menolak air dan cairan lainnya.</p>
+                                <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Repels
+                                    water and other liquids.</p>
                             </div>
                         </div>
                         <!-- Fitur 2 -->
@@ -842,7 +859,8 @@
                             <div>
                                 <h4 class="text-sm md:text-base font-semibold text-gray-900 dark:text-white mb-1.5">
                                     #ACTIVESCRUBS</h4>
-                                <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Dirancang untuk membuat hari kerja lebih baik.</p>
+                                <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Designed
+                                    to make everyday work life better.</p>
                             </div>
                         </div>
                         <!-- Fitur 3 -->
@@ -852,7 +870,8 @@
                             <div>
                                 <h4 class="text-sm md:text-base font-semibold text-gray-900 dark:text-white mb-1.5">
                                     Anti-Mikroba & Anti-Bau</h4>
-                                <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Meningkatkan kebersihan sepanjang hari kerja Anda.</p>
+                                <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Enhances
+                                    hygiene throughout your workday.</p>
                             </div>
                         </div>
                         <!-- Fitur 4 -->
@@ -863,7 +882,8 @@
                                 <h4 class="text-sm md:text-base font-semibold text-gray-900 dark:text-white mb-1.5">
                                     HEIQ PURE & DYMATIC Technology</h4>
                                 <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">
-                                    Teknologi untuk menjaga scrub tetap segar, breathable, dan nyaman sepanjang hari.</p>
+                                    Technology designed to keep scrubs fresh, breathable, and comfortable throughout the
+                                    day.</p>
                             </div>
                         </div>
                     </div>
@@ -973,72 +993,68 @@
                         <p class="text-sm text-gray-600 dark:text-white/80 leading-relaxed">Dapatkan wawasan seputar
                             dunia medis dan inspirasi Wearscrubs.</p>
                     </div>
-                    <a href="/blog.html"
+                    <a href="#"
                         class="text-xs font-bold text-gray-900 dark:text-white underline underline-offset-8 hover:text-gray-500 dark:hover:text-white/70 transition-colors hidden md:block pb-2">Lihat
                         Semua</a>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                     <!-- Story 1 -->
-                    <div
+                    <a href="news-1.html"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] md:aspect-[4/5] group cursor-pointer shadow-lg">
-                        <img src="images/news/1.jpg" alt="Story 1"
+                        <img src="images/news/1.jpg" alt="5 Pakaian Medis Wajib untuk Lemari Shift Anda"
                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-between p-6">
-                            <span class="text-xs font-bold text-white/90">27 Feb, 2024</span>
+                            <span class="text-xs font-bold text-white/90">15 Jan, 2025</span>
                             <div>
-                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">5
-                                    Pakaian Medis Wajib untuk Lemari Shift Anda</h3>
-                                <p class="text-xs text-white/70 font-medium">oleh Emma Weber</p>
+                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">5 Pakaian Medis Wajib untuk Lemari Shift Anda</h3>
+                                <p class="text-xs text-white/70 font-medium">oleh Tim Wearscrubs</p>
                             </div>
                         </div>
-                    </div>
+                    </a>
                     <!-- Story 2 -->
-                    <div
+                    <a href="news-2.html"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] md:aspect-[4/5] group cursor-pointer shadow-lg">
-                        <img src="images/news/2.webp" alt="Story 2"
+                        <img src="images/news/2.webp" alt="Memilih Underscrub yang Tepat Sesuai Tipe Kulit"
                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 grayscale">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-between p-6">
-                            <span class="text-xs font-bold text-white/90">26 Feb, 2024</span>
+                            <span class="text-xs font-bold text-white/90">20 Mar, 2025</span>
                             <div>
-                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">
-                                    Memilih Underscrub yang Tepat Sesuai Tipe Kulit</h3>
-                                <p class="text-xs text-white/70 font-medium">oleh Emma Weber</p>
+                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">Memilih Underscrub yang Tepat Sesuai Tipe Kulit</h3>
+                                <p class="text-xs text-white/70 font-medium">oleh Tim Wearscrubs</p>
                             </div>
                         </div>
-                    </div>
+                    </a>
                     <!-- Story 3 -->
-                    <div
+                    <a href="news-3.html"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] md:aspect-[4/5] group cursor-pointer shadow-lg">
-                        <img src="images/news/3.png" alt="Story 3"
+                        <img src="images/news/3.png" alt="Manfaat Memakai Scrub Kompresi Selama Operasi"
                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-between p-6">
-                            <span class="text-xs font-bold text-white/90">25 Feb, 2024</span>
+                            <span class="text-xs font-bold text-white/90">12 Jun, 2025</span>
                             <div>
-                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">
-                                    Manfaat Memakai Scrub Kompresi Selama Operasi</h3>
-                                <p class="text-xs text-white/70 font-medium">oleh Emma Weber</p>
+                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">Manfaat Memakai Scrub Kompresi Selama Operasi</h3>
+                                <p class="text-xs text-white/70 font-medium">oleh Tim Wearscrubs</p>
                             </div>
                         </div>
-                    </div>
+                    </a>
                     <!-- Story 4 -->
-                    <div
+                    <a href="news-4.html"
                         class="relative rounded-2xl overflow-hidden aspect-[3/4] md:aspect-[4/5] group cursor-pointer shadow-lg">
-                        <img src="images/news/4.webp" alt="Story 4"
+                        <img src="images/news/4.webp" alt="Seragam Medis Terbaik untuk Mobilitas Tinggi"
                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700">
                         <div
                             class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-between p-6">
-                            <span class="text-xs font-bold text-white/90">24 Feb, 2024</span>
+                            <span class="text-xs font-bold text-white/90">8 Sep, 2025</span>
                             <div>
-                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">
-                                    Seragam Medis Terbaik untuk Mobilitas Tinggi</h3>
-                                <p class="text-xs text-white/70 font-medium">oleh Emma Weber</p>
+                                <h3 class="text-xl font-bold text-white mb-3 leading-tight group-hover:underline">Seragam Medis Terbaik untuk Mobilitas Tinggi</h3>
+                                <p class="text-xs text-white/70 font-medium">oleh Tim Wearscrubs</p>
                             </div>
                         </div>
-                    </div>
+                    </a>
                 </div>
             </div>
         </section>
@@ -1132,7 +1148,13 @@
                 class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
                 <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400">&copy;
                     2026 WearScrubs. Hak Cipta Dilindungi.</p>
-                
+                <div class="flex space-x-6 items-center flex-wrap justify-center gap-y-4">
+                    <a href="#"
+                        class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Privasi</a>
+                    <a href="#"
+                        class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Syarat</a>
+
+                </div>
             </div>
         </div>
     </footer>
