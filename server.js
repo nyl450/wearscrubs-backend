@@ -337,6 +337,24 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_status_check CHECK(order_status IN ('waiting_payment','confirmed','bordir','packed','shipped','done','cancelled'))`).catch(() => {});
 
 
+    // ── Stock Movements (log semua perubahan stok) ────────────────────────────
+    await dbRun(`CREATE TABLE IF NOT EXISTS stock_movements (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL,
+        size TEXT NOT NULL,
+        color TEXT NOT NULL,
+        variant_type TEXT NOT NULL DEFAULT 'null',
+        movement_type TEXT NOT NULL CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore')),
+        quantity_change INTEGER NOT NULL,
+        quantity_before INTEGER NOT NULL DEFAULT 0,
+        quantity_after INTEGER NOT NULL DEFAULT 0,
+        note TEXT DEFAULT '',
+        order_id INTEGER DEFAULT NULL,
+        admin_user TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT fk_sm_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    )`);
+
     // ── Indexes ───────────────────────────────────────────────────────────────
     const createIdx = (sql) => dbRun(sql).catch(() => {});
     await createIdx('CREATE INDEX IF NOT EXISTS idx_products_category  ON products(category)');
@@ -351,6 +369,9 @@ async function initDB() {
     await createIdx('CREATE INDEX IF NOT EXISTS idx_orders_created     ON orders(created_at DESC)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_order_items_order  ON order_items(order_id)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_order_items_prod   ON order_items(product_id)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_product         ON stock_movements(product_id)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_lookup          ON stock_movements(product_id, color, size, variant_type)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_created         ON stock_movements(created_at DESC)');
 
     // ── Seed default admin ────────────────────────────────────────────────────
     const existingAdmin = await dbGet('SELECT id FROM users WHERE username = $1', ['admin']);
@@ -903,6 +924,50 @@ app.get('/api/inventory', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/inventory/all — semua inventory join product (satu query, untuk dashboard)
+app.get('/api/inventory/all', requireAuth(), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT i.*, p.name AS product_name, p.sku, p.category
+             FROM inventory i
+             JOIN products p ON p.id = i.product_id
+             ORDER BY p.name, i.color, i.variant_type,
+               CASE i.size WHEN 'S' THEN 1 WHEN 'M' THEN 2 WHEN 'L' THEN 3 WHEN 'XL' THEN 4 WHEN 'XXL' THEN 5 ELSE 6 END`,
+            []
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/inventory/variant/history — riwayat stok + pembeli per varian spesifik
+app.get('/api/inventory/variant/history', requireAuth(), async (req, res) => {
+    try {
+        const { product_id, color, size, variant_type } = req.query;
+        if (!product_id || !color || !size || !variant_type)
+            return res.status(400).json({ error: 'Query tidak lengkap: butuh product_id, color, size, variant_type' });
+
+        const movements = await dbAll(
+            `SELECT * FROM stock_movements
+             WHERE product_id=$1 AND color=$2 AND size=$3 AND variant_type=$4
+             ORDER BY created_at DESC LIMIT 50`,
+            [product_id, color, size, variant_type]
+        );
+
+        const buyers = await dbAll(
+            `SELECT o.customer_name, o.customer_phone, o.order_code, o.order_source,
+                    o.payment_status, o.order_status, o.created_at, o.payment_method,
+                    oi.quantity, oi.price
+             FROM order_items oi
+             JOIN orders o ON o.id = oi.order_id
+             WHERE oi.product_id=$1 AND oi.color=$2 AND oi.size=$3 AND oi.variant_type=$4
+             ORDER BY o.created_at DESC LIMIT 50`,
+            [product_id, color, size, variant_type]
+        );
+
+        res.json({ movements, buyers });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/inventory/:product_id', async (req, res) => {
     try {
         // GANTI: ? → $1
@@ -925,17 +990,65 @@ app.get('/api/inventory/:product_id/check', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT /api/inventory/single
-app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, res) => {
+// POST /api/inventory/receive — terima stok dari penjahit, log ke stock_movements
+app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req, res) => {
     try {
-        const { product_id, size, color, variant_type, stock } = req.body;
-        // GANTI: ? → $1-$6 | ON CONFLICT syntax sama ✅
+        const { product_id, size, color, variant_type, quantity, note } = req.body;
+        if (!product_id || !size || !color || !variant_type)
+            return res.status(400).json({ error: 'Data tidak lengkap' });
+        const qty = parseInt(quantity);
+        if (!qty || qty <= 0)
+            return res.status(400).json({ error: 'Jumlah harus lebih dari 0' });
+
+        const cur = await dbGet(
+            'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+            [product_id, size, color, variant_type]
+        );
+        const before = cur ? parseInt(cur.stock) : 0;
+        const after = before + qty;
+
         await dbRun(
             `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
              ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
-            [product_id, size, color, variant_type, parseInt(stock), parseInt(stock)]
+            [product_id, size, color, variant_type, after, after]
         );
-        res.json({ message: 'Stok diperbarui' });
+        await dbRun(
+            `INSERT INTO stock_movements
+             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
+             VALUES ($1,$2,$3,$4,'receive',$5,$6,$7,$8,$9)`,
+            [product_id, size, color, variant_type, qty, before, after, note || 'Terima stok baru', req.user.username]
+        );
+        invalidateCache('inventory');
+        res.json({ message: 'Stok berhasil ditambahkan', before, after, added: qty });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/inventory/single — update stok manual, log ke stock_movements
+app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const { product_id, size, color, variant_type, stock } = req.body;
+        const cur = await dbGet(
+            'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+            [product_id, size, color, variant_type]
+        );
+        const before = cur ? parseInt(cur.stock) : 0;
+        const after = parseInt(stock);
+
+        await dbRun(
+            `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
+             ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
+            [product_id, size, color, variant_type, after, after]
+        );
+        if (before !== after) {
+            await dbRun(
+                `INSERT INTO stock_movements
+                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
+                 VALUES ($1,$2,$3,$4,'manual_set',$5,$6,$7,'Update manual stok',$8)`,
+                [product_id, size, color, variant_type, after - before, before, after, req.user.username]
+            );
+        }
+        invalidateCache('inventory');
+        res.json({ message: 'Stok diperbarui', before, after });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1247,12 +1360,26 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
         await dbRun(`INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
             [order.id, 'payment', photoUrl, req.body.note || '']);
 
-        // Deduct inventory
+        // Deduct inventory + log order_out
         const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
         for (const item of items) {
+            const invBefore = await dbGet(
+                'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+                [item.product_id, item.size, item.color, item.variant_type]
+            );
+            const stockBefore = invBefore ? parseInt(invBefore.stock) : 0;
             await dbRun(
                 `UPDATE inventory SET stock = GREATEST(0, stock - $1) WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
                 [item.quantity, item.product_id, item.size, item.color, item.variant_type]
+            );
+            const stockAfter = Math.max(0, stockBefore - item.quantity);
+            await dbRun(
+                `INSERT INTO stock_movements
+                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                 VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+                [item.product_id, item.size, item.color, item.variant_type,
+                 -item.quantity, stockBefore, stockAfter,
+                 `Order ${order.order_code}`, order.id, req.user.username]
             );
         }
 
@@ -1346,14 +1473,28 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
             : null;
 
-        // If payment was already confirmed, return stock
+        // If payment was already confirmed, return stock + log restore
         if (order.payment_status === 'paid') {
             if (!req.file) return res.status(400).json({ error: 'Foto bukti refund wajib diupload karena pembayaran sudah dikonfirmasi' });
             const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
             for (const item of items) {
+                const invBefore = await dbGet(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+                    [item.product_id, item.size, item.color, item.variant_type]
+                );
+                const stockBefore = invBefore ? parseInt(invBefore.stock) : 0;
                 await dbRun(
                     `UPDATE inventory SET stock = stock + $1 WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
                     [item.quantity, item.product_id, item.size, item.color, item.variant_type]
+                );
+                const stockAfter = stockBefore + item.quantity;
+                await dbRun(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'order_cancel_restore',$5,$6,$7,$8,$9,$10)`,
+                    [item.product_id, item.size, item.color, item.variant_type,
+                     item.quantity, stockBefore, stockAfter,
+                     `Pembatalan ${order.order_code}`, order.id, user.username]
                 );
             }
         }

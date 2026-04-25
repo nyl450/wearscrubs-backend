@@ -318,39 +318,51 @@
     </div>
 
     <!-- INVENTORY -->
-    <div id="module-inventory" class="hidden p-6 space-y-4">
-        <div class="flex justify-between items-center flex-wrap gap-4">
+    <div id="module-inventory" class="hidden p-4 md:p-6 space-y-4">
+        <!-- Header bar -->
+        <div class="flex justify-between items-center flex-wrap gap-3">
             <h2 class="text-xl font-bold">Manajemen Inventori</h2>
-            <div class="flex gap-3 items-center">
-                <select id="inv-product-filter" onchange="loadInventory()" class="!w-48 !py-2">
-                    <option value="">Semua Produk</option>
-                </select>
-                <button onclick="saveInventory()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all">
-                    <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Semua
-                </button>
+            <button onclick="filterInventoryCritical()" id="inv-critical-btn"
+                class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-red-500/10 border border-red-400/20 text-red-400 hover:bg-red-500/20 transition">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span id="inv-critical-label">Stok Kritis</span>
+            </button>
+        </div>
+        <!-- Summary strip -->
+        <div class="grid grid-cols-3 gap-3">
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-3 text-center">
+                <div id="inv-stat-total" class="text-2xl font-bold text-white">—</div>
+                <div class="text-[10px] text-white/30 mt-0.5">Total Varian</div>
+            </div>
+            <div class="bg-darkcard border border-red-400/20 rounded-2xl p-3 text-center">
+                <div id="inv-stat-empty" class="text-2xl font-bold text-red-400">—</div>
+                <div class="text-[10px] text-white/30 mt-0.5">Habis</div>
+            </div>
+            <div class="bg-darkcard border border-yellow-400/20 rounded-2xl p-3 text-center">
+                <div id="inv-stat-low" class="text-2xl font-bold text-yellow-400">—</div>
+                <div class="text-[10px] text-white/30 mt-0.5">Kritis (&lt;5)</div>
             </div>
         </div>
-        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="border-b border-darkborder">
-                        <tr class="text-[10px] text-white/40 uppercase tracking-wider">
-                            <th class="px-5 py-3 text-left">Produk</th>
-                            <th class="px-5 py-3 text-left">Warna</th>
-                            <th class="px-5 py-3 text-left">Tipe</th>
-                            <th class="px-5 py-3 text-left">Size</th>
-                            <th class="px-5 py-3 text-center">Stok</th>
-                            <th class="px-5 py-3 text-center">Simpan</th>
-                        </tr>
-                    </thead>
-                    <tbody id="inventory-tbody" class="divide-y divide-darkborder">
-                        <tr id="inventory-empty-row">
-                            <td colspan="6" style="text-align:center; padding:2rem; color:#888;">
-                                Belum ada data inventori. Tambah produk terlebih dahulu.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <!-- Search + filter -->
+        <div class="flex gap-2 flex-wrap">
+            <div class="relative flex-1 min-w-[160px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
+                <input id="inv-search" type="text" placeholder="Cari produk..." oninput="renderInventory()"
+                    class="pl-8 pr-3 py-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30">
+            </div>
+            <select id="inv-cat-filter" onchange="renderInventory()" class="!py-2 !px-3 !text-xs !w-auto shrink-0">
+                <option value="">Semua Kategori</option>
+                <option value="tops">Atasan</option>
+                <option value="pants">Celana</option>
+                <option value="caps">Topi</option>
+                <option value="gown">Gown</option>
+            </select>
+        </div>
+        <!-- Cards container -->
+        <div id="inventory-cards" class="space-y-4">
+            <div class="text-center py-12 text-white/20 text-sm">
+                <i class="fa-solid fa-box-open text-3xl mb-3 block"></i>
+                Memuat data inventori...
             </div>
         </div>
     </div>
@@ -973,6 +985,101 @@
 </div>
 </div>
 
+<!-- ═══ RECEIVE STOCK MODAL ════════════════════════════════════════════════════ -->
+<div id="receive-stock-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1001] hidden items-center justify-center p-4">
+    <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-sm">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-darkborder">
+            <div>
+                <h3 class="font-bold text-base">Terima Stok Baru</h3>
+                <p id="rsm-subtitle" class="text-xs text-white/40 mt-0.5"></p>
+            </div>
+            <button onclick="closeReceiveStock()" class="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/60">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+        <div class="px-5 py-4 space-y-4">
+            <!-- Variant info -->
+            <div class="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
+                <span id="rsm-color-dot" class="w-4 h-4 rounded-full border border-white/20 shrink-0"></span>
+                <div>
+                    <div id="rsm-product-name" class="text-sm font-bold"></div>
+                    <div id="rsm-variant-info" class="text-[11px] text-white/40"></div>
+                </div>
+            </div>
+            <!-- Current stock -->
+            <div class="flex justify-between items-center">
+                <span class="text-xs text-white/40">Stok saat ini</span>
+                <span id="rsm-current-stock" class="text-sm font-bold text-white/70">—</span>
+            </div>
+            <!-- Quantity -->
+            <div>
+                <label class="block text-xs text-white/50 mb-1.5">Jumlah yang diterima</label>
+                <input id="rsm-qty" type="number" min="1" value="1" placeholder="Qty"
+                    class="!py-3 !text-center !text-lg !font-bold w-full">
+            </div>
+            <!-- Note -->
+            <div>
+                <label class="block text-xs text-white/50 mb-1.5">Catatan (opsional)</label>
+                <input id="rsm-note" type="text" placeholder="Misal: dari penjahit Bu Sari, batch Maret"
+                    class="!py-2.5 w-full text-sm">
+            </div>
+            <!-- After preview -->
+            <div class="flex justify-between items-center bg-green-500/10 border border-green-400/20 rounded-xl px-4 py-3">
+                <span class="text-xs text-white/40">Stok setelah ditambah</span>
+                <span id="rsm-after" class="text-sm font-bold text-green-400">—</span>
+            </div>
+            <!-- Hidden fields -->
+            <input type="hidden" id="rsm-product-id">
+            <input type="hidden" id="rsm-size">
+            <input type="hidden" id="rsm-color">
+            <input type="hidden" id="rsm-variant-type">
+        </div>
+        <div class="flex gap-3 px-5 pb-5">
+            <button onclick="closeReceiveStock()" class="flex-1 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5 transition">Batal</button>
+            <button onclick="submitReceiveStock()" class="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-box-archive"></i> Terima Stok
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ VARIANT HISTORY MODAL ════════════════════════════════════════════════ -->
+<div id="history-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1001] hidden items-center justify-center p-4">
+    <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-lg max-h-[88vh] flex flex-col">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-darkborder shrink-0">
+            <div>
+                <h3 class="font-bold text-base">Riwayat Varian</h3>
+                <p id="hm-subtitle" class="text-xs text-white/40 mt-0.5"></p>
+            </div>
+            <button onclick="closeHistoryModal()" class="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/60">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+        <!-- Tabs -->
+        <div class="flex gap-1 px-5 pt-3 shrink-0">
+            <button onclick="switchHistoryTab('movements')" id="htab-movements"
+                class="history-tab active text-xs font-bold px-4 py-1.5 rounded-xl bg-white text-black">
+                <i class="fa-solid fa-boxes-stacked mr-1"></i> Pergerakan Stok
+            </button>
+            <button onclick="switchHistoryTab('buyers')" id="htab-buyers"
+                class="history-tab text-xs font-bold px-4 py-1.5 rounded-xl bg-white/5 text-white/60 hover:bg-white/10">
+                <i class="fa-solid fa-users mr-1"></i> Pembeli
+            </button>
+        </div>
+        <!-- Content -->
+        <div class="overflow-y-auto flex-1 px-5 py-3 space-y-2">
+            <!-- Stock movements panel -->
+            <div id="hpanel-movements">
+                <div id="hm-movements-list" class="space-y-2"></div>
+            </div>
+            <!-- Buyers panel -->
+            <div id="hpanel-buyers" class="hidden">
+                <div id="hm-buyers-list" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div id="toast" class="fixed bottom-6 right-6 z-[9999] hidden">
     <div class="bg-darkcard border border-darkborder px-5 py-3 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-3">
@@ -1065,7 +1172,7 @@ const ALL_MOTIFS = [
 ];
 // ORDER_STATUS_MAP removed — gunakan statusBadge() di bawah
 
-let allProducts = [], inventoryEdits = {}, popularSelected = new Set();
+let allProducts = [], popularSelected = new Set();
 let currentOrderFilter = 'all', currentProductFilter = 'all';
 let mainChart = null, statsData = null;
 
@@ -1690,63 +1797,317 @@ document.getElementById('product-form').addEventListener('submit', async e => {
 });
 
 // ─── INVENTORY ────────────────────────────────────────────────────────────────
+let cachedInventoryAll = [];
+let invShowCriticalOnly = false;
+
+function resolveColor(colorId) {
+    return ALL_COLORS.find(x => x.id === colorId)
+        || ALL_GOWN_COLORS.find(x => x.id === colorId)
+        || ALL_MOTIFS.find(x => x.id === colorId)
+        || { label: colorId, hex: '#888' };
+}
+
 async function loadInventory() {
-    inventoryEdits = {};
     try {
-        const products = await apiFetch('/api/products?status=all');
-        const sel = document.getElementById('inv-product-filter');
-        const curVal = sel.value;
-        sel.innerHTML = '<option value="">Semua Produk</option>' + products.map(p => `<option value="${p.id}" ${curVal==p.id?'selected':''}>${p.name}</option>`).join('');
-        const filterPid = sel.value;
-        const filtered = filterPid ? products.filter(p => p.id == filterPid) : products;
-        const tbody = document.getElementById('inventory-tbody');
-        let rows = '';
-        for (const p of filtered) {
-            const inv = await apiFetch('/api/inventory/'+p.id);
-            inv.forEach(item => {
-                const cm = ALL_COLORS.find(x => x.id === item.color) || ALL_GOWN_COLORS.find(x => x.id === item.color) || ALL_MOTIFS.find(x => x.id === item.color) || { label: item.color, hex:'#ccc' };
-                const key = `${item.product_id}__${item.size}__${item.color}__${item.variant_type}`;
-                rows += `<tr class="hover:bg-white/2">
-                    <td class="px-5 py-2.5"><div class="font-medium text-sm">${p.name}</div><div class="text-[9px] text-white/30 font-mono">${p.sku}</div></td>
-                    <td class="px-5 py-2.5"><div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full border border-white/10" style="background:${cm.hex}"></span><span class="text-xs">${cm.label}</span></div></td>
-                    <td class="px-5 py-2.5"><span class="text-xs text-white/40 uppercase">${item.variant_type!=='null'?item.variant_type:'—'}</span></td>
-                    <td class="px-5 py-2.5"><span class="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold">${item.size}</span></td>
-                    <td class="px-5 py-2.5 text-center">
-                        <input type="number" min="0" value="${item.stock}" id="inv-${key}"
-                            class="!w-16 !rounded-lg !py-1 !px-2 text-center text-xs mx-auto ${item.stock<5?'!border-red-400/50 !text-red-400':''}"
-                            onchange="inventoryEdits['${key}']={product_id:${item.product_id},size:'${item.size}',color:'${item.color}',variant_type:'${item.variant_type}',stock:parseInt(this.value)}">
-                    </td>
-                    <td class="px-5 py-2.5 text-center">
-                        <button onclick="saveOneStock(${item.product_id},'${item.size}','${item.color}','${item.variant_type}','inv-${key}')"
-                            class="text-[10px] px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 transition">
-                            <i class="fa-solid fa-floppy-disk"></i>
+        cachedInventoryAll = await apiFetch('/api/inventory/all');
+        renderInventory();
+    } catch(e) { toast('Gagal load inventori: ' + e.message, true); }
+}
+
+function renderInventory() {
+    const search  = (document.getElementById('inv-search')?.value || '').toLowerCase();
+    const catFilter = document.getElementById('inv-cat-filter')?.value || '';
+    const container = document.getElementById('inventory-cards');
+
+    let rows = cachedInventoryAll;
+
+    // stats always from full set
+    const totalVariants = rows.length;
+    const emptyCount    = rows.filter(r => parseInt(r.stock) === 0).length;
+    const lowCount      = rows.filter(r => parseInt(r.stock) > 0 && parseInt(r.stock) < 5).length;
+    document.getElementById('inv-stat-total').textContent = totalVariants;
+    document.getElementById('inv-stat-empty').textContent = emptyCount;
+    document.getElementById('inv-stat-low').textContent   = lowCount;
+    document.getElementById('inv-critical-label').textContent =
+        invShowCriticalOnly ? 'Tampil Semua' : `Stok Kritis (${emptyCount + lowCount})`;
+
+    // apply filters
+    if (invShowCriticalOnly) rows = rows.filter(r => parseInt(r.stock) < 5);
+    if (catFilter)           rows = rows.filter(r => r.category === catFilter);
+    if (search)              rows = rows.filter(r =>
+        r.product_name.toLowerCase().includes(search) ||
+        (r.sku || '').toLowerCase().includes(search));
+
+    if (!rows.length) {
+        container.innerHTML = `<div class="text-center py-12 text-white/20 text-sm">
+            <i class="fa-solid fa-box-open text-3xl mb-3 block"></i>
+            Tidak ada varian yang sesuai filter.</div>`;
+        return;
+    }
+
+    // group by product_id
+    const byProduct = {};
+    rows.forEach(r => {
+        if (!byProduct[r.product_id]) byProduct[r.product_id] = { name: r.product_name, sku: r.sku, rows: [] };
+        byProduct[r.product_id].rows.push(r);
+    });
+
+    let html = '';
+    Object.entries(byProduct).forEach(([pid, prod]) => {
+        // group rows by color+variant_type
+        const byVariant = {};
+        prod.rows.forEach(r => {
+            const vk = `${r.color}||${r.variant_type}`;
+            if (!byVariant[vk]) byVariant[vk] = { color: r.color, vtype: r.variant_type, sizes: [] };
+            byVariant[vk].sizes.push(r);
+        });
+
+        let variantHtml = '';
+        Object.values(byVariant).forEach(v => {
+            const cm = resolveColor(v.color);
+            const vtLabel = (v.vtype && v.vtype !== 'null') ? `<span class="text-[9px] text-white/30 uppercase ml-1">· ${v.vtype}</span>` : '';
+            let sizeRows = '';
+            v.sizes.forEach(r => {
+                const stock = parseInt(r.stock);
+                const stockClass = stock === 0 ? 'text-red-400 font-bold' : stock < 5 ? 'text-yellow-400 font-bold' : 'text-white/80';
+                const badgeClass = stock === 0
+                    ? '!border-red-400/50 !text-red-400'
+                    : stock < 5 ? '!border-yellow-400/50 !text-yellow-400' : '';
+                const key = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
+                sizeRows += `
+                <div class="flex items-center gap-3 py-2.5 border-t border-white/5 first:border-0">
+                    <span class="text-xs font-bold text-white/50 w-8 shrink-0">${r.size}</span>
+                    <input type="number" min="0" value="${stock}" id="inv-${key}"
+                        data-pid="${r.product_id}" data-size="${r.size}" data-color="${r.color}" data-vtype="${r.variant_type}"
+                        class="!w-16 !rounded-lg !py-1.5 !px-2 text-center text-sm shrink-0 ${badgeClass}"
+                        onblur="invSaveOnBlur(this)">
+                    <span class="${stockClass} text-xs flex-1">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    <div class="flex gap-1.5 shrink-0">
+                        <button onclick="openReceiveStock(${r.product_id},'${r.size}','${r.color}','${r.variant_type}','${prod.name}',${stock})"
+                            class="text-[10px] px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-400/20 text-green-400 hover:bg-green-500/20 transition font-bold"
+                            title="Terima Stok">
+                            <i class="fa-solid fa-plus"></i>
                         </button>
-                        ${item.stock<5?'<i class="fa-solid fa-triangle-exclamation text-red-400 text-[10px] ml-1" title="Stok menipis"></i>':''}
-                    </td>
-                </tr>`;
+                        <button onclick="openVariantHistory(${r.product_id},'${r.size}','${r.color}','${r.variant_type}','${prod.name}')"
+                            class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition"
+                            title="Riwayat">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </button>
+                    </div>
+                </div>`;
             });
-        }
-        tbody.innerHTML = rows || '<tr><td colspan="6" class="px-5 py-10 text-center text-white/20 text-xs">Belum ada data inventori.</td></tr>';
-    } catch(e) { toast('Error: '+e.message, true); }
+
+            variantHtml += `
+            <div class="border-t border-white/5 pt-3 mt-3 first:border-0 first:pt-0 first:mt-0">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="w-3 h-3 rounded-full border border-white/15 shrink-0" style="background:${cm.hex}"></span>
+                    <span class="text-xs font-semibold text-white/70">${cm.label}</span>
+                    ${vtLabel}
+                </div>
+                ${sizeRows}
+            </div>`;
+        });
+
+        html += `
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-sm">${prod.name}</div>
+                    <div class="text-[10px] font-mono text-white/30 mt-0.5">${prod.sku || ''}</div>
+                </div>
+                <span class="text-[10px] text-white/30">${prod.rows.length} varian</span>
+            </div>
+            <div class="px-4 py-3">${variantHtml}</div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
 }
 
-async function saveOneStock(product_id, size, color, variant_type, inputId) {
-    const stock = parseInt(document.getElementById(inputId).value);
+function filterInventoryCritical() {
+    invShowCriticalOnly = !invShowCriticalOnly;
+    const btn = document.getElementById('inv-critical-btn');
+    btn.classList.toggle('bg-red-500/30', invShowCriticalOnly);
+    btn.classList.toggle('border-red-400/50', invShowCriticalOnly);
+    renderInventory();
+}
+
+async function invSaveOnBlur(input) {
+    const product_id  = parseInt(input.dataset.pid);
+    const size        = input.dataset.size;
+    const color       = input.dataset.color;
+    const variant_type = input.dataset.vtype;
+    const stock       = parseInt(input.value);
+    if (isNaN(stock) || stock < 0) return;
     try {
-        await apiFetch('/api/inventory/single', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({product_id,size,color,variant_type,stock}) });
+        await apiFetch('/api/inventory/single', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id, size, color, variant_type, stock })
+        });
+        // update cache
+        const item = cachedInventoryAll.find(r =>
+            r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
+        if (item) item.stock = stock;
         toast('Stok diperbarui');
-    } catch(e) { toast('Gagal: '+e.message, true); }
+        // refresh badges without full re-render
+        renderInventory();
+    } catch(e) { toast('Gagal simpan: ' + e.message, true); }
 }
 
-async function saveInventory() {
-    const updates = Object.values(inventoryEdits);
-    if (!updates.length) return toast('Tidak ada perubahan');
+// ── Receive Stock Modal ────────────────────────────────────────────────────────
+function openReceiveStock(product_id, size, color, variant_type, productName, currentStock) {
+    document.getElementById('rsm-product-id').value  = product_id;
+    document.getElementById('rsm-size').value         = size;
+    document.getElementById('rsm-color').value        = color;
+    document.getElementById('rsm-variant-type').value = variant_type;
+    document.getElementById('rsm-qty').value          = 1;
+    document.getElementById('rsm-note').value         = '';
+    document.getElementById('rsm-product-name').textContent = productName;
+    const cm = resolveColor(color);
+    document.getElementById('rsm-color-dot').style.background = cm.hex;
+    const vtText = (variant_type && variant_type !== 'null') ? ` · ${variant_type}` : '';
+    document.getElementById('rsm-variant-info').textContent = `${cm.label}${vtText} · Size ${size}`;
+    document.getElementById('rsm-subtitle').textContent     = `${size} · ${cm.label}`;
+    document.getElementById('rsm-current-stock').textContent = currentStock;
+    document.getElementById('rsm-after').textContent = currentStock + 1;
+    // live preview
+    const qtyInput = document.getElementById('rsm-qty');
+    qtyInput.oninput = () => {
+        const q = parseInt(qtyInput.value) || 0;
+        document.getElementById('rsm-after').textContent = currentStock + q;
+    };
+    const modal = document.getElementById('receive-stock-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    qtyInput.focus();
+}
+
+function closeReceiveStock() {
+    const modal = document.getElementById('receive-stock-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+async function submitReceiveStock() {
+    const product_id   = parseInt(document.getElementById('rsm-product-id').value);
+    const size         = document.getElementById('rsm-size').value;
+    const color        = document.getElementById('rsm-color').value;
+    const variant_type = document.getElementById('rsm-variant-type').value;
+    const quantity     = parseInt(document.getElementById('rsm-qty').value);
+    const note         = document.getElementById('rsm-note').value.trim();
+    if (!quantity || quantity < 1) return toast('Masukkan jumlah minimal 1', true);
     try {
-        await apiFetch('/api/inventory', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({updates}) });
-        toast('Semua stok diperbarui ✅');
-        inventoryEdits = {};
-        loadInventory();
-    } catch(e) { toast('Gagal: '+e.message, true); }
+        const res = await apiFetch('/api/inventory/receive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id, size, color, variant_type, quantity, note })
+        });
+        toast(`Stok ditambah +${quantity} → total ${res.after} ✅`);
+        closeReceiveStock();
+        await loadInventory();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+// ── Variant History Modal ──────────────────────────────────────────────────────
+const movementLabel = {
+    receive:               { icon: 'fa-box-archive',           color: 'text-green-400',  label: 'Terima Stok' },
+    manual_set:            { icon: 'fa-pen-to-square',         color: 'text-blue-400',   label: 'Set Manual' },
+    order_out:             { icon: 'fa-cart-arrow-down',       color: 'text-yellow-400', label: 'Terjual' },
+    order_cancel_restore:  { icon: 'fa-rotate-left',           color: 'text-purple-400', label: 'Dibatalkan' }
+};
+
+async function openVariantHistory(product_id, size, color, variant_type, productName) {
+    const cm     = resolveColor(color);
+    const vtText = (variant_type && variant_type !== 'null') ? ` · ${variant_type}` : '';
+    document.getElementById('hm-subtitle').textContent = `${productName} · ${cm.label}${vtText} · Size ${size}`;
+
+    const modal = document.getElementById('history-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('hm-movements-list').innerHTML = '<div class="text-center py-6 text-white/20 text-xs">Memuat...</div>';
+    document.getElementById('hm-buyers-list').innerHTML    = '<div class="text-center py-6 text-white/20 text-xs">Memuat...</div>';
+    switchHistoryTab('movements');
+
+    try {
+        const data = await apiFetch(
+            `/api/inventory/variant/history?product_id=${product_id}&color=${encodeURIComponent(color)}&size=${encodeURIComponent(size)}&variant_type=${encodeURIComponent(variant_type)}`
+        );
+
+        // Stock movements
+        const mvList = document.getElementById('hm-movements-list');
+        if (!data.movements.length) {
+            mvList.innerHTML = '<div class="text-center py-6 text-white/20 text-xs">Belum ada pergerakan stok.</div>';
+        } else {
+            mvList.innerHTML = data.movements.map(m => {
+                const ml = movementLabel[m.movement_type] || { icon:'fa-circle-dot', color:'text-white/40', label: m.movement_type };
+                const sign = m.quantity_change > 0 ? '+' : '';
+                const ts = new Date(m.created_at).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                return `<div class="flex items-start gap-3 bg-white/3 rounded-xl px-3 py-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center shrink-0 mt-0.5">
+                        <i class="fa-solid ${ml.icon} text-xs ${ml.color}"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-xs font-bold ${ml.color}">${ml.label}</span>
+                            <span class="text-xs font-bold ${m.quantity_change > 0 ? 'text-green-400' : 'text-red-400'}">${sign}${m.quantity_change}</span>
+                        </div>
+                        <div class="text-[10px] text-white/30 mt-0.5">${m.quantity_before} → ${m.quantity_after}${m.note ? ` · ${m.note}` : ''}</div>
+                        <div class="text-[9px] text-white/20 mt-0.5">${ts}${m.admin_user ? ' · ' + m.admin_user : ''}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Buyers
+        const buyList = document.getElementById('hm-buyers-list');
+        if (!data.buyers.length) {
+            buyList.innerHTML = '<div class="text-center py-6 text-white/20 text-xs">Belum ada pembeli untuk varian ini.</div>';
+        } else {
+            const channelBadge = s => {
+                if (s === 'whatsapp') return '<span class="bg-green-500/20 text-green-400 text-[9px] font-bold px-1.5 py-0.5 rounded-full">WA</span>';
+                if (s === 'website')  return '<span class="bg-blue-500/20 text-blue-400 text-[9px] font-bold px-1.5 py-0.5 rounded-full">Web</span>';
+                return `<span class="bg-white/10 text-white/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full">${s||'—'}</span>`;
+            };
+            buyList.innerHTML = data.buyers.map(b => {
+                const ts = new Date(b.created_at).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
+                return `<div class="flex items-start gap-3 bg-white/3 rounded-xl px-3 py-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center shrink-0 mt-0.5">
+                        <i class="fa-solid fa-user text-xs text-white/40"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-xs font-bold text-white/80 truncate">${b.customer_name || 'Pembeli'}</span>
+                            <span class="text-xs text-white/40 shrink-0">×${b.quantity}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            ${channelBadge(b.order_source)}
+                            <span class="text-[9px] text-white/30">${b.order_code || ''} · ${ts}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+    } catch(e) {
+        document.getElementById('hm-movements-list').innerHTML = `<div class="text-center py-6 text-red-400/60 text-xs">Error: ${e.message}</div>`;
+    }
+}
+
+function closeHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function switchHistoryTab(tab) {
+    document.getElementById('hpanel-movements').classList.toggle('hidden', tab !== 'movements');
+    document.getElementById('hpanel-buyers').classList.toggle('hidden', tab !== 'buyers');
+    document.getElementById('htab-movements').className = tab === 'movements'
+        ? 'history-tab text-xs font-bold px-4 py-1.5 rounded-xl bg-white text-black'
+        : 'history-tab text-xs font-bold px-4 py-1.5 rounded-xl bg-white/5 text-white/60 hover:bg-white/10';
+    document.getElementById('htab-buyers').className = tab === 'buyers'
+        ? 'history-tab text-xs font-bold px-4 py-1.5 rounded-xl bg-white text-black'
+        : 'history-tab text-xs font-bold px-4 py-1.5 rounded-xl bg-white/5 text-white/60 hover:bg-white/10';
 }
 
 // ─── POPULAR ──────────────────────────────────────────────────────────────────
