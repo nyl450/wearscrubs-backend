@@ -1007,10 +1007,37 @@
                     <div id="rsm-variant-info" class="text-[11px] text-white/40"></div>
                 </div>
             </div>
-            <!-- Current stock -->
-            <div class="flex justify-between items-center">
-                <span class="text-xs text-white/40">Stok saat ini</span>
-                <span id="rsm-current-stock" class="text-sm font-bold text-white/70">—</span>
+            <!-- Current stock (normal + reject) -->
+            <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-0.5 bg-white/3 rounded-xl px-3 py-2">
+                    <span class="text-[10px] text-white/30">Stok Normal</span>
+                    <span id="rsm-current-stock" class="text-sm font-bold text-white/80">—</span>
+                </div>
+                <div class="flex flex-col gap-0.5 bg-red-500/5 border border-red-400/15 rounded-xl px-3 py-2">
+                    <span class="text-[10px] text-white/30">Stok Reject</span>
+                    <span id="rsm-current-reject" class="text-sm font-bold text-red-400">—</span>
+                </div>
+            </div>
+            <!-- Kondisi -->
+            <div>
+                <label class="block text-xs text-white/50 mb-1.5">Kondisi Barang Masuk</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label id="rsm-cond-normal-lbl" class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-green-400/40 bg-green-500/10 cursor-pointer transition">
+                        <input type="radio" name="rsm-condition" value="normal" id="rsm-cond-normal" checked class="hidden" onchange="rsmUpdateCondition()">
+                        <span class="w-3.5 h-3.5 rounded-full border-2 border-green-400 flex items-center justify-center shrink-0">
+                            <span id="rsm-dot-normal" class="w-2 h-2 rounded-full bg-green-400"></span>
+                        </span>
+                        <span class="text-xs font-semibold text-green-400">Normal</span>
+                    </label>
+                    <label id="rsm-cond-reject-lbl" class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/10 bg-white/3 cursor-pointer transition">
+                        <input type="radio" name="rsm-condition" value="reject" id="rsm-cond-reject" class="hidden" onchange="rsmUpdateCondition()">
+                        <span class="w-3.5 h-3.5 rounded-full border-2 border-white/30 flex items-center justify-center shrink-0">
+                            <span id="rsm-dot-reject" class="w-2 h-2 rounded-full bg-red-400 hidden"></span>
+                        </span>
+                        <span class="text-xs font-semibold text-white/50" id="rsm-reject-label">Reject</span>
+                    </label>
+                </div>
+                <p id="rsm-reject-note" class="hidden mt-1.5 text-[10px] text-red-400/70">Stok reject bisa digunakan untuk display produk atau diperbaiki nanti.</p>
             </div>
             <!-- Quantity -->
             <div>
@@ -1025,7 +1052,7 @@
                     class="!py-2.5 w-full text-sm">
             </div>
             <!-- After preview -->
-            <div class="flex justify-between items-center bg-green-500/10 border border-green-400/20 rounded-xl px-4 py-3">
+            <div id="rsm-after-wrap" class="flex justify-between items-center bg-green-500/10 border border-green-400/20 rounded-xl px-4 py-3">
                 <span class="text-xs text-white/40">Stok setelah ditambah</span>
                 <span id="rsm-after" class="text-sm font-bold text-green-400">—</span>
             </div>
@@ -1037,7 +1064,7 @@
         </div>
         <div class="flex gap-3 px-5 pb-5">
             <button onclick="closeReceiveStock()" class="flex-1 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5 transition">Batal</button>
-            <button onclick="submitReceiveStock()" class="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
+            <button onclick="submitReceiveStock()" id="rsm-submit-btn" class="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-box-archive"></i> Terima Stok
             </button>
         </div>
@@ -1077,6 +1104,48 @@
             <div id="hpanel-buyers" class="hidden">
                 <div id="hm-buyers-list" class="space-y-2"></div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ REJECT TO NORMAL MODAL ════════════════════════════════════════════════ -->
+<div id="r2n-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+    <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-xs">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-darkborder">
+            <div>
+                <h3 class="font-bold text-sm">Ubah Reject → Normal</h3>
+                <p id="r2n-subtitle" class="text-[11px] text-white/40 mt-0.5"></p>
+            </div>
+            <button onclick="closeR2N()" class="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-white/50">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+        <div class="px-5 py-4 space-y-4">
+            <div class="flex justify-between items-center bg-red-500/5 border border-red-400/15 rounded-xl px-4 py-3">
+                <span class="text-xs text-white/40">Stok Reject tersedia</span>
+                <span id="r2n-reject-avail" class="text-sm font-bold text-red-400">—</span>
+            </div>
+            <div>
+                <label class="block text-xs text-white/50 mb-1.5">Jumlah yang diperbaiki / diubah ke Normal</label>
+                <input id="r2n-qty" type="number" min="1" value="1"
+                    class="!py-3 !text-center !text-lg !font-bold w-full">
+            </div>
+            <div class="flex justify-between items-center bg-green-500/10 border border-green-400/20 rounded-xl px-4 py-3">
+                <span class="text-xs text-white/40">Stok Normal setelah</span>
+                <span id="r2n-normal-after" class="text-sm font-bold text-green-400">—</span>
+            </div>
+            <input type="hidden" id="r2n-product-id">
+            <input type="hidden" id="r2n-size">
+            <input type="hidden" id="r2n-color">
+            <input type="hidden" id="r2n-variant-type">
+            <input type="hidden" id="r2n-current-normal">
+            <input type="hidden" id="r2n-current-reject">
+        </div>
+        <div class="flex gap-3 px-5 pb-5">
+            <button onclick="closeR2N()" class="flex-1 py-2.5 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5 transition">Batal</button>
+            <button onclick="submitR2N()" id="r2n-submit-btn" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition">
+                <i class="fa-solid fa-arrow-right-arrow-left mr-1.5"></i> Konversi ke Normal
+            </button>
         </div>
     </div>
 </div>
@@ -1869,22 +1938,28 @@ function renderInventory() {
             const vtLabel = (v.vtype && v.vtype !== 'null') ? `<span class="text-[11px] font-semibold text-white/50 ml-1.5 tracking-wide">· ${v.vtype}</span>` : '';
             let sizeRows = '';
             v.sizes.forEach(r => {
-                const stock = parseInt(r.stock);
-                const stockClass = stock === 0 ? 'text-red-400 font-bold' : stock < 5 ? 'text-yellow-400 font-bold' : 'text-white/80';
-                const badgeClass = stock === 0
-                    ? '!border-red-400/50 !text-red-400'
-                    : stock < 5 ? '!border-yellow-400/50 !text-yellow-400' : '';
-                const key = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
+                const stock       = parseInt(r.stock);
+                const stockReject = parseInt(r.stock_reject || 0);
+                const stockClass  = stock === 0 ? 'text-red-400 font-bold' : stock < 5 ? 'text-yellow-400 font-bold' : 'text-white/80';
+                const badgeClass  = stock === 0 ? '!border-red-400/50 !text-red-400' : stock < 5 ? '!border-yellow-400/50 !text-yellow-400' : '';
+                const key         = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
+                const rejectBadge = stockReject > 0
+                    ? `<button onclick="openR2N(${r.product_id},'${r.size}','${r.color}','${r.variant_type}','${prod.name}',${stock},${stockReject})"
+                           class="flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition"
+                           title="Stok Reject — klik untuk ubah ke Normal">
+                           <i class="fa-solid fa-triangle-exclamation text-[8px]"></i>${stockReject} reject
+                       </button>` : '';
                 sizeRows += `
-                <div class="flex items-center gap-3 py-2.5 border-t border-white/5 first:border-0">
+                <div class="flex items-center gap-2 py-2.5 border-t border-white/5 first:border-0 flex-wrap">
                     <span class="text-xs font-bold text-white/50 w-8 shrink-0">${r.size}</span>
                     <input type="number" min="0" value="${stock}" id="inv-${key}"
                         data-pid="${r.product_id}" data-size="${r.size}" data-color="${r.color}" data-vtype="${r.variant_type}"
                         class="!w-16 !rounded-lg !py-1.5 !px-2 text-center text-sm shrink-0 ${badgeClass}"
                         onblur="invSaveOnBlur(this)">
-                    <span class="${stockClass} text-xs flex-1">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    <span class="${stockClass} text-xs flex-1 min-w-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    ${rejectBadge}
                     <div class="flex gap-1.5 shrink-0">
-                        <button onclick="openReceiveStock(${r.product_id},'${r.size}','${r.color}','${r.variant_type}','${prod.name}',${stock})"
+                        <button onclick="openReceiveStock(${r.product_id},'${r.size}','${r.color}','${r.variant_type}','${prod.name}',${stock},${stockReject})"
                             class="text-[10px] px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-400/20 text-green-400 hover:bg-green-500/20 transition font-bold"
                             title="Terima Stok">
                             <i class="fa-solid fa-plus"></i>
@@ -1957,7 +2032,13 @@ async function invSaveOnBlur(input) {
 }
 
 // ── Receive Stock Modal ────────────────────────────────────────────────────────
-function openReceiveStock(product_id, size, color, variant_type, productName, currentStock) {
+let _rsmCurrentStock = 0;
+let _rsmCurrentReject = 0;
+
+function openReceiveStock(product_id, size, color, variant_type, productName, currentStock, currentReject) {
+    _rsmCurrentStock  = parseInt(currentStock)  || 0;
+    _rsmCurrentReject = parseInt(currentReject) || 0;
+
     document.getElementById('rsm-product-id').value  = product_id;
     document.getElementById('rsm-size').value         = size;
     document.getElementById('rsm-color').value        = color;
@@ -1970,18 +2051,53 @@ function openReceiveStock(product_id, size, color, variant_type, productName, cu
     const vtText = (variant_type && variant_type !== 'null') ? ` · ${variant_type}` : '';
     document.getElementById('rsm-variant-info').textContent = `${cm.label}${vtText} · Size ${size}`;
     document.getElementById('rsm-subtitle').textContent     = `${size} · ${cm.label}`;
-    document.getElementById('rsm-current-stock').textContent = currentStock;
-    document.getElementById('rsm-after').textContent = currentStock + 1;
+    document.getElementById('rsm-current-stock').textContent  = _rsmCurrentStock;
+    document.getElementById('rsm-current-reject').textContent = _rsmCurrentReject;
+    // reset to Normal radio
+    document.querySelectorAll('input[name="rsm-condition"]').forEach(r => r.checked = r.value === 'normal');
+    rsmUpdateCondition();
     // live preview
     const qtyInput = document.getElementById('rsm-qty');
-    qtyInput.oninput = () => {
-        const q = parseInt(qtyInput.value) || 0;
-        document.getElementById('rsm-after').textContent = currentStock + q;
-    };
+    qtyInput.oninput = () => rsmUpdateCondition();
     const modal = document.getElementById('receive-stock-modal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     qtyInput.focus();
+}
+
+function rsmUpdateCondition() {
+    const selected = document.querySelector('input[name="rsm-condition"]:checked')?.value || 'normal';
+    const qty = parseInt(document.getElementById('rsm-qty').value) || 0;
+    const isReject = selected === 'reject';
+
+    // Update normal label style
+    const normalLbl = document.getElementById('rsm-cond-normal-lbl');
+    const rejectLbl = document.getElementById('rsm-cond-reject-lbl');
+    const dotNormal = document.getElementById('rsm-dot-normal');
+    const dotReject = document.getElementById('rsm-dot-reject');
+    const rejectNote = document.getElementById('rsm-reject-note');
+    const afterEl   = document.getElementById('rsm-after');
+    const afterWrap = document.getElementById('rsm-after-wrap');
+
+    if (normalLbl) normalLbl.className = `flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition ${
+        !isReject ? 'border-green-400/40 bg-green-500/10' : 'border-white/10 bg-white/3'
+    }`;
+    if (rejectLbl) rejectLbl.className = `flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition ${
+        isReject ? 'border-red-400/40 bg-red-500/10' : 'border-white/10 bg-white/3'
+    }`;
+    if (dotNormal) dotNormal.classList.toggle('hidden', isReject);
+    if (dotReject) dotReject.classList.toggle('hidden', !isReject);
+    if (rejectNote) rejectNote.classList.toggle('hidden', !isReject);
+
+    const base = isReject ? _rsmCurrentReject : _rsmCurrentStock;
+    const after = base + qty;
+    if (afterEl) {
+        afterEl.textContent = after;
+        afterEl.className = isReject ? 'text-sm font-bold text-red-400' : 'text-sm font-bold text-green-400';
+    }
+    if (afterWrap) afterWrap.className = `flex justify-between items-center rounded-xl px-4 py-3 ${
+        isReject ? 'bg-red-500/10 border border-red-400/20' : 'bg-green-500/10 border border-green-400/20'
+    }`;
 }
 
 function closeReceiveStock() {
@@ -1997,17 +2113,84 @@ async function submitReceiveStock() {
     const variant_type = document.getElementById('rsm-variant-type').value;
     const quantity     = parseInt(document.getElementById('rsm-qty').value);
     const note         = document.getElementById('rsm-note').value.trim();
+    const stock_type   = document.querySelector('input[name="rsm-condition"]:checked')?.value || 'normal';
     if (!quantity || quantity < 1) return toast('Masukkan jumlah minimal 1', true);
+    const btn = document.getElementById('rsm-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
     try {
         const res = await apiFetch('/api/inventory/receive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id, size, color, variant_type, quantity, note })
+            body: JSON.stringify({ product_id, size, color, variant_type, quantity, note, stock_type })
         });
-        toast(`Stok ditambah +${quantity} → total ${res.after} ✅`);
+        const label = stock_type === 'reject' ? 'reject' : 'normal';
+        toast(`Stok ${label} ditambah +${quantity} → total ${res.after} ✅`);
         closeReceiveStock();
         await loadInventory();
-    } catch(e) { toast('Gagal: ' + e.message, true); }
+    } catch(e) {
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Simpan'; }
+    }
+}
+
+// ── Reject → Normal Modal ──────────────────────────────────────────────────────
+function openR2N(product_id, size, color, variant_type, productName, currentNormal, currentReject) {
+    document.getElementById('r2n-product-id').value    = product_id;
+    document.getElementById('r2n-size').value          = size;
+    document.getElementById('r2n-color').value         = color;
+    document.getElementById('r2n-variant-type').value  = variant_type;
+    document.getElementById('r2n-current-normal').value = currentNormal;
+    document.getElementById('r2n-current-reject').value = currentReject;
+    document.getElementById('r2n-qty').value            = 1;
+    const cm = resolveColor(color);
+    const vtText = (variant_type && variant_type !== 'null') ? ` · ${variant_type}` : '';
+    document.getElementById('r2n-subtitle').textContent     = `${productName} · ${cm.label}${vtText} · Size ${size}`;
+    document.getElementById('r2n-reject-avail').textContent = currentReject;
+    document.getElementById('r2n-normal-after').textContent = currentNormal + 1;
+    // live preview
+    const qtyInput = document.getElementById('r2n-qty');
+    qtyInput.oninput = () => {
+        const q = Math.min(parseInt(qtyInput.value) || 0, parseInt(currentReject));
+        document.getElementById('r2n-normal-after').textContent = parseInt(currentNormal) + q;
+    };
+    const modal = document.getElementById('r2n-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    qtyInput.focus();
+}
+
+function closeR2N() {
+    const modal = document.getElementById('r2n-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+async function submitR2N() {
+    const product_id    = parseInt(document.getElementById('r2n-product-id').value);
+    const size          = document.getElementById('r2n-size').value;
+    const color         = document.getElementById('r2n-color').value;
+    const variant_type  = document.getElementById('r2n-variant-type').value;
+    const currentReject = parseInt(document.getElementById('r2n-current-reject').value) || 0;
+    const quantity      = parseInt(document.getElementById('r2n-qty').value);
+    if (!quantity || quantity < 1) return toast('Masukkan jumlah minimal 1', true);
+    if (quantity > currentReject) return toast(`Maksimal ${currentReject} unit (stok reject tersedia)`, true);
+    const btn = document.getElementById('r2n-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Memproses...'; }
+    try {
+        const res = await apiFetch('/api/inventory/reject-to-normal', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id, size, color, variant_type, quantity })
+        });
+        toast(`${quantity} unit berhasil dikonversi ke stok normal ✅`);
+        closeR2N();
+        await loadInventory();
+    } catch(e) {
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Konversi ke Normal'; }
+    }
 }
 
 // ── Variant History Modal ──────────────────────────────────────────────────────
@@ -2015,7 +2198,9 @@ const movementLabel = {
     receive:               { icon: 'fa-box-archive',           color: 'text-green-400',  label: 'Terima Stok' },
     manual_set:            { icon: 'fa-pen-to-square',         color: 'text-blue-400',   label: 'Set Manual' },
     order_out:             { icon: 'fa-cart-arrow-down',       color: 'text-yellow-400', label: 'Terjual' },
-    order_cancel_restore:  { icon: 'fa-rotate-left',           color: 'text-purple-400', label: 'Dibatalkan' }
+    order_cancel_restore:  { icon: 'fa-rotate-left',           color: 'text-purple-400', label: 'Dibatalkan' },
+    receive_reject:        { icon: 'fa-triangle-exclamation',  color: 'text-red-400',    label: 'Terima Reject' },
+    reject_to_normal:      { icon: 'fa-arrow-right-arrow-left',color: 'text-indigo-400', label: 'Reject → Normal' }
 };
 
 async function openVariantHistory(product_id, size, color, variant_type, productName) {

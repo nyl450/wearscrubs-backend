@@ -373,6 +373,14 @@ async function initDB() {
     await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_lookup          ON stock_movements(product_id, color, size, variant_type)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_created         ON stock_movements(created_at DESC)');
 
+    // ── Migrate: reject stock support ─────────────────────────────────────────
+    await dbRun(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS stock_reject INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS is_reject BOOLEAN DEFAULT FALSE`);
+    // Extend movement_type CHECK to allow reject movement types
+    await dbRun(`ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check`);
+    await dbRun(`ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_movement_type_check
+        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal'))`);
+
     // ── Seed default admin ────────────────────────────────────────────────────
     const existingAdmin = await dbGet('SELECT id FROM users WHERE username = $1', ['admin']);
     if (!existingAdmin) {
@@ -992,36 +1000,87 @@ app.get('/api/inventory/:product_id/check', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/inventory/receive — terima stok dari penjahit, log ke stock_movements
+// POST /api/inventory/receive — terima stok dari penjahit, support normal & reject
 app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req, res) => {
     try {
-        const { product_id, size, color, variant_type, quantity, note } = req.body;
+        const { product_id, size, color, variant_type, quantity, note, stock_type } = req.body;
         if (!product_id || !size || !color || !variant_type)
             return res.status(400).json({ error: 'Data tidak lengkap' });
         const qty = parseInt(quantity);
         if (!qty || qty <= 0)
             return res.status(400).json({ error: 'Jumlah harus lebih dari 0' });
 
+        const isReject = stock_type === 'reject';
         const cur = await dbGet(
-            'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+            'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
             [product_id, size, color, variant_type]
         );
-        const before = cur ? parseInt(cur.stock) : 0;
-        const after = before + qty;
+        const normalBefore = cur ? parseInt(cur.stock || 0) : 0;
+        const rejectBefore = cur ? parseInt(cur.stock_reject || 0) : 0;
+        const before = isReject ? rejectBefore : normalBefore;
+        const after  = before + qty;
+
+        if (isReject) {
+            await dbRun(
+                `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES ($1,$2,$3,$4,0,$5)
+                 ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock_reject = $6`,
+                [product_id, size, color, variant_type, after, after]
+            );
+        } else {
+            await dbRun(
+                `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES ($1,$2,$3,$4,$5,0)
+                 ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
+                [product_id, size, color, variant_type, after, after]
+            );
+        }
+        await dbRun(
+            `INSERT INTO stock_movements
+             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [product_id, size, color, variant_type, isReject ? 'receive_reject' : 'receive',
+             qty, before, after, note || (isReject ? 'Terima stok reject' : 'Terima stok baru'),
+             req.user.username, isReject]
+        );
+        invalidateCache('inventory');
+        res.json({ message: isReject ? 'Stok reject ditambahkan' : 'Stok berhasil ditambahkan', before, after, added: qty, stock_type: isReject ? 'reject' : 'normal' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/inventory/reject-to-normal — ubah stok reject menjadi stok normal
+app.put('/api/inventory/reject-to-normal', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const { product_id, size, color, variant_type, quantity } = req.body;
+        if (!product_id || !size || !color || !variant_type)
+            return res.status(400).json({ error: 'Data tidak lengkap' });
+        const qty = parseInt(quantity);
+        if (!qty || qty <= 0) return res.status(400).json({ error: 'Jumlah harus lebih dari 0' });
+
+        const cur = await dbGet(
+            'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+            [product_id, size, color, variant_type]
+        );
+        if (!cur) return res.status(404).json({ error: 'Varian tidak ditemukan' });
+
+        const rejectBefore = parseInt(cur.stock_reject || 0);
+        if (qty > rejectBefore) return res.status(400).json({ error: `Stok reject hanya ${rejectBefore}` });
+
+        const normalBefore = parseInt(cur.stock || 0);
+        const rejectAfter  = rejectBefore - qty;
+        const normalAfter  = normalBefore + qty;
 
         await dbRun(
-            `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
-            [product_id, size, color, variant_type, after, after]
+            'UPDATE inventory SET stock=$1, stock_reject=$2 WHERE product_id=$3 AND size=$4 AND color=$5 AND variant_type=$6',
+            [normalAfter, rejectAfter, product_id, size, color, variant_type]
         );
         await dbRun(
             `INSERT INTO stock_movements
-             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
-             VALUES ($1,$2,$3,$4,'receive',$5,$6,$7,$8,$9)`,
-            [product_id, size, color, variant_type, qty, before, after, note || 'Terima stok baru', req.user.username]
+             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
+             VALUES ($1,$2,$3,$4,'reject_to_normal',$5,$6,$7,$8,$9,$10)`,
+            [product_id, size, color, variant_type, qty, rejectBefore, rejectAfter,
+             `Diubah reject→normal: ${qty} unit`, req.user.username, false]
         );
         invalidateCache('inventory');
-        res.json({ message: 'Stok berhasil ditambahkan', before, after, added: qty });
+        res.json({ message: `${qty} stok diubah dari reject ke normal`, normal_after: normalAfter, reject_after: rejectAfter });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
