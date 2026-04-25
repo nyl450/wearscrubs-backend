@@ -960,6 +960,8 @@ app.get('/api/inventory/variant/history', requireAuth(), async (req, res) => {
              FROM order_items oi
              JOIN orders o ON o.id = oi.order_id
              WHERE oi.product_id=$1 AND oi.color=$2 AND oi.size=$3 AND oi.variant_type=$4
+               AND o.order_status != 'cancelled'
+               AND o.payment_status = 'paid'
              ORDER BY o.created_at DESC LIMIT 50`,
             [product_id, color, size, variant_type]
         );

@@ -24,6 +24,7 @@
         input[type=text], input[type=number], select { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: white; border-radius: 0.75rem; padding: 0 1rem; font-size: 0.875rem; width: 100%; height: 42px; box-sizing: border-box; outline: none; transition: border-color 0.15s, background 0.15s; }
         textarea { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: white; border-radius: 0.75rem; padding: 0.65rem 1rem; font-size: 0.875rem; width: 100%; box-sizing: border-box; outline: none; transition: border-color 0.15s, background 0.15s; }
         input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.07); box-shadow: none; }
+        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.22); font-style: italic; font-size: 0.8125rem; }
         select option { background: #1a1a1a; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         .sidebar-group-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.18); padding: 14px 16px 4px; }
@@ -1865,7 +1866,7 @@ function renderInventory() {
         let variantHtml = '';
         Object.values(byVariant).forEach(v => {
             const cm = resolveColor(v.color);
-            const vtLabel = (v.vtype && v.vtype !== 'null') ? `<span class="text-[9px] text-white/30 uppercase ml-1">· ${v.vtype}</span>` : '';
+            const vtLabel = (v.vtype && v.vtype !== 'null') ? `<span class="text-[11px] font-semibold text-white/50 ml-1.5 tracking-wide">· ${v.vtype}</span>` : '';
             let sizeRows = '';
             v.sizes.forEach(r => {
                 const stock = parseInt(r.stock);
@@ -2174,7 +2175,7 @@ async function loadOrders() {
 function updateOrderTabCounts() {
     const counts = {
         all:       cachedOrders.length,
-        pending:   cachedOrders.filter(o => o.payment_status === 'pending').length,
+        pending:   cachedOrders.filter(o => o.payment_status === 'pending' && o.order_status !== 'cancelled').length,
         paid:      cachedOrders.filter(o => o.payment_status === 'paid').length,
         bordir:    cachedOrders.filter(o => o.order_status === 'bordir').length,
         packed:    cachedOrders.filter(o => o.order_status === 'packed').length,
@@ -2203,7 +2204,7 @@ function filterOrders(filter) {
 function renderOrders() {
     const searchQ = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
     let filtered = currentOrderFilter === 'all'      ? cachedOrders
-        : currentOrderFilter === 'pending'   ? cachedOrders.filter(o => o.payment_status==='pending')
+        : currentOrderFilter === 'pending'   ? cachedOrders.filter(o => o.payment_status==='pending' && o.order_status !== 'cancelled')
         : currentOrderFilter === 'paid'      ? cachedOrders.filter(o => o.payment_status==='paid')
         : currentOrderFilter === 'bordir'    ? cachedOrders.filter(o => o.order_status==='bordir')
         : currentOrderFilter === 'cancelled' ? cachedOrders.filter(o => o.order_status==='cancelled')
