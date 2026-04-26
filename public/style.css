@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
         body {
             font-family: 'Inter', sans-serif;
@@ -91,9 +91,43 @@
             opacity: 0;
         }
 
-        .product-card:hover .product-img-container img {
+        .product-card:hover .product-card-img-container img {
             transform: scale(1.05);
         }
+
+        /* Gaya Khusus Chatbot AI */
+        #ai-chat-panel {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            transform-origin: bottom left;
+        }
+        
+        .chat-hidden {
+            transform: scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .chat-visible {
+            transform: scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #9ca3af;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
 
@@ -112,13 +146,9 @@
                 border-right: none;
                 border-bottom: 1px solid rgba(255,255,255,0.1);
             }
+            #ai-chat-panel {
+                width: calc(100vw - 2rem) !important;
+                left: 1rem !important;
+                bottom: 5rem !important;
+            }
         }
-
-        /* â”€â”€â”€ Dark Mode: Tombol Bahasa di Mobile Drawer â”€â”€â”€ */
-        /* Aktif = bg-gray-900 (light) / bg-white (dark) â†’ text gelap */
-        html.dark #mobile-drawer a[data-lang-id].bg-gray-900,
-        html.dark #mobile-drawer a[data-lang-en].bg-gray-900 { color: #111827 !important; }
-        /* Tidak Aktif = bg-gray-100 (light) / bg-white/10 (dark) â†’ text putih dimmed */
-        html.dark #mobile-drawer a[data-lang-id]:not(.bg-gray-900),
-        html.dark #mobile-drawer a[data-lang-en]:not(.bg-gray-900) { color: rgba(255,255,255,0.6) !important; }
-
