@@ -318,6 +318,9 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_bordir_logo BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_bordir_nama BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS bordir_logo_requested BOOLEAN DEFAULT FALSE`);
+    // Migrate: per-item bordir flags on order_items (so invoice can derive base price per item)
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_nama BOOLEAN DEFAULT FALSE`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_logo BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_by TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT DEFAULT NULL`);
     // Migrate: order channel & payment method
@@ -1341,10 +1344,11 @@ app.post('/api/orders', async (req, res) => {
 
         for (const item of itemDetails) {
             await dbRun(
-                `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
                 [orderId, item.product_id, item.size, item.color,
-                    item.variant_type || 'null', item.quantity, item.price]
+                    item.variant_type || 'null', item.quantity, item.price,
+                    item.bordir_nama || false, item.bordir_logo || false]
             );
         }
 

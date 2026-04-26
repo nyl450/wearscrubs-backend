@@ -13,6 +13,9 @@
         #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
         .step { display: none; }
         .step.active { display: block; }
+        /* step-info uses flex layout (2-column on lg) — must override block */
+        #step-info.active { display: flex; flex-direction: column; gap: 2rem; }
+        @media (min-width: 1024px) { #step-info.active { flex-direction: row; } }
         .city-option { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.8rem; }
         .city-option:hover { background: rgba(99,102,241,0.15); }
         input[type=text]:focus, input[type=tel]:focus, textarea:focus { border-color: #6366f1 !important; }
@@ -241,7 +244,7 @@ function goToStep(step) {
     const target = document.getElementById('step-' + step);
     target.classList.add('active');
     // step-info uses flex layout (lg:flex-row), others use block
-    target.style.display = (step === 'info') ? '' : 'block';
+    target.style.display = (step === 'info') ? 'flex' : 'block';
     // Progress bar
     const steps = { info: 'pb-info', bordir: 'pb-bordir', payment: 'pb-payment' };
     Object.values(steps).forEach(id => document.getElementById(id)?.classList.remove('text-gray-900','dark:text-white','underline','underline-offset-2'));

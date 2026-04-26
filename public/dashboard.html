@@ -3549,7 +3549,9 @@ async function waSubmitOrder() {
             if (bordirLogo) {
                 const logoColor = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
                 logoPos = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
-                embroideryDetails.push({ type: 'logo', item_label: itemLabel, value: 'Logo dikirim via WA', color: logoColor, position: logoPos });
+                // Store base64 if admin uploaded logo per-item; otherwise use global ref or placeholder
+                const logoVal = waBordirLogoFiles[idx] || waBordirRefBase64 || 'Logo dikirim via WA';
+                embroideryDetails.push({ type: 'logo', item_label: itemLabel, value: logoVal, color: logoColor, position: logoPos });
             }
             // Validate: both bordir → positions must differ
             if (bordirNama && bordirLogo && namaPos && logoPos && namaPos === logoPos) {
