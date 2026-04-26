@@ -333,7 +333,8 @@ function showCityDropdown(query) {
     if (!filtered.length) { dd.classList.add('hidden'); return; }
     dd.innerHTML = filtered.map(c => `
         <div class="city-option ${c.is_dki ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-white'}"
-             onclick="selectCity('${c.name.replace(/'/g, "\\'")}')">
+             onmousedown="event.preventDefault(); selectCity('${c.name.replace(/'/g, "\\'")}');"
+             ontouchend="event.preventDefault(); selectCity('${c.name.replace(/'/g, "\\'")}');">
             ${c.name} <span class="text-[10px] opacity-50">${c.is_dki ? '— DKI' : ''}</span>
         </div>`).join('');
     dd.classList.remove('hidden');
@@ -362,19 +363,16 @@ document.getElementById('f-city-search').addEventListener('input', function() {
     showCityDropdown(this.value);
     if (!this.value) { selectedCity = null; document.getElementById('shipping-info').classList.add('hidden'); document.getElementById('f-city').value = ''; recalcTotals(); }
 });
-// Auto-select on blur if user typed exact city name (or close match) without clicking dropdown
-document.getElementById('f-city-search').addEventListener('blur', async function() {
-    if (document.getElementById('f-city').value) return; // already selected
-    const typed = this.value.trim();
-    if (typed.length < 2) return;
-    const match = allCities.find(c => c.name.toLowerCase() === typed.toLowerCase())
-        || allCities.find(c => c.name.toLowerCase().startsWith(typed.toLowerCase()));
-    if (match) await selectCity(match.name);
-});
-document.addEventListener('click', e => {
+// Hide dropdown when clicking outside (use mousedown so it fires before blur)
+document.addEventListener('mousedown', e => {
     if (!e.target.closest('#f-city-search') && !e.target.closest('#city-dropdown'))
         document.getElementById('city-dropdown').classList.add('hidden');
 });
+// Also hide on touchstart outside (mobile support)
+document.addEventListener('touchstart', e => {
+    if (!e.target.closest('#f-city-search') && !e.target.closest('#city-dropdown'))
+        document.getElementById('city-dropdown').classList.add('hidden');
+}, { passive: true });
 
 // ─── STEP 1 SUBMIT ────────────────────────────────────────────────────────────
 
@@ -629,8 +627,12 @@ function copyAccount(btn) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 loadCities();
-renderPreview();
 goToStep('info');
+// renderPreview() needs Cart (defined in main.js which loads after this script)
+// defer until all scripts are loaded
+window.addEventListener('load', function() {
+    renderPreview();
+});
 </script>
 <script src="main.js"></script>
 </body>
