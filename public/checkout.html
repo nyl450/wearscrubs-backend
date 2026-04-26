@@ -25,7 +25,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-    <link rel="dns-prefetch" href="https://wearscrubs-production.up.railway.app">
+    <link rel="dns-prefetch" href="https://wearscrubs-backend-production.up.railway.app">
 </head>
 <body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
 
@@ -233,7 +233,7 @@
 
 <script src="catalog.js"></script>
 <script>
-const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://wearscrubs-production.up.railway.app';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://wearscrubs-backend-production.up.railway.app';
 function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
 
 const BORDIR_NAMA_PRICE = 20000;
