@@ -3,10 +3,10 @@
  * Handles: product loading from API, filtering (with inventory), sorting, cart management
  */
 
-// Auto-detect environment: use relative URL in production, localhost in dev
+// Auto-detect environment: use Railway URL in production, localhost in dev
 var WS_API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : '';  // Empty = relative URL, API call goes to same Railway server
+    : 'https://wearscrubs-backend-production.up.railway.app';  // ← ganti dengan URL Railway Anda
 
 const COLOR_META = {
     // Scrub colors
@@ -272,8 +272,8 @@ const Catalog = {
         <div class="product-card-wrapper" data-id="${p.id}">
             <div class="group relative bg-white dark:bg-darkcard rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col h-full">
                 <div class="relative aspect-[3/4] bg-gray-100 dark:bg-darkbg overflow-hidden cursor-pointer" onclick="window.location.href='product.html?id=${p.id}'">
-                    <img id="pc-img1-${p.id}" src="${img1}" alt="${p.name}" class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:scale-105 z-10" onerror="this.src='images/logo/logo%20ws%20white%20250x55.png';">
-                    <img id="pc-img2-${p.id}" src="${img2}" alt="${p.name}" class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0">
+                    <img loading="lazy" decoding="async" id="pc-img1-${p.id}" src="${img1}" alt="${p.name}" class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-100 group-hover:scale-105 z-10" onerror="this.src='images/logo/logo%20ws%20white%20250x55.png';">
+                    <img loading="lazy" decoding="async" id="pc-img2-${p.id}" src="${img2}" alt="${p.name}" class="absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 opacity-0 group-hover:opacity-100 group-hover:scale-105 z-0">
                     ${p.is_popular ? '<span class="absolute top-3 left-3 text-[10px] font-bold px-2 py-1 rounded-full bg-black/70 text-white backdrop-blur-sm z-20">⭐ Popular</span>' : ''}
                 </div>
                 <div class="p-4 flex-1 flex flex-col gap-2">

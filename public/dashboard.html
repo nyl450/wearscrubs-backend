@@ -200,7 +200,7 @@
         <span class="block w-3 h-0.5 bg-white/60 rounded-full transition-all"></span>
     </button>
     <div class="flex items-center gap-3 flex-1">
-        <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto object-contain">
+        <img decoding="async" src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto object-contain">
         <span class="text-xs font-bold tracking-widest text-white/30 uppercase ml-1 hidden sm:block">Admin Portal</span>
     </div>
     <div class="flex items-center gap-4">
@@ -1009,7 +1009,7 @@
     </div>
     <div class="p-6 space-y-4">
         <div id="photo-preview-wrap" class="hidden">
-            <img id="photo-preview-img" src="" class="w-full rounded-xl max-h-48 object-cover mb-2">
+            <img loading="lazy" decoding="async" id="photo-preview-img" src="" class="w-full rounded-xl max-h-48 object-cover mb-2">
             <p id="photo-preview-name" class="text-[10px] text-white/40 text-center mb-3 truncate"></p>
         </div>
         <div id="photo-upload-zone" class="space-y-1">
@@ -1450,7 +1450,7 @@ function renderProducts() {
         const safeP = JSON.stringify(p).replace(/"/g, '&quot;');
         return `<div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden group">
             <div class="aspect-[4/3] bg-black/20 overflow-hidden relative">
-                <img src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                <img loading="lazy" decoding="async" src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
                      onerror="this.src='images/logo/logo%20ws%20white%20250x55.png'; this.classList.add('object-contain','p-8','opacity-30')">
                 <div class="absolute top-3 left-3 flex gap-2">
                     <span class="text-[9px] font-bold px-2 py-1 rounded-full ${p.status==='active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">${p.status}</span>
@@ -1688,7 +1688,7 @@ function generatePhotoSlots(colors, types) {
                             <div class="photo-drop-zone rounded-md cursor-pointer relative flex flex-col items-center justify-center group" style="height:110px;" onclick="document.getElementById('file-${key}').click()">
                                 <input type="file" id="file-${key}" data-key="${key}" class="hidden" onchange="previewPhoto(this,'${key}')" accept="image/*">
                                 <div id="preview-${key}" class="absolute inset-0 hidden rounded-md overflow-hidden">
-                                    <img class="w-full h-full object-cover rounded-md">
+                                    <img loading="lazy" decoding="async" class="w-full h-full object-cover rounded-md">
                                     <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><span class="text-[9px] font-bold">GANTI</span></div>
                                 </div>
                                 <div id="placeholder-${key}"><i class="fa-solid fa-camera text-lg text-white/20 mb-1 block text-center"></i><p class="text-[9px] text-white/30">Upload</p></div>
@@ -2354,7 +2354,7 @@ async function loadPopular() {
             const isSel = popularSelected.has(p.id);
             return `<div class="pop-card bg-darkcard border border-darkborder ${isSel?'selected':''}" onclick="togglePopular(${p.id},this)" id="pop-card-${p.id}">
                 <div class="aspect-[4/3] bg-black/20 overflow-hidden relative">
-                    <img src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top"
+                    <img loading="lazy" decoding="async" src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top"
                          onerror="this.src='images/logo/logo%20ws%20white%20250x55.png'; this.classList.add('object-contain','p-8','opacity-20')">
                     <div id="pop-check-${p.id}" class="absolute top-2 right-2 w-6 h-6 rounded-full border-2 ${isSel?'bg-indigo-500 border-indigo-500':'border-white/30'} flex items-center justify-center transition-all">
                         <i class="fa-solid fa-check text-[9px] ${isSel?'text-white':'text-transparent'}"></i>
@@ -2612,7 +2612,7 @@ async function viewOrder(id) {
             return `
             <div class="flex items-start gap-3 py-3 border-b border-darkborder last:border-0">
                 ${imgSrc
-                    ? `<img src="${imgSrc}" class="w-14 h-16 rounded-lg object-cover object-top flex-shrink-0" onerror="this.style.display='none'">`
+                    ? `<img loading="lazy" decoding="async" src="${imgSrc}" class="w-14 h-16 rounded-lg object-cover object-top flex-shrink-0" onerror="this.style.display='none'">`
                     : `<div class="w-14 h-16 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-shirt text-white/20"></i></div>`}
                 <div class="flex-1 min-w-0">
                     <p class="font-semibold text-sm">${i.product_name}</p>
@@ -2657,7 +2657,7 @@ async function viewOrder(id) {
                 <div class="min-w-0 flex-1">
                     <p class="text-[10px] text-white/40">${e.item_label||''}</p>
                     ${isLogoUploaded
-                        ? `<img src="${e.value}" alt="Logo Bordir" class="max-h-14 max-w-[90px] object-contain rounded border border-white/10 mt-1 mb-1" />`
+                        ? `<img loading="lazy" decoding="async" src="${e.value}" alt="Logo Bordir" class="max-h-14 max-w-[90px] object-contain rounded border border-white/10 mt-1 mb-1" />`
                         : `<p class="text-sm font-semibold">${e.value||''}</p>`
                     }
                     <div class="flex flex-wrap gap-x-3 mt-1">
@@ -2687,7 +2687,7 @@ async function viewOrder(id) {
                 ${photos.map(p => `
                 <div class="bg-white/5 rounded-xl overflow-hidden">
                     <a href="${API}${p.photo_url}" target="_blank">
-                        <img src="${API}${p.photo_url}"
+                        <img loading="lazy" decoding="async" src="${API}${p.photo_url}"
                              class="w-full h-32 object-cover hover:scale-105 transition-transform cursor-zoom-in"
                              onerror="this.parentElement.innerHTML='<div class=\\'p-4 text-center text-white/20 text-xs\\'>Foto tidak tersedia</div>'">
                     </a>
@@ -3446,7 +3446,7 @@ function waHandleLogoFile(input, idx) {
         const prev = document.getElementById(`wa-bordir-logo-preview-${idx}`);
         if (prev) {
             prev.classList.remove('hidden');
-            prev.innerHTML = `<img src="${e.target.result}" style="max-height:80px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
+            prev.innerHTML = `<img loading="lazy" decoding="async" src="${e.target.result}" style="max-height:80px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
         }
     };
     reader.readAsDataURL(file);
@@ -3781,7 +3781,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const ongkirRow = `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}${weightLabel}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
 
     const photosHTML = (extraPhotos && extraPhotos.length > 0)
-        ? `<div class="invoice-photos"><div class="section-label">Referensi Produk</div><div class="photos-grid">${extraPhotos.map(s=>`<img src="${s}" alt="Foto" />`).join('')}</div></div>`
+        ? `<div class="invoice-photos"><div class="section-label">Referensi Produk</div><div class="photos-grid">${extraPhotos.map(s=>`<img loading="lazy" decoding="async" src="${s}" alt="Foto" />`).join('')}</div></div>`
         : '';
 
     let bordirHTML = '';
@@ -3801,7 +3801,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 // Use base64 from emb.value (checkout upload), or bordirRefPhoto (WA form upload), or placeholder
                 const imgSrc = (emb.value && emb.value.startsWith('data:image/')) ? emb.value : (bordirRefPhoto || null);
                 const imgTag = imgSrc
-                    ? `<img src="${imgSrc}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
+                    ? `<img loading="lazy" decoding="async" src="${imgSrc}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
                     : `<div class="bordir-placeholder">Logo dikirim<br>via WA</div>`;
                 return `<div style="text-align:center;">${imgTag}<p style="font-size:10px;color:#aaa;margin:6px 0 0;">${posLbl}</p></div>`;
             }
@@ -3904,7 +3904,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         <div class="invoice-header">
             <div class="logo-side">
                 <span class="invoice-label">Invoice</span>
-                <img src="images/logo/logo ws putih invoice.png" alt="WearScrubs" class="logo-img" onerror="this.style.display='none'" />
+                <img decoding="async" src="images/logo/logo ws putih invoice.png" alt="WearScrubs" class="logo-img" onerror="this.style.display='none'" />
             </div>
             <div class="company-info">
                 RUKO ALLOGIO BARAT NO.25,<br>MEDANG, KEC. PAGEDANGAN,<br>KABUPATEN TANGERANG, BANTEN 15334<br><br>
@@ -4107,7 +4107,7 @@ function waHandleBordirRef(input) {
     reader.onload = (e) => {
         waBordirRefBase64 = e.target.result;
         const el = document.getElementById('wa-bordir-ref-preview');
-        if (el) el.innerHTML = `<img src="${e.target.result}" style="max-height:120px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
+        if (el) el.innerHTML = `<img loading="lazy" decoding="async" src="${e.target.result}" style="max-height:120px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
     };
     reader.readAsDataURL(file);
 }
