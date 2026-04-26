@@ -3929,14 +3929,35 @@ async function openInvoiceModal(orderId, extraPhotos = [], bordirRefPhoto = null
     modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;overflow:hidden;';
 
     modal.innerHTML = `
-        <div class="no-print" style="background:#111;border-bottom:1px solid #333;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
-            <span style="color:white;font-weight:700;font-size:14px;">📄 Invoice — ${order.order_code}</span>
-            <div style="display:flex;gap:8px;">
-                <button onclick="printInvoice()" style="background:#3b82f6;color:white;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Print / Save PDF</button>
-                <button onclick="downloadInvoicePDF('${order.order_code}')" style="background:#059669;color:white;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;" id="inv-dl-btn">⬇️ Download PDF</button>
-                <button onclick="document.getElementById('invoice-modal').style.display='none'" style="background:rgba(255,255,255,0.08);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Tutup</button>
+        <div class="no-print invoice-modal-header" style="background:#111;border-bottom:1px solid #333;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;flex-wrap:wrap;">
+            <span class="invoice-modal-title" style="color:white;font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 Invoice — ${order.order_code}</span>
+            <div class="invoice-modal-actions" style="display:flex;gap:8px;flex-shrink:0;">
+                <button onclick="printInvoice()" class="invoice-btn invoice-btn-print" style="background:#3b82f6;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                    <span>🖨️</span><span class="invoice-btn-label">Print / Save PDF</span>
+                </button>
+                <button onclick="downloadInvoicePDF('${order.order_code}')" class="invoice-btn invoice-btn-dl" style="background:#059669;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;" id="inv-dl-btn">
+                    <span>⬇️</span><span class="invoice-btn-label">Download PDF</span>
+                </button>
+                <button onclick="document.getElementById('invoice-modal').style.display='none'" class="invoice-btn invoice-btn-close" style="background:rgba(255,255,255,0.08);color:white;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                    <span>✕</span><span class="invoice-btn-label">Tutup</span>
+                </button>
             </div>
         </div>
+        <style>
+            /* Mobile: title on its own row, buttons compact (icon-only) */
+            @media (max-width: 640px) {
+                .invoice-modal-header { padding: 10px 12px !important; flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
+                .invoice-modal-title { font-size: 13px !important; }
+                .invoice-modal-actions { justify-content: space-between !important; gap: 6px !important; }
+                .invoice-btn { padding: 8px 10px !important; flex: 1; justify-content: center; }
+                .invoice-btn-label { display: none !important; }
+            }
+            @media (min-width: 641px) and (max-width: 900px) {
+                .invoice-btn-print .invoice-btn-label::after { content: "PDF"; }
+                .invoice-btn-print .invoice-btn-label { font-size: 0; }
+                .invoice-btn-print .invoice-btn-label::after { font-size: 13px; }
+            }
+        </style>
         <div style="flex:1;overflow-y:auto;padding:24px;background:#e0e0e0;">
             <div id="invoice-print-area" style="max-width:794px;margin:0 auto;background:white;box-shadow:0 4px 32px rgba(0,0,0,0.25);border-radius:4px;overflow:hidden;">
                 ${invoiceHTML}
@@ -3953,17 +3974,65 @@ async function downloadInvoicePDF(orderCode) {
         return;
     }
     const btn = document.getElementById('inv-dl-btn');
-    if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
+    const restoreBtn = () => {
+        if (btn) { btn.innerHTML = '<span>⬇️</span><span class="invoice-btn-label">Download PDF</span>'; btn.disabled = false; }
+    };
+    if (btn) { btn.innerHTML = '<span>⏳</span><span class="invoice-btn-label">Generating...</span>'; btn.disabled = true; }
+    const filename = `Invoice-WearScrubs-${orderCode}.pdf`;
     try {
-        await html2pdf().set({
+        // Generate PDF as Blob (not auto-saved) so we can use Web Share API on mobile
+        // windowWidth/width forces desktop layout (794px) even when generated on mobile,
+        // so mobile-stacking media queries (<600px) don't apply → PDF identical across devices
+        const pdfBlob = await html2pdf().set({
             margin: 0,
-            filename: `Invoice-WearScrubs-${orderCode}.pdf`,
+            filename,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, logging: false },
+            html2canvas: {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                width: 794,
+                windowWidth: 794,
+                onclone: (doc) => {
+                    // Belt-and-suspenders: directly override mobile media query rules
+                    const target = doc.getElementById('invoice-print-area');
+                    if (target) {
+                        target.style.width = '794px';
+                        target.style.maxWidth = '794px';
+                    }
+                }
+            },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        }).from(el).save();
-    } catch (e) { alert('Gagal download PDF. Gunakan tombol Print sebagai alternatif.'); }
-    if (btn) { btn.textContent = '⬇️ Download PDF'; btn.disabled = false; }
+        }).from(el).outputPdf('blob');
+
+        // Mobile: use Web Share API with File (clean — no blob: URL leaks into share text)
+        const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+        const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: `Invoice ${orderCode}`
+                    // intentionally NO `text` field — that's what causes the blob URL to leak in iOS share sheet
+                });
+                restoreBtn();
+                return;
+            } catch (shareErr) {
+                if (shareErr && shareErr.name === 'AbortError') { restoreBtn(); return; }
+                // fall through to download
+            }
+        }
+
+        // Desktop fallback: trigger normal download via anchor
+        const url = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+        alert('Gagal download PDF. Gunakan tombol Print sebagai alternatif.');
+    }
+    restoreBtn();
 }
 
 function waHandleProductPhotos(input) {
