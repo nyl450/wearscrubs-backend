@@ -3691,14 +3691,17 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
 
     let itemRowsHTML = '';
-    let bordirLineRowsHTML = '';  // bordir jasa rows — inserted AFTER discount, NOT subject to discount
     let productSubtotal = 0;
+    let totalBordirNamaQty = 0;
+    let totalBordirLogoQty = 0;
     items.forEach(item => {
         // Derive base garment price (stored price includes embroidery cost)
         const embCost = (item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0);
         const basePrice = (item.price || 0) - embCost;
         const qty = item.quantity || 1;
         productSubtotal += basePrice * qty;
+        if (item.bordir_nama) totalBordirNamaQty += qty;
+        if (item.bordir_logo) totalBordirLogoQty += qty;
 
         itemRowsHTML += `<tr>
             <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}</td>
@@ -3706,26 +3709,13 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             <td>${qty}</td>
             <td>${fmtRp(basePrice * qty)}</td>
         </tr>`;
-
-        // Build bordir jasa rows (shown after discount — bordir not discounted)
-        if (item.bordir_nama || item.bordir_logo) {
-            const iLabel = `${item.product_name||''} (${item.color||''}, ${item.size||''})`;
-            const embNama = embDetails.find(e => e.type === 'nama' && e.item_label === iLabel);
-            const embLogo = embDetails.find(e => e.type === 'logo' && e.item_label === iLabel);
-            if (item.bordir_nama) {
-                const detail = embNama
-                    ? `: ${embNama.value}${embNama.color ? ' · benang '+embNama.color : ''}${embNama.position ? ' · '+(embNama.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}`
-                    : '';
-                bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Nama${detail}</td><td>${fmtRp(20000)}</td><td>${qty}</td><td>${fmtRp(20000 * qty)}</td></tr>`;
-            }
-            if (item.bordir_logo) {
-                const detail = embLogo
-                    ? `${embLogo.color ? ' · benang '+embLogo.color : ''}${embLogo.position ? ' · '+(embLogo.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}`
-                    : '';
-                bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Logo${detail}</td><td>${fmtRp(30000)}</td><td>${qty}</td><td>${fmtRp(30000 * qty)}</td></tr>`;
-            }
-        }
     });
+    // Consolidated bordir rows — max 2 lines regardless of how many items have bordir
+    let bordirLineRowsHTML = '';
+    if (totalBordirNamaQty > 0)
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Nama</td><td>${fmtRp(20000)}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(20000 * totalBordirNamaQty)}</td></tr>`;
+    if (totalBordirLogoQty > 0)
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Logo</td><td>${fmtRp(30000)}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(30000 * totalBordirLogoQty)}</td></tr>`;
     const shippingCost = order.shipping_cost || 0;
     const courier = order.shipping_courier || 'Kurir';
     const shippingCity = order.shipping_city || '';
