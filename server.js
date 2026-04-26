@@ -1314,13 +1314,17 @@ app.post('/api/orders', async (req, res) => {
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
         const hasBordirNama = itemDetails.some(i => i.bordir_nama);
 
+        // Auto-mark logo as provided if customer already uploaded via checkout (stored as base64 in emb.value)
+        const logoAlreadyProvided = hasBordirLogo && Array.isArray(embroidery_details) &&
+            embroidery_details.some(e => e.type === 'logo' && typeof e.value === 'string' && e.value.startsWith('data:image/'));
+
         const orderCode = generateOrderCode(order_source || 'website');
         const orderResult = await dbRun(
             `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
               shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
               embroidery_details, has_bordir_logo, has_bordir_nama, notes, order_source,
-              payment_method, discount_percent, discount_amount, discount_label)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+              payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
             [orderCode, customer_name, customer_phone, customer_address,
              shipping_city || '', courier, weightKg, shippingCost, total,
              embroidery_details ? JSON.stringify(embroidery_details) : null,
@@ -1330,7 +1334,8 @@ app.post('/api/orders', async (req, res) => {
              payment_method || '',
              safeDiscountPct,
              discountAmount,
-             discountLabel]
+             discountLabel,
+             logoAlreadyProvided]
         );
         const orderId = orderResult.rows[0].id;
 

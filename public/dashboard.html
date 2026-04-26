@@ -2579,23 +2579,29 @@ async function viewOrder(id) {
 
         // ── Bordir details ────────────────────────────────────────────────────
         const waLink = `https://wa.me/${o.customer_phone?.replace(/^0/,'62')}`;
+        // Check if logo was already uploaded via checkout (stored as base64 in emb.value)
+        const logoAlreadyUploaded = bordirDetails.some(e => e.type === 'logo' && e.value && e.value.startsWith('data:image/'));
         const bordirHTML = bordirDetails.length ? `
         <div class="bg-purple-900/20 border border-purple-500/20 rounded-xl p-4">
             <div class="flex items-center justify-between mb-3">
                 <p class="text-xs font-bold text-purple-300 uppercase tracking-wider">🧵 Detail Bordir</p>
-                ${o.has_bordir_logo ? `
-                <a href="${waLink}?text=${encodeURIComponent(`Halo ${o.customer_name}, pesanan #${o.order_code} Anda memiliki bordir logo. Mohon kirimkan file logo bordir Anda ke kami ya. Terima kasih! 🙏`)}"
-                   target="_blank" onclick="markLogoRequested(${o.id})"
-                   class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5
-                   ${o.bordir_logo_requested
-                       ? 'bg-green-500/10 text-green-300 border border-green-500/20'
-                       : 'bg-orange-500/20 text-orange-300 border border-orange-500/30 animate-pulse hover:bg-orange-500/30'}">
-                    <i class="fa-brands fa-whatsapp"></i>
-                    ${o.bordir_logo_requested ? '✓ Logo Sudah Diminta' : '⚠️ Minta Logo ke Customer'}
-                </a>` : ''}
+                ${o.has_bordir_logo ? (logoAlreadyUploaded
+                    ? `<span class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 bg-green-500/10 text-green-300 border border-green-500/20">
+                           <i class="fa-solid fa-check"></i> Logo Sudah Diupload (via Website)
+                       </span>`
+                    : `<a href="${waLink}?text=${encodeURIComponent(`Halo ${o.customer_name}, pesanan #${o.order_code} Anda memiliki bordir logo. Mohon kirimkan file logo bordir Anda ke kami ya. Terima kasih! 🙏`)}"
+                       target="_blank" onclick="markLogoRequested(${o.id})"
+                       class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5
+                       ${o.bordir_logo_requested
+                           ? 'bg-green-500/10 text-green-300 border border-green-500/20'
+                           : 'bg-orange-500/20 text-orange-300 border border-orange-500/30 animate-pulse hover:bg-orange-500/30'}">
+                        <i class="fa-brands fa-whatsapp"></i>
+                        ${o.bordir_logo_requested ? '✓ Logo Sudah Diminta' : '⚠️ Minta Logo ke Customer'}
+                    </a>`) : ''}
             </div>
             ${bordirDetails.map(e => {
                 const posLbl = e.position === 'kanan' ? 'Kanan Dada' : e.position === 'kiri' ? 'Kiri Dada' : '';
+                const isLogoUploaded = e.type === 'logo' && e.value && e.value.startsWith('data:image/');
                 return `
             <div class="flex items-start gap-3 py-2.5 border-b border-purple-500/10 last:border-0">
                 <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0
@@ -2604,7 +2610,10 @@ async function viewOrder(id) {
                 </span>
                 <div class="min-w-0 flex-1">
                     <p class="text-[10px] text-white/40">${e.item_label||''}</p>
-                    <p class="text-sm font-semibold">${e.value||''}</p>
+                    ${isLogoUploaded
+                        ? `<img src="${e.value}" alt="Logo Bordir" class="max-h-14 max-w-[90px] object-contain rounded border border-white/10 mt-1 mb-1" />`
+                        : `<p class="text-sm font-semibold">${e.value||''}</p>`
+                    }
                     <div class="flex flex-wrap gap-x-3 mt-1">
                         ${e.color ? `<p class="text-[11px] text-white/40">🎨 Benang: <span class="text-white/60">${e.color}</span></p>` : ''}
                         ${posLbl  ? `<p class="text-[11px] text-white/40">📍 Posisi: <span class="text-white/60">${posLbl}</span></p>` : ''}
@@ -3680,28 +3689,38 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
 
     let itemRowsHTML = '';
+    let bordirLineRowsHTML = '';  // bordir jasa rows — inserted AFTER discount, NOT subject to discount
     let productSubtotal = 0;
     items.forEach(item => {
-        const unitPrice = item.price || 0;
+        // Derive base garment price (stored price includes embroidery cost)
+        const embCost = (item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0);
+        const basePrice = (item.price || 0) - embCost;
         const qty = item.quantity || 1;
-        productSubtotal += unitPrice * qty;
+        productSubtotal += basePrice * qty;
+
         itemRowsHTML += `<tr>
             <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}</td>
-            <td>${fmtRp(unitPrice)}</td>
+            <td>${fmtRp(basePrice)}</td>
             <td>${qty}</td>
-            <td>${fmtRp(unitPrice * qty)}</td>
+            <td>${fmtRp(basePrice * qty)}</td>
         </tr>`;
+
+        // Build bordir jasa rows (shown after discount — bordir not discounted)
         if (item.bordir_nama || item.bordir_logo) {
             const iLabel = `${item.product_name||''} (${item.color||''}, ${item.size||''})`;
             const embNama = embDetails.find(e => e.type === 'nama' && e.item_label === iLabel);
             const embLogo = embDetails.find(e => e.type === 'logo' && e.item_label === iLabel);
             if (item.bordir_nama) {
-                const detail = embNama ? `: ${embNama.value}${embNama.color ? ' · benang '+embNama.color : ''}${embNama.position ? ' · '+(embNama.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}` : '';
-                itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Nama${detail}</td><td>${fmtRp(20000)}</td><td>-</td><td>-</td></tr>`;
+                const detail = embNama
+                    ? `: ${embNama.value}${embNama.color ? ' · benang '+embNama.color : ''}${embNama.position ? ' · '+(embNama.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}`
+                    : '';
+                bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Nama${detail}</td><td>${fmtRp(20000)}</td><td>${qty}</td><td>${fmtRp(20000 * qty)}</td></tr>`;
             }
             if (item.bordir_logo) {
-                const detail = embLogo ? `${embLogo.color ? ' · benang '+embLogo.color : ''}${embLogo.position ? ' · '+(embLogo.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}` : '';
-                itemRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Logo${detail}</td><td>${fmtRp(30000)}</td><td>-</td><td>-</td></tr>`;
+                const detail = embLogo
+                    ? `${embLogo.color ? ' · benang '+embLogo.color : ''}${embLogo.position ? ' · '+(embLogo.position==='kanan'?'Kanan':'Kiri')+' Dada' : ''}`
+                    : '';
+                bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Logo${detail}</td><td>${fmtRp(30000)}</td><td>${qty}</td><td>${fmtRp(30000 * qty)}</td></tr>`;
             }
         }
     });
@@ -3729,11 +3748,8 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
     let bordirHTML = '';
     if ((order.has_bordir_nama || order.has_bordir_logo) && embDetails.length > 0) {
-        const namaEntry = embDetails.find(e => e.type === 'nama');
-        const logoEntry = embDetails.find(e => e.type === 'logo');
-        const hasBoth   = namaEntry && logoEntry;
 
-        // Helper: render one visual cell
+        // Helper: render one visual mockup cell
         const renderVisCell = (emb) => {
             if (emb.type === 'nama') {
                 const col = emb.color && emb.color.toLowerCase() !== 'putih' ? emb.color : '#1a1a1a';
@@ -3744,57 +3760,106 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 </div>`;
             } else {
                 const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
-                const imgTag = bordirRefPhoto
-                    ? `<img src="${bordirRefPhoto}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
+                // Use base64 from emb.value (checkout upload), or bordirRefPhoto (WA form upload), or placeholder
+                const imgSrc = (emb.value && emb.value.startsWith('data:image/')) ? emb.value : (bordirRefPhoto || null);
+                const imgTag = imgSrc
+                    ? `<img src="${imgSrc}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
                     : `<div class="bordir-placeholder">Logo dikirim<br>via WA</div>`;
                 return `<div style="text-align:center;">${imgTag}<p style="font-size:10px;color:#aaa;margin:6px 0 0;">${posLbl}</p></div>`;
             }
         };
 
-        let tableBody = '';
-        if (hasBoth) {
-            // Combine detail column; split visual into kanan | kiri
-            const rightEmb = [namaEntry, logoEntry].find(e => e.position === 'kanan') || namaEntry;
-            const leftEmb  = [namaEntry, logoEntry].find(e => e.position === 'kiri')  || logoEntry;
-            const detNama = `<p style="margin:0 0 4px;"><strong>✏️ Bordir Nama</strong></p>
-                <p style="margin:2px 0;">Produk: ${namaEntry.item_label||'-'}</p>
-                <p style="margin:2px 0;">Nama: <strong>${namaEntry.value||'-'}</strong></p>
-                <p style="margin:2px 0;">Warna Benang: ${namaEntry.color||'-'}</p>
-                <p style="margin:2px 0;">Posisi: ${namaEntry.position==='kanan'?'Kanan':'Kiri'} Dada</p>
-                <p style="margin:2px 0;font-size:11px;color:#999;">Tinggi huruf ~1,2 cm</p>`;
-            const detLogo = `<p style="margin:10px 0 4px;border-top:1px solid #f0f0f0;padding-top:10px;"><strong>🎨 Bordir Logo</strong></p>
-                <p style="margin:2px 0;">Produk: ${logoEntry.item_label||'-'}</p>
-                <p style="margin:2px 0;">Warna Benang: ${logoEntry.color||'-'}</p>
-                <p style="margin:2px 0;">Posisi: ${logoEntry.position==='kanan'?'Kanan':'Kiri'} Dada</p>`;
-            const splitVis = `<table style="width:100%;border-collapse:collapse;">
-                <thead><tr>
-                    <th style="background:#f5f5f5;padding:6px 8px;font-size:10px;font-weight:600;color:#666;border-bottom:1px solid #e5e5e5;text-align:center;width:50%;">KANAN</th>
-                    <th style="background:#f5f5f5;padding:6px 8px;font-size:10px;font-weight:600;color:#666;border-bottom:1px solid #e5e5e5;border-left:1px solid #e5e5e5;text-align:center;width:50%;">KIRI</th>
-                </tr></thead>
-                <tbody><tr>
-                    <td style="padding:14px 10px;text-align:center;vertical-align:middle;">${renderVisCell(rightEmb)}</td>
-                    <td style="padding:14px 10px;text-align:center;vertical-align:middle;border-left:1px solid #e5e5e5;">${renderVisCell(leftEmb)}</td>
-                </tr></tbody>
-            </table>`;
-            tableBody = `<tr><td class="bordir-detail">${detNama}${detLogo}</td><td class="bordir-visual" style="padding:0;vertical-align:top;">${splitVis}</td></tr>`;
-        } else {
-            tableBody = embDetails.map(emb => {
+        // Group embDetails by item_label so multi-product orders show all items
+        const groups = {};
+        for (const emb of embDetails) {
+            const key = emb.item_label || '(produk)';
+            if (!groups[key]) groups[key] = { nama: null, logo: null };
+            if (emb.type === 'nama' && !groups[key].nama) groups[key].nama = emb;
+            if (emb.type === 'logo' && !groups[key].logo) groups[key].logo = emb;
+        }
+
+        let sections = '';
+        const cellStyle = 'padding:10px 12px;vertical-align:top;font-size:11px;color:#333;line-height:1.55;';
+        const thStyle   = 'padding:7px 12px;font-size:10px;font-weight:700;color:#555;background:#fafafa;border-bottom:1px solid #e8e8e8;';
+
+        for (const [itemLbl, g] of Object.entries(groups)) {
+            const { nama, logo } = g;
+            const hasBoth = nama && logo;
+
+            if (hasBoth) {
+                // ── Both bordir selected: detail side-by-side, mockup full-width below ──
+                const rightEmb = [nama, logo].find(e => e.position === 'kanan') || nama;
+                const leftEmb  = [nama, logo].find(e => e.position === 'kiri')  || logo;
+
+                const namaDet = `<p style="margin:0 0 6px;font-weight:700;">✏️ Bordir Nama</p>
+                    <p style="margin:2px 0;">Nama: <strong>${nama.value||'-'}</strong></p>
+                    <p style="margin:2px 0;">Benang: ${nama.color||'-'}</p>
+                    <p style="margin:2px 0;">Posisi: ${nama.position==='kanan'?'Kanan':'Kiri'} Dada</p>
+                    <p style="margin:4px 0 0;font-size:10px;color:#999;">Tinggi huruf ~1,2 cm</p>`;
+                const logoDet = `<p style="margin:0 0 6px;font-weight:700;">🎨 Bordir Logo</p>
+                    <p style="margin:2px 0;">Benang: ${logo.color||'-'}</p>
+                    <p style="margin:2px 0;">Posisi: ${logo.position==='kanan'?'Kanan':'Kiri'} Dada</p>`;
+
+                sections += `
+                <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;">
+                    <thead>
+                        <tr><th colspan="2" style="${thStyle}text-align:left;background:#f0f0f0;">Produk: ${itemLbl}</th></tr>
+                        <tr>
+                            <th style="${thStyle}width:50%;text-align:left;border-right:1px solid #e8e8e8;">Detail Permintaan — Bordir Nama</th>
+                            <th style="${thStyle}text-align:left;">Detail Permintaan — Bordir Logo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="${cellStyle}border-right:1px solid #e8e8e8;">${namaDet}</td>
+                            <td style="${cellStyle}">${logoDet}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="background:#f5f5f5;padding:6px 12px;font-size:10px;font-weight:700;color:#666;text-align:center;letter-spacing:0.06em;border-top:1px solid #e8e8e8;">MOCKUP VISUAL</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:14px 10px;text-align:center;border-right:1px solid #e8e8e8;border-top:1px solid #f0f0f0;">
+                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">KANAN</div>
+                                ${renderVisCell(rightEmb)}
+                            </td>
+                            <td style="padding:14px 10px;text-align:center;border-top:1px solid #f0f0f0;">
+                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">KIRI</div>
+                                ${renderVisCell(leftEmb)}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>`;
+
+            } else {
+                // ── Single bordir: detail | mockup side by side ──
+                const emb = nama || logo;
                 const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
                 const det = emb.type === 'nama'
-                    ? `<p><strong>Jenis:</strong> Bordir Nama</p>
-                       <p><strong>Produk:</strong> ${emb.item_label||'-'}</p>
-                       <p><strong>Nama:</strong> <strong style="font-size:14px;">${emb.value||'-'}</strong></p>
-                       <p><strong>Warna Benang:</strong> ${emb.color||'-'}</p>
-                       <p><strong>Posisi:</strong> ${posLbl}</p>
-                       <p style="color:#999;font-size:11px;">Tinggi huruf ~1,2 cm · Panjang menyesuaikan</p>`
-                    : `<p><strong>Jenis:</strong> Bordir Logo</p>
-                       <p><strong>Produk:</strong> ${emb.item_label||'-'}</p>
-                       <p><strong>Warna Benang:</strong> ${emb.color||'-'}</p>
-                       <p><strong>Posisi:</strong> ${posLbl}</p>`;
-                return `<tr><td class="bordir-detail">${det}</td><td class="bordir-visual">${renderVisCell(emb)}</td></tr>`;
-            }).join('');
+                    ? `<p style="margin:0 0 4px;font-weight:700;">✏️ Bordir Nama</p>
+                       <p style="margin:2px 0;font-size:11px;">Produk: ${emb.item_label||'-'}</p>
+                       <p style="margin:2px 0;font-size:11px;">Nama: <strong style="font-size:13px;">${emb.value||'-'}</strong></p>
+                       <p style="margin:2px 0;font-size:11px;">Benang: ${emb.color||'-'}</p>
+                       <p style="margin:2px 0;font-size:11px;">Posisi: ${posLbl}</p>
+                       <p style="color:#999;font-size:10px;margin:4px 0 0;">Tinggi ~1,2 cm · panjang menyesuaikan</p>`
+                    : `<p style="margin:0 0 4px;font-weight:700;">🎨 Bordir Logo</p>
+                       <p style="margin:2px 0;font-size:11px;">Produk: ${emb.item_label||'-'}</p>
+                       <p style="margin:2px 0;font-size:11px;">Benang: ${emb.color||'-'}</p>
+                       <p style="margin:2px 0;font-size:11px;">Posisi: ${posLbl}</p>`;
+                sections += `
+                <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+                    <thead><tr>
+                        <th style="${thStyle}width:52%;text-align:left;">Detail Permintaan</th>
+                        <th style="${thStyle}border-left:1px solid #e5e5e5;text-align:center;">Mockup Visual</th>
+                    </tr></thead>
+                    <tbody><tr>
+                        <td class="bordir-detail">${det}</td>
+                        <td class="bordir-visual">${renderVisCell(emb)}</td>
+                    </tr></tbody>
+                </table>`;
+            }
         }
-        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Detail Bordir</div><table><thead><tr><th style="width:52%">Detail Permintaan</th><th style="width:48%">Mockup Visual</th></tr></thead><tbody>${tableBody}</tbody></table></div>`;
+
+        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Detail Bordir</div>${sections}</div>`;
     }
 
     return `<div class="invoice-wrap">
@@ -3828,6 +3893,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     ${itemRowsHTML}
                     ${subtotalRowHTML}
                     ${discountRowHTML}
+                    ${bordirLineRowsHTML}
                     ${ongkirRow}
                     <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Total Pembayaran</td><td>${fmtRp(total)}</td></tr>
                 </tbody>

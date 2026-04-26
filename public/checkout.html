@@ -185,7 +185,7 @@
                         <span class="text-sm text-gray-500 dark:text-white/50">No. Rekening</span>
                         <div class="flex items-center gap-2">
                             <span class="font-mono font-bold text-lg" id="bank-account-display">8780269791</span>
-                            <button onclick="copyAccount()" class="text-xs text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-copy"></i></button>
+                            <button onclick="copyAccount(this)" class="text-xs text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-copy"></i></button>
                         </div>
                     </div>
                     <div class="flex justify-between items-center">
@@ -236,9 +236,12 @@ let embroideryData = [];
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
 
 function goToStep(step) {
-    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
-    document.getElementById('step-' + step).classList.remove('hidden');
-    document.getElementById('step-' + step).classList.add('active');
+    // Use style.display to avoid Tailwind 'hidden' (!important) conflicting with flex layout on step-info
+    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+    const target = document.getElementById('step-' + step);
+    target.classList.add('active');
+    // step-info uses flex layout (lg:flex-row), others use block
+    target.style.display = (step === 'info') ? '' : 'block';
     // Progress bar
     const steps = { info: 'pb-info', bordir: 'pb-bordir', payment: 'pb-payment' };
     Object.values(steps).forEach(id => document.getElementById(id)?.classList.remove('text-gray-900','dark:text-white','underline','underline-offset-2'));
@@ -504,7 +507,8 @@ async function submitBordirStep() {
             const color = document.getElementById(`bordir-logo-color-${itemIdx}-${q}`)?.value?.trim() || '';
             logoPos     = document.getElementById(`bordir-logo-pos-${itemIdx}-${q}`)?.value || 'kiri';
             const b64   = document.getElementById(`bordir-logo-b64-${itemIdx}-${q}`)?.value || '';
-            embroideryData.push({ item_label: itemLabel, type: 'logo', value: b64 ? 'Logo diupload' : 'Logo dikirim via WA', color, position: logoPos });
+            // Store actual base64 so invoice and order modal can display the logo directly
+            embroideryData.push({ item_label: itemLabel, type: 'logo', value: b64 || 'Logo dikirim via WA', color, position: logoPos });
         }
         if (item.bordir_nama && item.bordir_logo && namaPos && logoPos && namaPos === logoPos) {
             errors.push(`${item.name}: Posisi bordir nama dan logo tidak boleh sama (satu harus kanan, satunya kiri).`);
@@ -581,12 +585,24 @@ async function submitOrder() {
     }
 }
 
-function copyAccount() {
-    navigator.clipboard.writeText('8780269791').then(() => {
-        const btn = event.currentTarget;
+function copyAccount(btn) {
+    const prev = btn.innerHTML;
+    const done = () => {
         btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
-        setTimeout(() => btn.innerHTML = '<i class="fa-solid fa-copy"></i>', 2000);
-    });
+        setTimeout(() => btn.innerHTML = prev, 2000);
+    };
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText('8780269791').then(done).catch(() => {});
+    } else {
+        // Fallback for mobile browsers
+        const el = document.createElement('textarea');
+        el.value = '8780269791';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        done();
+    }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
