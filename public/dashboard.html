@@ -21,11 +21,57 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         .photo-drop-zone { border: 2px dashed rgba(255,255,255,0.12); transition: all 0.2s; }
         .photo-drop-zone:hover { border-color: rgba(99,102,241,0.6); background: rgba(99,102,241,0.05); }
-        input[type=text], input[type=number], select { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: white; border-radius: 0.75rem; padding: 0 1rem; font-size: 0.875rem; width: 100%; height: 42px; box-sizing: border-box; outline: none; transition: border-color 0.15s, background 0.15s; }
-        textarea { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: white; border-radius: 0.75rem; padding: 0.65rem 1rem; font-size: 0.875rem; width: 100%; box-sizing: border-box; outline: none; transition: border-color 0.15s, background 0.15s; }
-        input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.07); box-shadow: none; }
-        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.22); font-style: italic; font-size: 0.8125rem; }
-        select option { background: #1a1a1a; }
+        /* Form controls — consistent height, breathing room for descenders, custom select arrow */
+        input[type=text], input[type=number], input[type=tel], input[type=email], input[type=date], select {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: white;
+            border-radius: 0.75rem;
+            padding: 0.7rem 1rem;
+            font-size: 0.875rem;
+            line-height: 1.4;
+            width: 100%;
+            min-height: 46px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        select {
+            padding-right: 2.5rem;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.45)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 0.9rem center;
+            background-size: 14px;
+            cursor: pointer;
+        }
+        textarea {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: white;
+            border-radius: 0.75rem;
+            padding: 0.7rem 1rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            width: 100%;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        input[type=text]:focus, input[type=number]:focus, input[type=tel]:focus, input[type=email]:focus, input[type=date]:focus, textarea:focus, select:focus {
+            border-color: rgba(99,102,241,0.55);
+            background: rgba(255,255,255,0.07);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        }
+        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.28); font-style: italic; font-size: 0.8125rem; }
+        select option { background: #1a1a1a; color: white; padding: 8px; }
+        /* Form labels — consistent rhythm */
+        label { display: block; }
+        /* Compact variant — for tight grids */
+        input.input-sm, select.input-sm { min-height: 38px; padding: 0.4rem 0.85rem; font-size: 0.8125rem; }
+        select.input-sm { padding-right: 2.25rem; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         .sidebar-group-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.18); padding: 14px 16px 4px; }
         .pop-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
@@ -735,12 +781,12 @@
 </div>
 
 <!-- PRODUCT MODAL -->
-<div id="product-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] hidden items-center justify-center p-4">
-<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
-    <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center">
-        <div>
-            <h3 id="modal-title" class="font-bold text-lg">Tambah Produk Baru</h3>
-            <div class="flex items-center gap-1 mt-2">
+<div id="product-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] hidden items-center justify-center p-2 sm:p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[92vh] overflow-hidden flex flex-col">
+    <div class="px-5 sm:px-6 py-4 border-b border-darkborder flex justify-between items-start gap-3">
+        <div class="min-w-0 flex-1">
+            <h3 id="modal-title" class="font-bold text-base sm:text-lg">Tambah Produk Baru</h3>
+            <div class="flex items-center gap-1 mt-2 flex-wrap">
                 <span id="sd1" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all bg-indigo-500 text-white">
                     <span id="sd-n1" class="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center text-[8px] shrink-0">1</span>
                     Info Produk
@@ -758,13 +804,13 @@
                 <span id="step-label" class="hidden"></span>
             </div>
         </div>
-        <button onclick="closeProductModal()" class="text-white/40 hover:text-white transition"><i class="fa-solid fa-times text-xl"></i></button>
+        <button onclick="closeProductModal()" class="text-white/40 hover:text-white transition shrink-0 mt-0.5"><i class="fa-solid fa-times text-xl"></i></button>
     </div>
     <form id="product-form" class="flex-1 overflow-y-auto">
         <input type="hidden" id="pf-id">
         <!-- STEP 1 -->
-        <div id="step-1" class="p-6 space-y-5">
-            <div class="grid grid-cols-2 gap-4">
+        <div id="step-1" class="p-5 sm:p-6 space-y-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="space-y-1.5">
                     <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">SKU *</label>
                     <input type="text" id="pf-sku" placeholder="WS-TOP-MINNA" required>
@@ -813,7 +859,7 @@
         </div>
 
         <!-- STEP 2 -->
-        <div id="step-2" class="hidden p-6 space-y-6">
+        <div id="step-2" class="hidden p-5 sm:p-6 space-y-6">
 
             <!-- Atasan: Sub-Tipe + Harga per tipe -->
             <div id="tops-variants-wrap" class="space-y-3">
@@ -924,7 +970,7 @@
             </div>
         </div>
         <!-- STEP 3 -->
-        <div id="step-3" class="hidden p-6 space-y-5">
+        <div id="step-3" class="hidden p-5 sm:p-6 space-y-5">
             <div class="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl">
                 <p class="text-xs text-indigo-300"><i class="fa-solid fa-circle-info mr-2"></i>Upload foto atau masukkan path foto lokal (contoh: <code class="bg-black/20 px-1 rounded">images/Minna LS Black/1.png</code>)</p>
             </div>
@@ -3266,19 +3312,19 @@ function waAddItem() {
             <div class="grid grid-cols-3 gap-2">
                 <div>
                     <label class="wa-field-label">Warna</label>
-                    <select id="wa-color-${idx}" onchange="waUpdateTotal()" style="font-size:12px">
+                    <select id="wa-color-${idx}" onchange="waUpdateTotal()" class="input-sm">
                         <option value="">--</option>
                     </select>
                 </div>
                 <div>
                     <label class="wa-field-label">Variant</label>
-                    <select id="wa-variant-${idx}" onchange="waUpdateTotal()" style="font-size:12px">
+                    <select id="wa-variant-${idx}" onchange="waUpdateTotal()" class="input-sm">
                         <option value="">--</option>
                     </select>
                 </div>
                 <div>
                     <label class="wa-field-label">Ukuran</label>
-                    <select id="wa-size-${idx}" onchange="waUpdateTotal()" style="font-size:12px">
+                    <select id="wa-size-${idx}" onchange="waUpdateTotal()" class="input-sm">
                         <option value="">--</option>
                     </select>
                 </div>
@@ -3311,16 +3357,16 @@ function waAddItem() {
                 <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(196,181,253,0.8);">✏️ Detail Bordir Nama</p>
                 <div>
                     <label class="wa-field-label">Nama yang dibordir <span style="color:#f87171">*</span></label>
-                    <input type="text" id="wa-bordir-nama-text-${idx}" placeholder="dr. James, M.Ked — perhatikan ejaan & huruf kapital" style="font-size:12px" />
+                    <input type="text" id="wa-bordir-nama-text-${idx}" placeholder="dr. James, M.Ked — perhatikan ejaan & huruf kapital" class="input-sm" />
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="wa-field-label">Warna Benang</label>
-                        <input type="text" id="wa-bordir-nama-color-${idx}" placeholder="Putih, hitam, merah..." style="font-size:12px" />
+                        <input type="text" id="wa-bordir-nama-color-${idx}" placeholder="Putih, hitam, merah..." class="input-sm" />
                     </div>
                     <div>
                         <label class="wa-field-label">Posisi di Dada</label>
-                        <select id="wa-bordir-nama-pos-${idx}" style="font-size:12px">
+                        <select id="wa-bordir-nama-pos-${idx}" class="input-sm">
                             <option value="kanan">Kanan Dada</option>
                             <option value="kiri">Kiri Dada</option>
                         </select>
@@ -3341,11 +3387,11 @@ function waAddItem() {
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="wa-field-label">Warna Benang</label>
-                        <input type="text" id="wa-bordir-logo-color-${idx}" placeholder="Putih, hitam..." style="font-size:12px" />
+                        <input type="text" id="wa-bordir-logo-color-${idx}" placeholder="Putih, hitam..." class="input-sm" />
                     </div>
                     <div>
                         <label class="wa-field-label">Posisi di Dada</label>
-                        <select id="wa-bordir-logo-pos-${idx}" style="font-size:12px">
+                        <select id="wa-bordir-logo-pos-${idx}" class="input-sm">
                             <option value="kiri">Kiri Dada</option>
                             <option value="kanan">Kanan Dada</option>
                         </select>
