@@ -1361,9 +1361,17 @@ app.post('/api/orders', async (req, res) => {
             return line;
         }).join('\n');
 
+        // Helper: strip base64 image values before including in WA messages (prevents multi-MB payloads)
+        const safeEmbVal = (e) => {
+            if (e.type === 'logo') {
+                const isBase64 = typeof e.value === 'string' && e.value.startsWith('data:image/');
+                return isBase64 ? '(Logo sudah diupload via website)' : (e.value || 'kirim via WA');
+            }
+            return e.value || '';
+        };
         const embroiderySection = embroidery_details && embroidery_details.length > 0
-            ? `\n\n🧵 *Detail Bordir:*\n` + JSON.parse(JSON.stringify(embroidery_details)).map(e =>
-                `• ${e.item_label}: ${e.type === 'nama' ? 'Nama: ' + e.value : 'Logo: ' + e.value}`
+            ? `\n\n🧵 *Detail Bordir:*\n` + embroidery_details.map(e =>
+                `• ${e.item_label}: ${e.type === 'nama' ? 'Nama: ' + safeEmbVal(e) : 'Logo: ' + safeEmbVal(e)}`
               ).join('\n')
             : '';
 
@@ -1390,7 +1398,7 @@ app.post('/api/orders', async (req, res) => {
         // ⚠️ Immediate reminder if bordir logo ordered
         if (hasBordirLogo) {
             const logoItems = embroidery_details
-                ? embroidery_details.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${e.value}`).join('\n')
+                ? embroidery_details.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${safeEmbVal(e)}`).join('\n')
                 : '(lihat detail pesanan)';
             await sendWANotification(
                 `🔔 *REMINDER: BORDIR LOGO - #${orderCode}*\n\n` +
