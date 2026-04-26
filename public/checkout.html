@@ -323,7 +323,16 @@ function renderPreview() {
 let allCities = [];
 async function loadCities() {
     try {
-        allCities = await fetch(API + '/api/cities').then(r => r.json());
+        // Try API first; fall back to static cities.json (CDN-cached, works if API is down)
+        let data = null;
+        try {
+            const res = await fetch(API + '/api/cities');
+            if (res.ok) data = await res.json();
+        } catch(e) {}
+        if (!Array.isArray(data) || data.length === 0) {
+            data = await fetch('/cities.json').then(r => r.json());
+        }
+        allCities = Array.isArray(data) ? data : [];
     } catch(e) { console.error('Gagal load kota', e); }
 }
 
@@ -347,10 +356,24 @@ async function selectCity(name) {
 
     const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
     try {
-        const res = await fetch(`${API}/api/shipping-cost?city=${encodeURIComponent(name)}&qty=${qty}`);
-        const data = await res.json();
-        selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier, shipping_cost: data.shipping_cost, weight_kg: data.weight_kg };
+        let data = null;
+        try {
+            const res = await fetch(`${API}/api/shipping-cost?city=${encodeURIComponent(name)}&qty=${qty}`);
+            if (res.ok) data = await res.json();
+        } catch(e) {}
 
+        // Local fallback: same formula as server (ceil(qty/3) kg, DKI Rp10.000/kg, non-DKI Rp20.000/kg)
+        if (!data || !data.city) {
+            const cityData = allCities.find(c => c.name.toLowerCase() === name.toLowerCase());
+            const is_dki = cityData ? cityData.is_dki : false;
+            const weight_kg = Math.ceil(qty / 3) || 1;
+            const courier = is_dki ? 'Gosend / Grab (DKI)' : 'JNE Regular';
+            const shipping_cost = weight_kg * (is_dki ? 10000 : 20000);
+            data = { city: name, is_dki, courier, shipping_cost, weight_kg,
+                     shipping_cost_formatted: fmt(shipping_cost) };
+        }
+
+        selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier, shipping_cost: data.shipping_cost, weight_kg: data.weight_kg };
         document.getElementById('shipping-courier').textContent = data.courier;
         document.getElementById('shipping-weight').textContent = `${data.weight_kg} kg (${qty} item)`;
         document.getElementById('shipping-cost-display').textContent = data.shipping_cost_formatted;
