@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+
+# Private pages — jangan diindex
+Disallow: /dashboard.html
+Disallow: /login.html
+Disallow: /cart.html
+Disallow: /checkout.html
+Disallow: /backend/
+Disallow: /node_modules/
+Disallow: /backup/
+Disallow: /js/
+Disallow: /css/
+Disallow: /*.log$
+Disallow: /*.json$
+
+# Sitemap location
+Sitemap: https://wearscrubs.id/sitemap.xml

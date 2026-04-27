@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <!-- ═══ HOME ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/index.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/index.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/index-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/index-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/index.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/index-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- ═══ CATALOG — Atasan / Scrub Tops ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/scrub-top.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/scrub-top.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/scrub-top-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/scrub-top-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/scrub-top.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/scrub-top-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ═══ CATALOG — Celana / Scrub Pants ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/scrub-pants.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/scrub-pants.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/scrub-pants-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/scrub-pants-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/scrub-pants.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/scrub-pants-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ═══ CATALOG — Topi / Scrub Caps ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/scrub-caps.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/scrub-caps.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/scrub-caps-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/scrub-caps-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/scrub-caps.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/scrub-caps-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ═══ CATALOG — Gown ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/gown.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/gown.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/gown-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/gown-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/gown.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/gown-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ═══ ABOUT US ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/about-us.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/about-us.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/about-us-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/about-us-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/about-us.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/about-us-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- ═══ CONTACT ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/contact.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/contact.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/contact-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/contact-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/contact.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/contact-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ═══ FAQ ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/FAQ.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/FAQ.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/FAQ-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/FAQ-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/FAQ.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/FAQ-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ═══ PANDUAN UKURAN / SIZE GUIDE ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/ukuran.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/ukuran.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/ukuran-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/ukuran-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/ukuran.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/ukuran-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- ═══ SHIPPING / PENGIRIMAN ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/shipping.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/shipping.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/shipping-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/shipping-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/shipping.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/shipping-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ═══ PAYMENTS & SHIPPING ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/payments-shipping.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/payments-shipping.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/payments-shipping-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/payments-shipping-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/payments-shipping.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/payments-shipping-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ═══ KARIR / CAREERS ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/karir.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/karir.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/karir-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/karir-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/karir.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/karir-en.html"/>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- ═══ NEWS / BLOG ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/news-1.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-1-en.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-2.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-2-en.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-3.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-3-en.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-4.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-4-en.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- ═══ NEWS AGGREGATOR ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/news.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/news.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/news-en.html"/>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/news-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/news.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/news-en.html"/>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- ═══ LEGAL: PRIVASI / PRIVACY ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/privasi.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/privasi.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/privasi-en.html"/>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/privasi-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/privasi.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/privasi-en.html"/>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <!-- ═══ LEGAL: SYARAT / TERMS ═══ -->
+  <url>
+    <loc>https://wearscrubs.id/syarat.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/syarat.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/syarat-en.html"/>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://wearscrubs.id/syarat-en.html</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="https://wearscrubs.id/syarat.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wearscrubs.id/syarat-en.html"/>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+</urlset>
