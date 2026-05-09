@@ -146,9 +146,13 @@
                 border-right: none;
                 border-bottom: 1px solid rgba(255,255,255,0.1);
             }
-            #ai-chat-panel {
-                width: calc(100vw - 2rem) !important;
-                left: 1rem !important;
-                bottom: 5rem !important;
-            }
         }
+
+        /* Dark Mode: Tombol Bahasa di Mobile Drawer */
+        /* Aktif = bg-gray-900 (light) / bg-white (dark) text gelap */
+        html.dark #mobile-drawer a[data-lang-id].bg-gray-900,
+        html.dark #mobile-drawer a[data-lang-en].bg-gray-900 { color: #111827 !important; }
+        /* Tidak Aktif = bg-gray-100 (light) / bg-white/10 (dark) text putih dimmed */
+        html.dark #mobile-drawer a[data-lang-id]:not(.bg-gray-900),
+        html.dark #mobile-drawer a[data-lang-en]:not(.bg-gray-900) { color: rgba(255,255,255,0.6) !important; }
+
