@@ -354,7 +354,7 @@
             <button onclick="filterProducts('all')" data-tab="all" class="prod-tab-btn active text-xs font-bold px-4 py-2 rounded-xl bg-white text-black">Semua</button>
             <button onclick="filterProducts('tops')" data-tab="tops" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Atasan</button>
             <button onclick="filterProducts('pants')" data-tab="pants" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Celana</button>
-            <button onclick="filterProducts('caps')" data-tab="caps" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Topi</button>
+            <button onclick="filterProducts('caps')" data-tab="caps" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Cap</button>
             <button onclick="filterProducts('gown')" data-tab="gown" class="prod-tab-btn text-xs font-bold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10">Gown</button>
         </div>
         <div id="products-empty" class="hidden text-center py-16 text-white/30 text-sm">
@@ -401,7 +401,7 @@
                 <option value="">Semua Kategori</option>
                 <option value="tops">Atasan</option>
                 <option value="pants">Celana</option>
-                <option value="caps">Topi</option>
+                <option value="caps">Cap</option>
                 <option value="gown">Gown</option>
             </select>
         </div>
@@ -825,7 +825,7 @@
                 <select id="pf-category" onchange="handleCategoryChange()" class="w-full !py-3">
                     <option value="tops">Atasan Scrub</option>
                     <option value="pants">Celana Scrub</option>
-                    <option value="caps">Topi Scrub</option>
+                    <option value="caps">Cap Scrub</option>
                     <option value="gown">Gown</option>
                 </select>
             </div>
@@ -1375,7 +1375,7 @@ function switchChart(type) {
     let labels = [], data = [], color = '';
     if (type === 'products') {
         const bycat = statsData.by_category || [];
-        labels = bycat.map(c => ({ tops:'Atasan', pants:'Celana', caps:'Topi', gown:'Gown' }[c.category] || c.category));
+        labels = bycat.map(c => ({ tops:'Atasan', pants:'Celana', caps:'Cap', gown:'Gown' }[c.category] || c.category));
         data = bycat.map(c => c.count);
         color = 'rgba(99,102,241,0.7)';
     } else if (type === 'orders') {
@@ -1444,7 +1444,7 @@ function renderProducts() {
     const empty = document.getElementById('products-empty');
     if (!list.length) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
     empty.classList.add('hidden');
-    const catLabel = { tops:'Atasan', pants:'Celana', caps:'Topi', gown:'Gown' };
+    const catLabel = { tops:'Atasan', pants:'Celana', caps:'Cap', gown:'Gown' };
     grid.innerHTML = list.map(p => {
         const photo = resolvePhoto(p.main_photo);
         const safeP = JSON.stringify(p).replace(/"/g, '&quot;');
@@ -2348,7 +2348,7 @@ async function loadPopular() {
         const products = await apiFetch('/api/products?status=all');
         popularSelected = new Set(products.filter(p => p.is_popular).map(p => p.id));
         document.getElementById('popular-count-label').textContent = `${popularSelected.size} / 4 dipilih`;
-        const catLabel = { tops:'Atasan', pants:'Celana', caps:'Topi', gown:'Gown' };
+        const catLabel = { tops:'Atasan', pants:'Celana', caps:'Cap', gown:'Gown' };
         document.getElementById('popular-grid').innerHTML = products.map(p => {
             const photo = resolvePhoto(p.main_photo);
             const isSel = popularSelected.has(p.id);
