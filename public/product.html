@@ -883,8 +883,22 @@
     // Language switcher — called when user clicks ID/EN or on page load
     function setLang(lang, isUserChoice = false) {
         const isId = lang === 'id';
-        document.getElementById('lang-id').className = `text-sm ${isId ? 'font-bold text-black dark:text-white' : 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors'}`;
-        document.getElementById('lang-en').className = `text-sm ${!isId ? 'font-bold text-black dark:text-white' : 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors'}`;
+        // Toggle active/inactive classes on ALL lang switcher instances (desktop + mobile drawer)
+        // Uses data-lang-id / data-lang-en attributes from canonical header template
+        document.querySelectorAll('[data-lang-id]').forEach(el => {
+            el.classList.toggle('font-bold', isId);
+            el.classList.toggle('font-medium', !isId);
+            el.classList.toggle('text-black', isId);
+            el.classList.toggle('dark:text-white', isId);
+            el.classList.toggle('text-gray-500', !isId);
+        });
+        document.querySelectorAll('[data-lang-en]').forEach(el => {
+            el.classList.toggle('font-bold', !isId);
+            el.classList.toggle('font-medium', isId);
+            el.classList.toggle('text-black', !isId);
+            el.classList.toggle('dark:text-white', !isId);
+            el.classList.toggle('text-gray-500', isId);
+        });
         localStorage.setItem('ws_lang', lang);
         if (isUserChoice) localStorage.setItem('ws_lang_set', 'true');
 
