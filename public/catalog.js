@@ -260,7 +260,7 @@ const Catalog = {
         const isCaps = p.category === 'caps';
         const isGown = p.category === 'gown';
         const isEn = localStorage.getItem('ws_lang') === 'en' || location.pathname.includes('-en.html');
-        const capsDescId = 'Dengan desain yang ringan dan ergonomis, topi scrub ini menjamin kenyamanan dan kesesuaian yang pas selama shift panjang sekaligus menjaga rambut tetap tertutup rapi.';
+        const capsDescId = 'Dengan desain yang ringan dan ergonomis, cap scrub ini menjamin kenyamanan dan kesesuaian yang pas selama shift panjang sekaligus menjaga rambut tetap tertutup rapi.';
         const capsDescEn = 'With a lightweight and ergonomic design, this scrub cap ensures comfort and a perfect fit during long shifts while keeping hair neatly covered.';
         const capsDesc = isCaps ? `<p class="text-[11px] text-gray-500 dark:text-white/50 leading-relaxed mt-0.5">${isEn ? capsDescEn : capsDescId}</p>` : '';
         const gownDescId = 'Baju gown medis dengan bahan premium, praktis, dan nyaman untuk prosedur klinis.';
