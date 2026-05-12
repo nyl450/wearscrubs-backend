@@ -336,9 +336,10 @@
                 <div class="border-t border-gray-100 dark:border-white/10 space-y-0 pt-1">
                     <details class="group py-4 border-b border-gray-100 dark:border-white/10">
                         <summary class="flex justify-between items-center cursor-pointer list-none">
-                            <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-700 dark:text-white/70" data-id="Material &amp; Produk Detail" data-en="Material &amp; Product Details">Material &amp; Produk Detail</span>
+                            <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-700 dark:text-white/70" data-id="Detail Produk" data-en="Product Details">Detail Produk</span>
                             <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 group-open:rotate-180 transition-transform"></i>
                         </summary>
+                        <div id="product-long-desc" class="pt-3 text-sm text-gray-500 dark:text-white/50 leading-relaxed space-y-2"></div>
                         <div class="pt-3 text-sm text-gray-500 dark:text-white/50 leading-relaxed">
                             <ul class="list-disc list-inside space-y-1.5">
                                 <li><span data-id="Scrub Atasan, Celana, Cap : Polyester &amp; Spandex" data-en="Scrub Tops, Pants, Caps : Polyester &amp; Spandex">Scrub Atasan, Celana, Cap : Polyester &amp; Spandex</span></li>
@@ -879,24 +880,12 @@
         const isId = lang === 'id';
         // Toggle active/inactive classes on ALL lang switcher instances (desktop + mobile drawer)
         // Uses data-lang-id / data-lang-en attributes from canonical header template
-        document.querySelectorAll('[data-lang-id]').forEach(el => {
-            el.classList.toggle('font-bold', isId);
-            el.classList.toggle('font-medium', !isId);
-            el.classList.toggle('text-black', isId);
-            el.classList.toggle('dark:text-white', isId);
-            el.classList.toggle('text-gray-500', !isId);
-        });
-        document.querySelectorAll('[data-lang-en]').forEach(el => {
-            el.classList.toggle('font-bold', !isId);
-            el.classList.toggle('font-medium', isId);
-            el.classList.toggle('text-black', !isId);
-            el.classList.toggle('dark:text-white', !isId);
-            el.classList.toggle('text-gray-500', isId);
-        });
+        document.getElementById('lang-id').className = `text-sm ${isId ? 'font-bold text-black dark:text-white' : 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors'}`;
+        document.getElementById('lang-en').className = `text-sm ${!isId ? 'font-bold text-black dark:text-white' : 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors'}`;
         localStorage.setItem('ws_lang', lang);
         if (isUserChoice) localStorage.setItem('ws_lang_set', 'true');
 
-        // â”€â”€ Swap all data-id/data-en elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        //  Swap all data-id/data-en elements 
         document.querySelectorAll('[data-id][data-en]').forEach(el => {
             el.textContent = isId ? el.dataset.id : el.dataset.en;
         });
@@ -908,7 +897,7 @@
         const mitraEl = document.querySelector('[data-id="Mitra Resmi"],[data-en="Official Partner"]');
         if (mitraEl) mitraEl.textContent = isId ? 'Mitra Resmi' : 'Official Partner';
 
-        // â”€â”€ Update dark mode toggle text to match current language â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        //  Update dark mode toggle text to match current language  
         const isDark = document.documentElement.classList.contains('dark');
         document.querySelectorAll('[data-theme-text]').forEach(el => {
             el.textContent = isDark
