@@ -240,6 +240,7 @@ async function initDB() {
     await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS price_by_type TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS short_description_en TEXT DEFAULT ''`);
     await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS long_description_en TEXT DEFAULT ''`);
+    await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
 
     // ── Product Variants (photos per color/type combination) ─────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS product_variants (
@@ -618,7 +619,7 @@ app.get('/api/products', async (req, res) => {
             SELECT p.*,
                    (SELECT pv.photo_url FROM product_variants pv
                     WHERE pv.product_id = p.id ORDER BY pv.id ASC LIMIT 1) AS main_photo
-            FROM products p WHERE 1=1`;
+            FROM products p WHERE p.is_active = TRUE`;
         const params = [];
         let idx = 1; // GANTI: track nomor $N
 
@@ -644,7 +645,7 @@ app.get('/api/products/popular', async (req, res) => {
                    (SELECT STRING_AGG(pv2.photo_url, '||') FROM
                     (SELECT photo_url FROM product_variants WHERE product_id = p.id
                      AND photo_url IS NOT NULL ORDER BY id ASC LIMIT 2) pv2) AS photos_raw
-            FROM products p WHERE p.is_popular = 1 AND p.status = 'active'
+            FROM products p WHERE p.is_popular = 1 AND p.status = 'active' AND p.is_active = TRUE
             ORDER BY p.created_at DESC LIMIT 4`);
         res.json(rows.map(r => {
             const photos = r.photos_raw ? r.photos_raw.split('||').filter(Boolean) : (r.main_photo ? [r.main_photo] : []);
@@ -905,11 +906,11 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
 });
 
 
-// DELETE /api/products/:id
+// DELETE /api/products/:id (soft delete — preserves order history)
 app.delete('/api/products/:id', requireAuth(['admin','manager']), async (req, res) => {
     try {
-        // GANTI: ? → $1
-        await dbRun('DELETE FROM products WHERE id = $1', [req.params.id]);
+        await dbRun('UPDATE products SET is_active = FALSE WHERE id = $1', [req.params.id]);
+        invalidateCache('products');
         res.json({ message: 'Produk dihapus' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1136,7 +1137,7 @@ app.put('/api/inventory', requireAuth(['admin','manager']), async (req, res) => 
 
 app.get('/api/stats/overview', requireAuth(), async (req, res) => {
     try {
-        const totalProducts = await dbGet("SELECT COUNT(*) as count FROM products WHERE status != 'draft'");
+        const totalProducts = await dbGet("SELECT COUNT(*) as count FROM products WHERE status != 'draft' AND is_active = TRUE");
         const totalOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status != 'cancelled'");
         const cancelledOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status = 'cancelled'");
         const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status != 'cancelled'");
@@ -1145,7 +1146,7 @@ app.get('/api/stats/overview', requireAuth(), async (req, res) => {
         // Revenue: hanya order PAID yang TIDAK dibatalkan
         const totalRevenue = await dbGet("SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
         const lowStock = await dbGet("SELECT COUNT(*) as count FROM inventory WHERE stock < 5 AND stock >= 0");
-        const byCategory = await dbAll("SELECT category, COUNT(*) as count FROM products GROUP BY category");
+        const byCategory = await dbAll("SELECT category, COUNT(*) as count FROM products WHERE is_active = TRUE GROUP BY category");
 
         const monthlyOrders = await dbAll(`
             SELECT TO_CHAR(created_at, 'YYYY-MM') as month, 
