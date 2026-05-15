@@ -83,9 +83,10 @@
                 <div>
                     <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Kota Tujuan Pengiriman *</label>
                     <div class="relative">
-                        <input type="text" id="f-city-search" placeholder="Ketik nama kota..." autocomplete="off" required
+                        <input type="text" id="f-city-search" placeholder="Ketik nama kota..." autocomplete="off"
                             class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
-                        <input type="hidden" id="f-city" required>
+                        <input type="hidden" id="f-city">
+                        <p id="f-city-error" class="hidden mt-1 text-xs text-red-500"><i class="fa-solid fa-circle-exclamation mr-1"></i>Pilih kota dari dropdown</p>
                         <div id="city-dropdown" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 hidden"></div>
                     </div>
                     <div id="shipping-info" class="mt-2 hidden">
@@ -153,6 +154,14 @@
                 <div>
                     <p class="text-sm font-semibold text-purple-800 dark:text-purple-300">Estimasi Proses Bordir: ±1 Minggu</p>
                     <p class="text-xs text-purple-600 dark:text-purple-400 mt-0.5">Pesanan bordir akan diproses selama ±1 minggu setelah pembayaran dikonfirmasi. Bordir logo memerlukan file logo dari Anda — admin akan menghubungi via WhatsApp.</p>
+                </div>
+            </div>
+            <!-- Disclaimer: kompleksitas bordir -->
+            <div class="mt-3 flex items-start gap-3 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3">
+                <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 text-base shrink-0"></i>
+                <div>
+                    <p class="text-xs font-semibold text-amber-800 dark:text-amber-300">Catatan Kompleksitas Bordir</p>
+                    <p class="text-[11px] text-amber-700 dark:text-amber-400/90 mt-0.5">Bordir dengan tingkat kerumitan tinggi (logo detail kecil) atau nama melebihi 15 karakter akan kami review terlebih dahulu. Admin akan konfirmasi via WhatsApp sebelum produksi — opsi revisi, lanjut tanpa bordir (refund biaya bordir), atau batal pesanan.</p>
                 </div>
             </div>
         </div>
@@ -337,10 +346,26 @@ async function loadCities() {
             if (res.ok) data = await res.json();
         } catch(e) {}
         if (!Array.isArray(data) || data.length === 0) {
-            data = await fetch('/cities.json').then(r => r.json());
+            try {
+                data = await fetch('/cities.json').then(r => r.ok ? r.json() : null);
+            } catch(e) { data = null; }
         }
         allCities = Array.isArray(data) ? data : [];
-    } catch(e) { console.error('Gagal load kota', e); }
+        if (allCities.length === 0) showCitiesLoadError();
+    } catch(e) {
+        console.error('Gagal load kota', e);
+        showCitiesLoadError();
+    }
+}
+
+function showCitiesLoadError() {
+    const wrap = document.getElementById('f-city-search')?.parentElement;
+    if (!wrap || document.getElementById('cities-load-error')) return;
+    const banner = document.createElement('div');
+    banner.id = 'cities-load-error';
+    banner.className = 'mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2';
+    banner.innerHTML = '<i class="fa-solid fa-circle-exclamation mr-1"></i>Gagal memuat daftar kota. Coba refresh halaman atau hubungi admin via WhatsApp.';
+    wrap.appendChild(banner);
 }
 
 function showCityDropdown(query) {
@@ -369,18 +394,34 @@ async function selectCity(name) {
             if (res.ok) data = await res.json();
         } catch(e) {}
 
-        // Local fallback: same formula as server (ceil(qty/3) kg, DKI Rp10.000/kg, non-DKI Rp20.000/kg)
+        // Local fallback: same rules as server
+        //  DKI: JNE / J&T Reguler, Rp10.000/kg
+        //  Non-DKI ≤10kg: J&T Reguler / Lion Parcel, Rp20.000/kg
+        //  Non-DKI >10kg: Lion Cargo, ongkir dikonfirmasi admin
         if (!data || !data.city) {
             const cityData = allCities.find(c => c.name.toLowerCase() === name.toLowerCase());
             const is_dki = cityData ? cityData.is_dki : false;
             const weight_kg = Math.ceil(qty / 3) || 1;
-            const courier = is_dki ? 'Gosend / Grab (DKI)' : 'JNE Regular';
-            const shipping_cost = weight_kg * (is_dki ? 10000 : 20000);
-            data = { city: name, is_dki, courier, shipping_cost, weight_kg,
-                     shipping_cost_formatted: fmt(shipping_cost) };
+            let courier, shipping_cost, needs_confirmation = false;
+            if (!is_dki && weight_kg > 10) {
+                courier = 'Lion Cargo (ongkir dikonfirmasi admin via WhatsApp)';
+                shipping_cost = 0;
+                needs_confirmation = true;
+            } else if (is_dki) {
+                courier = 'JNE / J&T Reguler';
+                shipping_cost = weight_kg * 10000;
+            } else {
+                courier = 'J&T Reguler / Lion Parcel';
+                shipping_cost = weight_kg * 20000;
+            }
+            data = { city: name, is_dki, courier, shipping_cost, weight_kg, needs_confirmation,
+                     shipping_cost_formatted: needs_confirmation ? 'Dikonfirmasi admin' : fmt(shipping_cost) };
         }
 
-        selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier, shipping_cost: data.shipping_cost, weight_kg: data.weight_kg };
+        const safeWeight = parseInt(data.weight_kg) || Math.ceil(qty / 3) || 1;
+        selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier,
+                         shipping_cost: parseInt(data.shipping_cost) || 0, weight_kg: safeWeight,
+                         needs_confirmation: !!data.needs_confirmation };
         document.getElementById('shipping-courier').textContent = data.courier;
         document.getElementById('shipping-weight').textContent = `${data.weight_kg} kg (${qty} item)`;
         document.getElementById('shipping-cost-display').textContent = data.shipping_cost_formatted;
@@ -418,8 +459,14 @@ document.getElementById('checkout-form').addEventListener('submit', async (e) =>
         }
     }
     if (!document.getElementById('f-city').value) {
-        alert('Pilih kota tujuan pengiriman terlebih dahulu'); return;
+        const errEl = document.getElementById('f-city-error');
+        const searchEl = document.getElementById('f-city-search');
+        if (errEl) errEl.classList.remove('hidden');
+        if (searchEl) { searchEl.classList.add('ring-2','ring-red-500'); searchEl.focus(); }
+        return;
     }
+    document.getElementById('f-city-error')?.classList.add('hidden');
+    document.getElementById('f-city-search')?.classList.remove('ring-2','ring-red-500');
 
     // Check apakah ada item tops dengan bordir
     const hasBordir = cartItems.some(item => item.category === 'tops' && (item.bordir_nama || item.bordir_logo));
@@ -469,8 +516,8 @@ function buildBordirForm() {
                         <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Nama yang dibordir <span class="text-red-500">*</span></label>
                         <input type="text" id="bordir-nama-${itemIdx}-${q}"
                             placeholder="dr. James, M.Ked — perhatikan ejaan & huruf kapital"
-                            class="${cls}" required>
-                        <p class="text-[10px] text-gray-400 dark:text-white/25 mt-1">Tinggi huruf ~1,2 cm · panjang menyesuaikan</p>
+                            class="${cls}" required maxlength="15">
+                        <p class="text-[10px] text-gray-400 dark:text-white/25 mt-1">Maks. 15 karakter · Tinggi huruf ~1,2 cm</p>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -508,7 +555,7 @@ function buildBordirForm() {
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Posisi di Dada</label>
-                            <select id="bordir-logo-pos-${itemIdx}-${q}" class="${cls} cursor-pointer">${posOpts(item.bordir_nama ? 'kiri' : 'kiri')}</select>
+                            <select id="bordir-logo-pos-${itemIdx}-${q}" class="${cls} cursor-pointer">${posOpts(item.bordir_nama ? 'kiri' : 'kanan')}</select>
                         </div>
                     </div>
                 </div>
@@ -695,11 +742,14 @@ function copyAccount(btn) {
 
 loadCities();
 goToStep('info');
-// renderPreview() needs Cart (defined in main.js which loads after this script)
-// defer until all scripts are loaded
-window.addEventListener('load', function() {
+// renderPreview() needs Cart (defined in main.js which loads after this script).
+// DOMContentLoaded fires after all sync scripts execute but before images load —
+// much faster than 'load' which waits for ALL resources including images.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderPreview);
+} else {
     renderPreview();
-});
+}
 </script>
 <script src="main.js"></script>
 </body>

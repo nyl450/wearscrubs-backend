@@ -327,6 +327,9 @@ async function initDB() {
     // Migrate: new columns for order tracking & bordir/cancel
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_bordir_logo BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_bordir_nama BOOLEAN DEFAULT FALSE`);
+    // Bordir review status: NULL = no bordir, 'pending' = waiting admin review, 'approved' = ok to produce, 'rejected' = admin reject (revisi/refund)
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS bordir_status TEXT DEFAULT NULL`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS bordir_reject_reason TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS bordir_logo_requested BOOLEAN DEFAULT FALSE`);
     // Migrate: per-item bordir flags on order_items (so invoice can derive base price per item)
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_nama BOOLEAN DEFAULT FALSE`);
@@ -1214,16 +1217,33 @@ app.get('/api/cities', (req, res) => {
 });
 
 // GET /api/shipping-cost?city=Jakarta%20Selatan&qty=5
-// Formula: ceil(qty / 3) kg, DKI Rp10.000/kg, Luar DKI Rp20.000/kg
+// Rules:
+//  - DKI: JNE / J&T Reguler, Rp10.000/kg
+//  - Luar DKI ≤10kg: J&T Reguler / Lion Parcel, Rp20.000/kg
+//  - Luar DKI >10kg: Lion Cargo, ongkir dikonfirmasi admin per kota (cost=0, needs_confirmation=true)
 app.get('/api/shipping-cost', (req, res) => {
     const { city, qty } = req.query;
     const quantity = parseInt(qty || 1);
     const weightKg = Math.ceil(quantity / 3);
     const cityInfo = CITIES.find(c => c.name === city);
     if (!cityInfo) return res.status(404).json({ error: 'Kota tidak ditemukan' });
-    const ratePerKg = cityInfo.is_dki ? 10000 : 20000;
-    const courier   = cityInfo.is_dki ? 'J&T Reguler' : 'Lion Parcel';
-    const cost      = weightKg * ratePerKg;
+
+    let courier, ratePerKg, cost, needsConfirmation = false;
+    if (!cityInfo.is_dki && weightKg > 10) {
+        courier = 'Lion Cargo (ongkir dikonfirmasi admin via WhatsApp)';
+        ratePerKg = 0;
+        cost = 0;
+        needsConfirmation = true;
+    } else if (cityInfo.is_dki) {
+        courier = 'JNE / J&T Reguler';
+        ratePerKg = 10000;
+        cost = weightKg * ratePerKg;
+    } else {
+        courier = 'J&T Reguler / Lion Parcel';
+        ratePerKg = 20000;
+        cost = weightKg * ratePerKg;
+    }
+
     res.json({
         city: cityInfo.name,
         is_dki: cityInfo.is_dki,
@@ -1232,7 +1252,8 @@ app.get('/api/shipping-cost', (req, res) => {
         weight_kg: weightKg,
         rate_per_kg: ratePerKg,
         shipping_cost: cost,
-        shipping_cost_formatted: `Rp ${cost.toLocaleString('id-ID')}`
+        shipping_cost_formatted: needsConfirmation ? 'Dikonfirmasi admin' : `Rp ${cost.toLocaleString('id-ID')}`,
+        needs_confirmation: needsConfirmation
     });
 });
 
@@ -1326,9 +1347,14 @@ app.post('/api/orders', async (req, res) => {
 
         // Courier dipilih manual dari form, fallback ke logika kota jika tidak diisi
         const cityInfo = CITIES.find(c => c.name === shipping_city);
-        const autoCourier = cityInfo ? (cityInfo.is_dki ? 'J&T' : 'Lion Parcel') : 'J&T';
-        const courier = (req_shipping_courier && req_shipping_courier.trim()) ? req_shipping_courier.trim() : autoCourier;
         const weightKg = parseInt(shipping_weight_kg || 0);
+        let autoCourier = 'JNE / J&T Reguler';
+        if (cityInfo) {
+            if (!cityInfo.is_dki && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
+            else if (cityInfo.is_dki) autoCourier = 'JNE / J&T Reguler';
+            else autoCourier = 'J&T Reguler / Lion Parcel';
+        }
+        const courier = (req_shipping_courier && req_shipping_courier.trim()) ? req_shipping_courier.trim() : autoCourier;
 
         // Detect bordir flags from items for order-level tracking
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
@@ -1342,13 +1368,14 @@ app.post('/api/orders', async (req, res) => {
         const orderResult = await dbRun(
             `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
               shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
-              embroidery_details, has_bordir_logo, has_bordir_nama, notes, order_source,
+              embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
               payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
             [orderCode, customer_name, customer_phone, customer_address,
              shipping_city || '', courier, weightKg, shippingCost, total,
              embroidery_details ? JSON.stringify(embroidery_details) : null,
              hasBordirLogo, hasBordirNama,
+             (hasBordirLogo || hasBordirNama) ? 'pending' : null,
              notes || '',
              order_source || 'website',
              payment_method || '',
@@ -1636,6 +1663,51 @@ app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, 
             [order_status, req.params.id]
         );
         res.json({ message: `Status: ${order_status}` });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/orders/:id/bordir-review — admin approve / reject bordir
+// Body: { action: 'approve' | 'reject', reason?: string }
+app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+    try {
+        const { action, reason } = req.body;
+        if (!['approve','reject'].includes(action))
+            return res.status(400).json({ error: 'Action harus approve atau reject' });
+
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (!order.has_bordir_logo && !order.has_bordir_nama)
+            return res.status(400).json({ error: 'Pesanan ini tidak memiliki bordir' });
+
+        if (action === 'approve') {
+            await dbRun(
+                `UPDATE orders SET bordir_status = 'approved', bordir_reject_reason = NULL, updated_at = NOW() WHERE id = $1`,
+                [order.id]
+            );
+            return res.json({ message: 'Bordir disetujui, order siap diproses' });
+        }
+
+        // Reject: simpan alasan + generate WA link untuk admin kirim ke customer
+        const rejectReason = (reason || '').trim() || 'Bordir terlalu rumit atau nama terlalu panjang untuk diproses';
+        await dbRun(
+            `UPDATE orders SET bordir_status = 'rejected', bordir_reject_reason = $1, updated_at = NOW() WHERE id = $2`,
+            [rejectReason, order.id]
+        );
+
+        const phone = (order.customer_phone || '').replace(/[^0-9]/g, '').replace(/^0/, '62');
+        const msg = encodeURIComponent(
+            `Halo ${order.customer_name},\n\n` +
+            `Mohon maaf, untuk pesanan *${order.order_code}* bordir yang Anda minta tidak dapat kami proses karena:\n` +
+            `${rejectReason}\n\n` +
+            `Silakan pilih salah satu opsi berikut:\n` +
+            `1. Revisi bordir (kirim ulang detail/file)\n` +
+            `2. Lanjut tanpa bordir (kami refund biaya bordir)\n` +
+            `3. Batal pesanan (full refund)\n\n` +
+            `Mohon konfirmasi via balasan WA ini. Terima kasih.`
+        );
+        const waUrl = phone ? `https://wa.me/${phone}?text=${msg}` : null;
+
+        res.json({ message: 'Bordir ditolak. Kirim WA ke customer.', wa_url: waUrl, reason: rejectReason });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

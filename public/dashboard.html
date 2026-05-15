@@ -2686,6 +2686,30 @@ async function viewOrder(id) {
             <div class="mt-3 pt-3 border-t border-purple-500/15 flex items-center gap-2 text-[11px] text-purple-300/70">
                 <i class="fa-regular fa-clock"></i>
                 Estimasi proses bordir: <strong>1 minggu</strong> setelah konfirmasi bayar
+            </div>
+            <!-- Bordir Review (admin approval) -->
+            <div class="mt-3 pt-3 border-t border-purple-500/15">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <p class="text-[11px] font-bold text-purple-300/80 uppercase tracking-wider">Review Bordir</p>
+                    ${o.bordir_status === 'approved' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-green-500/15 text-green-300 border border-green-500/25">✓ Disetujui</span>'
+                      : o.bordir_status === 'rejected' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-red-500/15 text-red-300 border border-red-500/25">✕ Ditolak</span>'
+                      : '<span class="text-[10px] px-2 py-1 rounded-md bg-yellow-500/15 text-yellow-300 border border-yellow-500/25">⏳ Pending Review</span>'}
+                </div>
+                ${o.bordir_status === 'rejected' && o.bordir_reject_reason ? `
+                    <p class="text-[11px] text-red-300/80 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2 mb-2">
+                        <strong>Alasan tolak:</strong> ${o.bordir_reject_reason}
+                    </p>` : ''}
+                ${o.bordir_status !== 'approved' ? `
+                    <div class="flex gap-2">
+                        <button onclick="reviewBordir(${o.id}, 'approve')"
+                            class="flex-1 text-[11px] px-3 py-2 rounded-lg bg-green-500/15 text-green-300 border border-green-500/25 hover:bg-green-500/25 transition">
+                            <i class="fa-solid fa-check mr-1"></i> Setujui
+                        </button>
+                        <button onclick="reviewBordir(${o.id}, 'reject')"
+                            class="flex-1 text-[11px] px-3 py-2 rounded-lg bg-red-500/15 text-red-300 border border-red-500/25 hover:bg-red-500/25 transition">
+                            <i class="fa-solid fa-xmark mr-1"></i> Tolak (terlalu rumit / nama panjang)
+                        </button>
+                    </div>` : ''}
             </div>` : ''}
         </div>` : '';
 
@@ -2802,6 +2826,38 @@ async function markLogoRequested(orderId) {
         if (o) o.bordir_logo_requested = true;
         toast('✅ Logo bordir sudah ditandai sebagai diminta');
     } catch(e) { /* silent — WA link still works */ }
+}
+
+async function reviewBordir(orderId, action) {
+    try {
+        let reason = '';
+        if (action === 'reject') {
+            reason = prompt(
+                'Alasan tolak bordir (akan dikirim ke customer via WA):',
+                'Bordir terlalu rumit untuk diproses dengan kualitas terbaik'
+            );
+            if (reason === null) return; // user cancel
+        }
+        const fd = new FormData();
+        fd.append('action', action);
+        if (reason) fd.append('reason', reason);
+        const res = await apiFetch(`/api/orders/${orderId}/bordir-review`, { method: 'PUT', body: fd });
+        // Update local cache so UI refresh shows new state
+        const o = cachedOrders.find(x => x.id === orderId);
+        if (o) {
+            o.bordir_status = action === 'approve' ? 'approved' : 'rejected';
+            if (action === 'reject') o.bordir_reject_reason = res.reason || reason;
+        }
+        if (action === 'reject' && res.wa_url) {
+            window.open(res.wa_url, '_blank');
+            toast('✕ Bordir ditolak. WA template terbuka di tab baru — kirim ke customer.');
+        } else {
+            toast('✓ Bordir disetujui — order siap diproses.');
+        }
+        // Reopen modal to refresh
+        closeOrderModal();
+        viewOrder(orderId);
+    } catch(e) { toast('Gagal: ' + e.message, true); }
 }
 
 function closeOrderModal() {
