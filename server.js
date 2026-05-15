@@ -252,6 +252,15 @@ async function initDB() {
         CONSTRAINT fk_variants_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
     )`);
 
+    // ── Migrate: add slot column (identify which photo 1/2/3 per color/type) ──
+    await dbRun(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS slot INTEGER`);
+    await dbRun(`UPDATE product_variants pv SET slot = sub.rn FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY product_id, color, variant_type ORDER BY id) AS rn
+        FROM product_variants WHERE slot IS NULL
+    ) sub WHERE pv.id = sub.id AND pv.slot IS NULL`).catch(() => {});
+    await dbRun(`ALTER TABLE product_variants ALTER COLUMN slot SET DEFAULT 1`).catch(() => {});
+    await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS uq_variants_slot ON product_variants(product_id, color, variant_type, slot)`).catch(() => {});
+
     // ── Inventory (stock per product+size+color+type) ─────────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS inventory (
         id SERIAL PRIMARY KEY,
@@ -680,9 +689,9 @@ app.get('/api/products/:id', async (req, res) => {
         const p = await dbGet('SELECT * FROM products WHERE id = $1', [req.params.id]);
         if (!p) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
-        const variantRows = await dbAll('SELECT * FROM product_variants WHERE product_id = $1 ORDER BY id ASC', [p.id]);
+        const variantRows = await dbAll('SELECT * FROM product_variants WHERE product_id = $1 ORDER BY color, variant_type, slot ASC NULLS LAST, id ASC', [p.id]);
         const inventory = await dbAll('SELECT * FROM inventory WHERE product_id = $1', [p.id]);
-        const mainPhoto = variantRows.length > 0 ? variantRows[0].photo_url : '';
+        const mainPhoto = (variantRows.find(r => r.photo_url) || {}).photo_url || '';
 
         const variantMap = {};
         variantRows.forEach(row => {
@@ -690,7 +699,8 @@ app.get('/api/products/:id', async (req, res) => {
             if (!variantMap[key]) {
                 variantMap[key] = { color: row.color, variant_type: row.variant_type, photos: [] };
             }
-            if (row.photo_url) variantMap[key].photos.push(row.photo_url);
+            const idx = (row.slot || 1) - 1;
+            variantMap[key].photos[idx] = row.photo_url || null;
         });
         const variants = Object.values(variantMap);
 
@@ -758,16 +768,16 @@ app.post('/api/products', requireAuth(['admin','manager']), upload.any(), async 
 
                     if (photoUrl) {
                         if (i === 1) mainPhotoUrl = photoUrl;
-                        // GANTI: ? → $1,$2,$3,$4
                         await dbRun(
-                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url) VALUES ($1,$2,$3,$4)`,
-                            [productId, color, type, photoUrl]
+                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES ($1,$2,$3,$4,$5)`,
+                            [productId, color, type, photoUrl, i]
                         );
                     }
                 }
                 if (!mainPhotoUrl) {
                     await dbRun(
-                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url) VALUES ($1,$2,$3,$4)`,
+                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES ($1,$2,$3,$4,1)
+                         ON CONFLICT (product_id, color, variant_type, slot) DO NOTHING`,
                         [productId, color, type, null]
                     );
                 }
@@ -831,6 +841,16 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
             for (const type of selTypes) {
                 for (let i = 1; i <= NUM_PHOTOS; i++) {
                     const mapKey = `${color}_${type}_${i}`;
+
+                    // Handle explicit delete (X button): remove this slot row entirely
+                    if (req.body[`photo_clear_${mapKey}`] === '1') {
+                        await dbRun(
+                            `DELETE FROM product_variants WHERE product_id=$1 AND color=$2 AND variant_type=$3 AND slot=$4`,
+                            [req.params.id, color, type, i]
+                        );
+                        continue;
+                    }
+
                     let photoUrl = req.body[`photo_url_${mapKey}`] || null;
                     if (!photoUrl) {
                         const fileField = photoMap[mapKey];
@@ -851,17 +871,12 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
                         }
                     }
                     if (photoUrl) {
-                        // Try upsert, fall back to plain update if no unique constraint
                         await dbRun(
-                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url)
-                             VALUES ($1,$2,$3,$4)
-                             ON CONFLICT(product_id, color, variant_type) DO UPDATE SET photo_url = EXCLUDED.photo_url`,
-                            [req.params.id, color, type, photoUrl]
-                        ).catch(() => dbRun(
-                            `UPDATE product_variants SET photo_url = $1
-                             WHERE product_id = $2 AND color = $3 AND variant_type = $4`,
-                            [photoUrl, req.params.id, color, type]
-                        ));
+                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot)
+                             VALUES ($1,$2,$3,$4,$5)
+                             ON CONFLICT(product_id, color, variant_type, slot) DO UPDATE SET photo_url = EXCLUDED.photo_url`,
+                            [req.params.id, color, type, photoUrl, i]
+                        );
                     }
                 }
             }
@@ -882,8 +897,9 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
                 );
                 if (!existingVariant) {
                     await dbRun(
-                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url)
-                         VALUES ($1, $2, $3, $4)`,
+                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot)
+                         VALUES ($1, $2, $3, $4, 1)
+                         ON CONFLICT (product_id, color, variant_type, slot) DO NOTHING`,
                         [req.params.id, color, dbType, null]
                     );
                 }

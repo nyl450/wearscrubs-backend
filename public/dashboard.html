@@ -1690,6 +1690,7 @@ function generatePhotoSlots(colors, types) {
                                 <div id="preview-${key}" class="absolute inset-0 hidden rounded-md overflow-hidden">
                                     <img loading="lazy" decoding="async" class="w-full h-full object-cover rounded-md">
                                     <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><span class="text-[9px] font-bold">GANTI</span></div>
+                                    <button type="button" onclick="event.stopPropagation(); clearPhotoSlot('${key}')" class="absolute top-1 right-1 z-10 w-6 h-6 rounded-full bg-black/70 hover:bg-red-500 text-white text-xs flex items-center justify-center transition shadow-lg" title="Hapus foto"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
                                 <div id="placeholder-${key}"><i class="fa-solid fa-camera text-lg text-white/20 mb-1 block text-center"></i><p class="text-[9px] text-white/30">Upload</p></div>
                             </div>
@@ -1711,7 +1712,7 @@ function restorePhotoSlots(variants) {
             const urlEl = document.getElementById(`url-${key}`);
             const previewEl = document.getElementById(`preview-${key}`);
             const placeholderEl = document.getElementById(`placeholder-${key}`);
-            if (urlEl) urlEl.value = photoUrl;
+            if (urlEl) { urlEl.value = photoUrl; delete urlEl.dataset.cleared; }
             if (previewEl) {
                 const img = previewEl.querySelector('img');
                 if (img) img.src = photoUrl;
@@ -1722,6 +1723,18 @@ function restorePhotoSlots(variants) {
     });
 }
 
+// ── Clear a photo slot (X button) ─────────────────────────────────────────────
+function clearPhotoSlot(key) {
+    const urlEl = document.getElementById(`url-${key}`);
+    const fileEl = document.getElementById(`file-${key}`);
+    const previewEl = document.getElementById(`preview-${key}`);
+    const placeholderEl = document.getElementById(`placeholder-${key}`);
+    if (urlEl) { urlEl.value = ''; urlEl.dataset.cleared = '1'; }
+    if (fileEl) fileEl.value = '';
+    if (previewEl) previewEl.classList.add('hidden');
+    if (placeholderEl) placeholderEl.classList.remove('hidden');
+}
+
 function previewPhoto(input, key) {
     if (input.files && input.files[0]) {
         const reader = new FileReader();
@@ -1729,6 +1742,8 @@ function previewPhoto(input, key) {
             document.getElementById(`preview-${key}`).classList.remove('hidden');
             document.getElementById(`preview-${key}`).querySelector('img').src = e.target.result;
             document.getElementById(`placeholder-${key}`).classList.add('hidden');
+            const urlEl = document.getElementById(`url-${key}`);
+            if (urlEl) delete urlEl.dataset.cleared;
         };
         reader.readAsDataURL(input.files[0]);
     }
@@ -1887,6 +1902,7 @@ document.getElementById('product-form').addEventListener('submit', async e => {
                     const ui = document.getElementById(`url-${key}`);
                     if (fi && fi.files[0]) { fd.append(`photo_${key}`, fi.files[0]); photoMap[key] = `photo_${key}`; }
                     else if (ui && ui.value.trim()) fd.append(`photo_url_${key}`, ui.value.trim());
+                    else if (ui && ui.dataset.cleared === '1') fd.append(`photo_clear_${key}`, '1');
                 }
             });
         });
