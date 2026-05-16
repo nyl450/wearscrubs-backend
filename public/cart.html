@@ -121,6 +121,64 @@ async function fetchStockForCart(cart) {
         );
     }
     await Promise.all(tasks);
+    validateCartStock();
+}
+
+// Block checkout if any variant in cart exceeds stock (aggregating bordir-split rows).
+function validateCartStock() {
+    const cart = Cart.get();
+    const checkoutBtn = document.getElementById('checkout-btn');
+    if (!checkoutBtn) return;
+
+    // Sum qty by stockKey + remember a display label per key
+    const totals = new Map();
+    const labels = new Map();
+    for (const item of cart) {
+        const k = stockKey(item);
+        totals.set(k, (totals.get(k) || 0) + item.quantity);
+        if (!labels.has(k)) {
+            const typeLbl = item.type && item.type !== 'null' ? ', ' + item.type : '';
+            labels.set(k, `${item.name} (${item.color.replace(/-/g,' ')}, ${item.size}${typeLbl})`);
+        }
+    }
+
+    const issues = [];
+    for (const [k, qty] of totals) {
+        const stock = stockCache.has(k) ? stockCache.get(k) : Infinity;
+        if (qty > stock) issues.push({ label: labels.get(k), qty, stock, excess: qty - stock });
+    }
+
+    const banner = document.getElementById('stock-warning-banner');
+    if (issues.length === 0) {
+        checkoutBtn.classList.remove('opacity-40', 'pointer-events-none');
+        checkoutBtn.removeAttribute('aria-disabled');
+        if (banner) banner.remove();
+        return;
+    }
+
+    checkoutBtn.classList.add('opacity-40', 'pointer-events-none');
+    checkoutBtn.setAttribute('aria-disabled', 'true');
+
+    const lines = issues.map(i =>
+        `<li><strong>${i.label}</strong>: keranjang ${i.qty} pcs, stok ${i.stock} pcs — kurangi <strong>${i.excess} pcs</strong></li>`
+    ).join('');
+    const html = `<div class="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+        <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i>
+        <div>
+            <p class="font-bold mb-1">Beberapa item melebihi stok</p>
+            <ul class="list-disc pl-4 space-y-0.5">${lines}</ul>
+            <p class="mt-1.5 text-red-600/80 dark:text-red-300/70">Kurangi qty atau hapus item sebelum lanjut checkout.</p>
+        </div>
+    </div>`;
+    if (banner) {
+        banner.innerHTML = html;
+    } else {
+        const b = document.createElement('div');
+        b.id = 'stock-warning-banner';
+        b.className = 'mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30';
+        b.innerHTML = html;
+        checkoutBtn.parentElement.insertBefore(b, checkoutBtn);
+    }
 }
 
 function renderCart() {
@@ -187,6 +245,9 @@ function renderCart() {
 
     document.getElementById('subtotal-display').textContent = fmt(subtotal);
     document.getElementById('total-display').textContent = fmt(subtotal);
+
+    // Re-validate stock immediately (handles cached case + post-qty-change re-check)
+    validateCartStock();
 }
 
 function removeItem(idx) {
