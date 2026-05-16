@@ -1,17 +1,17 @@
-﻿<!DOCTYPE html>
-<html lang="id" class="dark">
+<!DOCTYPE html>
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keranjang Belanja | Wearscrubs</title>
+    <title>Shopping Cart | Wearscrubs</title>
     <meta name="robots" content="noindex,nofollow">
-    <meta name="description" content="Keranjang belanja Wearscrubs">
+    <meta name="description" content="Wearscrubs shopping cart">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Keranjang Belanja | Wearscrubs">
-    <meta property="og:description" content="Keranjang belanja Wearscrubs">
-    <meta property="og:url" content="https://wearscrubs.id/cart.html">
+    <meta property="og:title" content="Shopping Cart | Wearscrubs">
+    <meta property="og:description" content="Wearscrubs shopping cart">
+    <meta property="og:url" content="https://wearscrubs.id/cart-en.html">
     <meta property="og:image" content="https://wearscrubs.id/images/logo/logo%20ws%20white%20250x55.png">
-    <meta property="og:locale" content="id_ID">
+    <meta property="og:locale" content="en_US">
     <meta property="og:site_name" content="Wearscrubs">
     <link rel="alternate" hreflang="id" href="https://wearscrubs.id/cart.html">
     <link rel="alternate" hreflang="en" href="https://wearscrubs.id/cart-en.html">
@@ -30,53 +30,53 @@
 <!-- Header -->
 <header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10">
     <div class="container mx-auto px-6 py-4 flex items-center justify-between">
-        <a href="index.html">
+        <a href="index-en.html">
             <img decoding="async" src="images/logo/logo%20ws%20black%20250x55.png" alt="Wearscrubs" class="h-8 w-auto block dark:hidden">
             <img decoding="async" src="images/logo/logo%20ws%20white%20250x55.png" alt="Wearscrubs" class="h-8 w-auto hidden dark:block">
         </a>
-        <h1 class="hidden md:block text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Keranjang Belanja</h1>
-        <a href="scrub-top.html" class="hidden md:flex text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Lanjut Belanja</a>
+        <h1 class="hidden md:block text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Shopping Cart</h1>
+        <a href="scrub-top-en.html" class="hidden md:flex text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Continue Shopping</a>
     </div>
 </header>
 
 <main class="container mx-auto px-6 py-12 max-w-5xl">
     <!-- Mobile page title: shows above item list on small screens -->
     <div class="flex items-center justify-between mb-6 md:hidden">
-        <h2 class="text-xl font-bold">Keranjang Belanja</h2>
-        <a href="scrub-top.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition flex items-center gap-1.5">
-            <i class="fa-solid fa-arrow-left text-xs"></i> Lanjut Belanja
+        <h2 class="text-xl font-bold">Shopping Cart</h2>
+        <a href="scrub-top-en.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrow-left text-xs"></i> Continue Shopping
         </a>
     </div>
 
     <div id="cart-content" class="flex flex-col lg:flex-row gap-8">
         <!-- Left: Cart Items -->
         <div class="flex-1">
-            <h2 class="hidden md:block text-xl font-bold mb-6">Item Dipilih (<span id="cart-total-count">0</span>)</h2>
-            <h2 class="md:hidden text-base font-semibold mb-4 text-gray-600 dark:text-white/60">Item Dipilih (<span id="cart-total-count-mobile">0</span>)</h2>
+            <h2 class="hidden md:block text-xl font-bold mb-6">Selected Items (<span id="cart-total-count">0</span>)</h2>
+            <h2 class="md:hidden text-base font-semibold mb-4 text-gray-600 dark:text-white/60">Selected Items (<span id="cart-total-count-mobile">0</span>)</h2>
             <div id="cart-items" class="space-y-4"></div>
         </div>
         <!-- Right: Summary -->
         <aside class="w-full lg:w-80 shrink-0">
             <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 sticky top-24 shadow-sm">
-                <h3 class="font-bold text-lg mb-5">Ringkasan Pesanan</h3>
+                <h3 class="font-bold text-lg mb-5">Order Summary</h3>
                 <div class="space-y-3 mb-6">
                     <div class="flex justify-between text-sm">
                         <span class="text-gray-500 dark:text-white/50">Subtotal</span>
                         <span id="subtotal-display" class="font-medium">Rp 0</span>
                     </div>
                     <div class="flex justify-between text-sm">
-                        <span class="text-gray-500 dark:text-white/50">Ongkos Kirim</span>
-                        <span class="text-xs text-gray-400 italic">Dihitung saat checkout</span>
+                        <span class="text-gray-500 dark:text-white/50">Shipping</span>
+                        <span class="text-xs text-gray-400 italic">Calculated at checkout</span>
                     </div>
                     <div class="border-t border-gray-100 dark:border-white/10 pt-3 flex justify-between font-bold">
                         <span>Total</span>
                         <span id="total-display" class="text-lg">Rp 0</span>
                     </div>
                 </div>
-                <a id="checkout-btn" href="checkout.html" class="w-full flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold hover:bg-gray-700 dark:hover:bg-gray-200 transition-all text-sm">
-                    Lanjut ke Checkout <i class="fa-solid fa-arrow-right-long"></i>
+                <a id="checkout-btn" href="checkout-en.html" class="w-full flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold hover:bg-gray-700 dark:hover:bg-gray-200 transition-all text-sm">
+                    Proceed to Checkout <i class="fa-solid fa-arrow-right-long"></i>
                 </a>
-                <p class="text-center text-xs text-gray-400 mt-4">Pembayaran via Transfer Bank BCA</p>
+                <p class="text-center text-xs text-gray-400 mt-4">Payment via BCA Bank Transfer</p>
             </div>
         </aside>
     </div>
@@ -84,9 +84,9 @@
     <!-- Empty State -->
     <div id="empty-cart" class="hidden flex-col items-center justify-center py-24 text-center">
         <i class="fa-solid fa-cart-shopping text-6xl text-gray-200 dark:text-white/10 mb-6"></i>
-        <h2 class="text-2xl font-bold mb-3">Keranjang masih kosong</h2>
-        <p class="text-gray-500 dark:text-white/40 mb-8">Tambahkan produk favorit Anda ke keranjang.</p>
-        <a href="scrub-top.html" class="bg-gray-900 dark:bg-white text-white dark:text-black px-8 py-3 rounded-xl font-bold hover:opacity-80 transition text-sm">Mulai Belanja</a>
+        <h2 class="text-2xl font-bold mb-3">Your cart is empty</h2>
+        <p class="text-gray-500 dark:text-white/40 mb-8">Add your favorite products to the cart.</p>
+        <a href="scrub-top-en.html" class="bg-gray-900 dark:bg-white text-white dark:text-black px-8 py-3 rounded-xl font-bold hover:opacity-80 transition text-sm">Start Shopping</a>
     </div>
 </main>
 
@@ -168,8 +168,8 @@ async function renderCart() {
                 </div>
                 ${(item.bordir_nama || item.bordir_logo) ? `
                 <div class="flex flex-wrap gap-1.5 mb-2">
-                    ${item.bordir_nama ? '<span class="text-[10px] px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded font-bold uppercase tracking-wide"><i class="fa-solid fa-pen-to-square mr-1"></i>Bordir Nama</span>' : ''}
-                    ${item.bordir_logo ? '<span class="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded font-bold uppercase tracking-wide"><i class="fa-solid fa-palette mr-1"></i>Bordir Logo</span>' : ''}
+                    ${item.bordir_nama ? '<span class="text-[10px] px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded font-bold uppercase tracking-wide"><i class="fa-solid fa-pen-to-square mr-1"></i>Name Embroidery</span>' : ''}
+                    ${item.bordir_logo ? '<span class="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded font-bold uppercase tracking-wide"><i class="fa-solid fa-palette mr-1"></i>Logo Embroidery</span>' : ''}
                 </div>` : ''}
                 <p class="text-sm font-bold text-gray-900 dark:text-white">${fmt(item.price)}</p>
             </div>
@@ -221,7 +221,7 @@ function changeQty(idx, delta) {
         // Hard block: don't allow exceeding stock
         const stock = stockCache.has(stockKey(item)) ? stockCache.get(stockKey(item)) : Infinity;
         if (newQty > stock) {
-            showCartToast(`Stok tersisa hanya ${stock}`);
+            showCartToast(`Only ${stock} left in stock`);
             return;
         }
     }

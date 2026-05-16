@@ -818,24 +818,7 @@
             bordir_nama: bordirNama,
             bordir_logo: bordirLogo
         };
-        let cart = JSON.parse(localStorage.getItem('ws_cart') || '[]');
-        // Bordir options make items distinct — same shirt with different bordir = separate line
-        const existing = cart.find(i =>
-            i.product_id === item.product_id &&
-            i.color === item.color &&
-            i.type === item.type &&
-            i.size === item.size &&
-            !!i.bordir_nama === bordirNama &&
-            !!i.bordir_logo === bordirLogo
-        );
-        if (existing) existing.quantity++;
-        else cart.push(item);
-        localStorage.setItem('ws_cart', JSON.stringify(cart));
-
-        // Update all cart badges
-        document.querySelectorAll('.cart-count').forEach(el => {
-            el.textContent = cart.reduce((s, i) => s + i.quantity, 0);
-        });
+        Cart.add(item);
         showToast();
     });
 

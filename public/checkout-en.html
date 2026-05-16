@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout | Wearscrubs</title>
+    <link rel="alternate" hreflang="id" href="https://wearscrubs.id/checkout.html">
+    <link rel="alternate" hreflang="en" href="https://wearscrubs.id/checkout-en.html">
+    <link rel="icon" type="image/png" href="images/logo/logo%20ws%20white.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } } }</script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
+        .step { display: none; }
+        .step.active { display: block; }
+        /* step-info uses flex layout (2-column on lg) — must override block */
+        #step-info.active { display: flex; flex-direction: column; gap: 2rem; }
+        @media (min-width: 1024px) { #step-info.active { flex-direction: row; } }
+        .city-option { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.8rem; }
+        .city-option:hover { background: rgba(99,102,241,0.15); }
+        input[type=text]:focus, input[type=tel]:focus, textarea:focus { border-color: #6366f1 !important; }
+        .bordir-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+    </style>
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://wearscrubs-backend-production.up.railway.app">
+</head>
+<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
+
+<!-- Header -->
+<header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10">
+    <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+        <a href="index-en.html">
+            <img src="images/logo/logo%20ws%20black%20250x55.png" alt="Wearscrubs" class="h-8 w-auto block dark:hidden">
+            <img src="images/logo/logo%20ws%20white%20250x55.png" alt="Wearscrubs" class="h-8 w-auto hidden dark:block">
+        </a>
+        <h1 class="hidden md:block text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Checkout</h1>
+        <a href="cart-en.html" class="hidden md:flex text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Back to Cart</a>
+    </div>
+</header>
+
+<!-- Progress Bar -->
+<div class="border-b border-gray-100 dark:border-white/5 bg-white dark:bg-darkbg">
+    <div class="container mx-auto px-6 py-3 flex items-center justify-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] font-bold flex-wrap">
+        <span class="text-gray-400">1. Cart</span>
+        <i class="fa-solid fa-chevron-right text-gray-300 dark:text-white/20 text-[9px]"></i>
+        <span id="pb-info" class="text-gray-400">2. Information</span>
+        <i class="fa-solid fa-chevron-right text-gray-300 dark:text-white/20 text-[9px]"></i>
+        <span id="pb-bordir" class="text-gray-400">3. Embroidery</span>
+        <i class="fa-solid fa-chevron-right text-gray-300 dark:text-white/20 text-[9px]"></i>
+        <span id="pb-payment" class="text-gray-400">4. Payment</span>
+    </div>
+</div>
+
+<main class="container mx-auto px-6 py-8 md:py-12 max-w-5xl">
+    <!-- Mobile page title: shows above content on small screens -->
+    <div class="flex items-center justify-between mb-6 md:hidden">
+        <h2 class="text-xl font-bold">Checkout</h2>
+        <a href="cart-en.html" class="text-sm text-gray-500 hover:text-black dark:hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrow-left text-xs"></i> Cart
+        </a>
+    </div>
+
+    <!-- ═══ STEP 1: Shipping Info ═══ -->
+    <div id="step-info" class="step active flex flex-col lg:flex-row gap-8">
+        <div class="flex-1">
+            <h2 class="text-xl font-bold mb-6">Shipping Information</h2>
+            <form id="checkout-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Full Name *</label>
+                    <input type="text" id="f-name" placeholder="Your full name" required
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">WhatsApp Number *</label>
+                    <input type="tel" id="f-phone" placeholder="08xxxxxxxxxx or +62..." required
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                </div>
+
+                <!-- Destination City with autocomplete -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Destination City *</label>
+                    <div class="relative">
+                        <input type="text" id="f-city-search" placeholder="Type city name..." autocomplete="off"
+                            class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                        <input type="hidden" id="f-city">
+                        <p id="f-city-error" class="hidden mt-1 text-xs text-red-500"><i class="fa-solid fa-circle-exclamation mr-1"></i>Please select a city from the dropdown</p>
+                        <div id="city-dropdown" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 hidden"></div>
+                    </div>
+                    <div id="shipping-info" class="mt-2 hidden">
+                        <div class="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/20 rounded-xl px-4 py-2.5 text-sm">
+                            <div>
+                                <span id="shipping-courier" class="font-bold text-indigo-700 dark:text-indigo-300"></span>
+                                <span class="text-gray-500 dark:text-white/40 text-xs ml-2" id="shipping-weight"></span>
+                            </div>
+                            <span id="shipping-cost-display" class="font-bold text-gray-900 dark:text-white"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Full Address *</label>
+                    <textarea id="f-address" rows="3" placeholder="Street, house number, neighborhood, district, postal code..." required
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-white/50 uppercase tracking-wider mb-2">Notes (Optional)</label>
+                    <input type="text" id="f-notes" placeholder="Special shipping instructions..."
+                        class="w-full bg-gray-50 dark:bg-darkcard border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition">
+                </div>
+                <button type="submit" class="w-full bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold text-sm hover:opacity-80 transition-all flex items-center justify-center gap-2">
+                    Continue <i class="fa-solid fa-arrow-right-long"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- Order Summary -->
+        <aside class="w-full lg:w-80 shrink-0">
+            <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 sticky top-24 shadow-sm">
+                <h3 class="font-bold mb-4">Your Order</h3>
+                <div id="order-items-preview" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-1"></div>
+                <div class="border-t border-gray-100 dark:border-white/10 pt-3 space-y-1.5">
+                    <div class="flex justify-between text-sm text-gray-500 dark:text-white/50">
+                        <span>Subtotal</span>
+                        <span id="subtotal-display">Rp 0</span>
+                    </div>
+                    <div id="bordir-summary-row" class="hidden flex justify-between text-sm text-purple-600 dark:text-purple-400">
+                        <span>Embroidery cost</span>
+                        <span id="bordir-cost-display">Rp 0</span>
+                    </div>
+                    <div id="shipping-summary-row" class="hidden flex justify-between text-sm text-indigo-600 dark:text-indigo-400">
+                        <span id="shipping-summary-label">Shipping</span>
+                        <span id="shipping-summary-cost">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-base border-t border-gray-100 dark:border-white/10 pt-2 mt-1">
+                        <span>Total</span>
+                        <span id="co-total" class="text-lg">Rp 0</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ═══ STEP 2: Embroidery Details ═══ -->
+    <div id="step-bordir" class="step hidden max-w-2xl mx-auto">
+        <div class="mb-6">
+            <h2 class="text-xl font-bold mb-1">Embroidery Details</h2>
+            <p class="text-sm text-gray-500 dark:text-white/40">Fill in embroidery information for each item below.</p>
+            <!-- Embroidery estimate info -->
+            <div class="mt-4 flex items-start gap-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-500/30 rounded-xl px-4 py-3">
+                <i class="fa-regular fa-clock text-purple-500 mt-0.5 text-base shrink-0"></i>
+                <div>
+                    <p class="text-sm font-semibold text-purple-800 dark:text-purple-300">Embroidery Processing Time: ~1 Week</p>
+                    <p class="text-xs text-purple-600 dark:text-purple-400 mt-0.5">Embroidery orders will be processed within ~1 week after payment is confirmed. Logo embroidery requires a logo file from you — admin will contact you via WhatsApp.</p>
+                </div>
+            </div>
+            <!-- Disclaimer: embroidery complexity -->
+            <div class="mt-3 flex items-start gap-3 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3">
+                <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 text-base shrink-0"></i>
+                <div>
+                    <p class="text-xs font-semibold text-amber-800 dark:text-amber-300">Embroidery Complexity Note</p>
+                    <p class="text-[11px] text-amber-700 dark:text-amber-400/90 mt-0.5">Highly complex embroidery (small detailed logos) or names exceeding 15 characters will be reviewed first. Admin will confirm via WhatsApp before production — options include revision, proceeding without embroidery (refund of embroidery cost), or cancelling the order.</p>
+                </div>
+            </div>
+        </div>
+        <div id="bordir-form-container" class="space-y-4"></div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="goToStep('info')" class="flex-1 py-3 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Back
+            </button>
+            <button onclick="submitBordirStep()" class="flex-2 flex-1 py-3 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold hover:opacity-80 transition">
+                Continue to Payment <i class="fa-solid fa-arrow-right-long ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══ STEP 3: Payment ═══ -->
+    <div id="step-payment" class="step hidden max-w-2xl mx-auto">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-check-circle text-green-500 text-3xl"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Order Successfully Created!</h2>
+            <p class="text-gray-500 dark:text-white/50 text-sm">Invoice Code: <span id="order-code-display" class="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-base bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 rounded-lg"></span></p>
+            <p class="text-xs text-gray-400 dark:text-white/30 mt-2">Save this code to confirm payment with admin</p>
+        </div>
+
+        <!-- Bank Transfer Info -->
+        <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-6 shadow-sm mb-4">
+            <h3 class="font-bold mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-building-columns text-blue-500"></i>
+                Payment Instructions
+            </h3>
+            <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-500/10 rounded-xl p-4 mb-4">
+                <p class="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-3">Transfer to BCA Account</p>
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-white/50">Bank</span>
+                        <span class="font-bold">BCA</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-white/50">Account No.</span>
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold text-lg" id="bank-account-display">8780269791</span>
+                            <button onclick="copyAccount(this)" class="text-xs text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500 dark:text-white/50">Account Holder</span>
+                        <span class="font-bold">Priscilla Lavine</span>
+                    </div>
+                    <div class="flex justify-between items-center border-t border-blue-100 dark:border-blue-500/10 pt-2 mt-2">
+                        <span class="text-sm font-bold text-gray-700 dark:text-white">Transfer Amount</span>
+                        <span id="payment-amount" class="font-bold text-xl text-green-600 dark:text-green-400"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4 text-sm text-yellow-800 dark:text-yellow-300 space-y-2">
+                <p class="font-bold">⚠️ Important:</p>
+                <ol class="list-decimal pl-4 space-y-1 text-xs">
+                    <li>Transfer the <strong>exact</strong> amount shown above</li>
+                    <li>After transferring, send payment proof + <strong>invoice code</strong> to Admin's WhatsApp</li>
+                    <li>Order will be processed after Admin confirmation</li>
+                    <li>Payment deadline: <strong>24 hours</strong></li>
+                </ol>
+            </div>
+        </div>
+
+        <a id="wa-confirm-btn" href="#" target="_blank"
+            class="w-full flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white py-4 rounded-2xl font-bold text-sm transition-all mb-4">
+            <i class="fa-brands fa-whatsapp text-xl"></i>
+            Send Payment Proof via WhatsApp
+        </a>
+        <a href="scrub-top-en.html" class="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+            <i class="fa-solid fa-arrow-left"></i> Back to Shopping
+        </a>
+    </div>
+
+</main>
+
+<script src="catalog.js"></script>
+<script>
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://wearscrubs-backend-production.up.railway.app';
+function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+
+const BORDIR_NAMA_PRICE = 20000;
+const BORDIR_LOGO_PRICE = 30000;
+
+let cartItems = [];
+let selectedCity = null;   // { name, is_dki, courier, shipping_cost }
+let embroideryData = [];
+
+// ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
+
+function goToStep(step) {
+    // Use style.display to avoid Tailwind 'hidden' (!important) conflicting with flex layout on step-info
+    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+    const target = document.getElementById('step-' + step);
+    target.classList.add('active');
+    // step-info uses flex layout (lg:flex-row), others use block
+    target.style.display = (step === 'info') ? 'flex' : 'block';
+    // Progress bar
+    const steps = { info: 'pb-info', bordir: 'pb-bordir', payment: 'pb-payment' };
+    Object.values(steps).forEach(id => document.getElementById(id)?.classList.remove('text-gray-900','dark:text-white','underline','underline-offset-2'));
+    const active = steps[step];
+    if (active) { document.getElementById(active)?.classList.add('text-gray-900','dark:text-white','underline','underline-offset-2'); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── RENDER PREVIEW ───────────────────────────────────────────────────────────
+
+function calcBordirCost(item) {
+    if (item.category !== 'tops') return 0;
+    return ((item.bordir_nama ? BORDIR_NAMA_PRICE : 0) + (item.bordir_logo ? BORDIR_LOGO_PRICE : 0)) * item.quantity;
+}
+
+function recalcTotals() {
+    let subtotal = 0;
+    let bordirTotal = 0;
+    cartItems.forEach(item => {
+        subtotal += item.price * item.quantity;
+        bordirTotal += calcBordirCost(item);
+    });
+    const shippingCost = selectedCity ? selectedCity.shipping_cost : 0;
+    const grandTotal = subtotal + bordirTotal + shippingCost;
+
+    document.getElementById('subtotal-display').textContent = fmt(subtotal);
+    document.getElementById('co-total').textContent = fmt(grandTotal);
+
+    const bordirRow = document.getElementById('bordir-summary-row');
+    if (bordirTotal > 0) { bordirRow.classList.remove('hidden'); document.getElementById('bordir-cost-display').textContent = fmt(bordirTotal); }
+    else { bordirRow.classList.add('hidden'); }
+
+    const shipRow = document.getElementById('shipping-summary-row');
+    if (selectedCity) {
+        shipRow.classList.remove('hidden');
+        document.getElementById('shipping-summary-label').textContent = `Shipping (${selectedCity.courier})`;
+        document.getElementById('shipping-summary-cost').textContent = fmt(shippingCost);
+    } else { shipRow.classList.add('hidden'); }
+}
+
+function renderPreview() {
+    cartItems = Cart.get();
+    if (cartItems.length === 0) { window.location.href = 'cart-en.html'; return; }
+
+    document.getElementById('order-items-preview').innerHTML = cartItems.map(item => {
+        const bordirBadges = item.category === 'tops'
+            ? `${item.bordir_nama ? '<span class="bordir-badge bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">Name Embroidery</span> ' : ''}${item.bordir_logo ? '<span class="bordir-badge bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">Logo Embroidery</span>' : ''}`
+            : '';
+        return `
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-darkbg shrink-0">
+                <img src="${item.photo ? (item.photo.startsWith('/uploads/') ? API + item.photo : item.photo) : ''}"
+                    alt="${item.name || 'Product image'}"
+                    class="w-full h-full object-cover object-top"
+                    onerror="this.src='images/logo/logo%20ws%20black%20250x55.png';this.classList.add('object-contain','p-1')">
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold truncate">${item.name}</p>
+                <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span class="text-[9px] px-1 bg-gray-100 dark:bg-white/10 rounded font-bold">${item.size}</span>
+                    <span class="text-[9px] text-gray-400 capitalize">${item.color}</span>
+                    ${item.type && item.type !== 'null' ? `<span class="text-[9px] text-indigo-400 font-bold uppercase">${item.type}</span>` : ''}
+                    <span class="text-[9px] text-gray-500 italic">x${item.quantity}</span>
+                </div>
+                ${bordirBadges ? `<div class="mt-1 flex gap-1 flex-wrap">${bordirBadges}</div>` : ''}
+            </div>
+            <p class="text-xs font-bold shrink-0">${fmt(item.price * item.quantity)}</p>
+        </div>`;
+    }).join('');
+
+    recalcTotals();
+}
+
+// ─── CITY AUTOCOMPLETE ────────────────────────────────────────────────────────
+
+let allCities = [];
+async function loadCities() {
+    try {
+        // Try API first; fall back to static cities.json (CDN-cached, works if API is down)
+        let data = null;
+        try {
+            const res = await fetch(API + '/api/cities');
+            if (res.ok) data = await res.json();
+        } catch(e) {}
+        if (!Array.isArray(data) || data.length === 0) {
+            try {
+                data = await fetch('/cities.json').then(r => r.ok ? r.json() : null);
+            } catch(e) { data = null; }
+        }
+        allCities = Array.isArray(data) ? data : [];
+        if (allCities.length === 0) showCitiesLoadError();
+    } catch(e) {
+        console.error('Failed to load cities', e);
+        showCitiesLoadError();
+    }
+}
+
+function showCitiesLoadError() {
+    const wrap = document.getElementById('f-city-search')?.parentElement;
+    if (!wrap || document.getElementById('cities-load-error')) return;
+    const banner = document.createElement('div');
+    banner.id = 'cities-load-error';
+    banner.className = 'mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2';
+    banner.innerHTML = '<i class="fa-solid fa-circle-exclamation mr-1"></i>Failed to load city list. Please refresh the page or contact admin via WhatsApp.';
+    wrap.appendChild(banner);
+}
+
+function showCityDropdown(query) {
+    const dd = document.getElementById('city-dropdown');
+    const filtered = query.length < 2 ? [] : allCities.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 20);
+    if (!filtered.length) { dd.classList.add('hidden'); return; }
+    dd.innerHTML = filtered.map(c => `
+        <div class="city-option ${c.is_dki ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-white'}"
+             onmousedown="event.preventDefault(); selectCity('${c.name.replace(/'/g, "\\'")}');"
+             ontouchend="event.preventDefault(); selectCity('${c.name.replace(/'/g, "\\'")}');">
+            ${c.name} <span class="text-[10px] opacity-50">${c.is_dki ? '— DKI' : ''}</span>
+        </div>`).join('');
+    dd.classList.remove('hidden');
+}
+
+async function selectCity(name) {
+    document.getElementById('f-city-search').value = name;
+    document.getElementById('f-city').value = name;
+    document.getElementById('city-dropdown').classList.add('hidden');
+
+    const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
+    try {
+        let data = null;
+        try {
+            const res = await fetch(`${API}/api/shipping-cost?city=${encodeURIComponent(name)}&qty=${qty}`);
+            if (res.ok) data = await res.json();
+        } catch(e) {}
+
+        // Local fallback: same rules as server
+        //  DKI: JNE / J&T Reguler, Rp10,000/kg
+        //  Non-DKI ≤10kg: J&T Reguler / Lion Parcel, Rp20,000/kg
+        //  Non-DKI >10kg: Lion Cargo, shipping confirmed by admin
+        if (!data || !data.city) {
+            const cityData = allCities.find(c => c.name.toLowerCase() === name.toLowerCase());
+            const is_dki = cityData ? cityData.is_dki : false;
+            const weight_kg = Math.ceil(qty / 3) || 1;
+            let courier, shipping_cost, needs_confirmation = false;
+            if (!is_dki && weight_kg > 10) {
+                courier = 'Lion Cargo (shipping confirmed by admin via WhatsApp)';
+                shipping_cost = 0;
+                needs_confirmation = true;
+            } else if (is_dki) {
+                courier = 'JNE / J&T Reguler';
+                shipping_cost = weight_kg * 10000;
+            } else {
+                courier = 'J&T Reguler / Lion Parcel';
+                shipping_cost = weight_kg * 20000;
+            }
+            data = { city: name, is_dki, courier, shipping_cost, weight_kg, needs_confirmation,
+                     shipping_cost_formatted: needs_confirmation ? 'Confirmed by admin' : fmt(shipping_cost) };
+        }
+
+        const safeWeight = parseInt(data.weight_kg) || Math.ceil(qty / 3) || 1;
+        selectedCity = { name: data.city, is_dki: data.is_dki, courier: data.courier,
+                         shipping_cost: parseInt(data.shipping_cost) || 0, weight_kg: safeWeight,
+                         needs_confirmation: !!data.needs_confirmation };
+        document.getElementById('shipping-courier').textContent = data.courier;
+        document.getElementById('shipping-weight').textContent = `${data.weight_kg} kg (${qty} items)`;
+        document.getElementById('shipping-cost-display').textContent = data.shipping_cost_formatted;
+        document.getElementById('shipping-info').classList.remove('hidden');
+        recalcTotals();
+    } catch(e) { console.error(e); }
+}
+
+document.getElementById('f-city-search').addEventListener('input', function() {
+    showCityDropdown(this.value);
+    if (!this.value) { selectedCity = null; document.getElementById('shipping-info').classList.add('hidden'); document.getElementById('f-city').value = ''; recalcTotals(); }
+});
+// Hide dropdown when clicking outside (use mousedown so it fires before blur)
+document.addEventListener('mousedown', e => {
+    if (!e.target.closest('#f-city-search') && !e.target.closest('#city-dropdown'))
+        document.getElementById('city-dropdown').classList.add('hidden');
+});
+// Also hide on touchstart outside (mobile support)
+document.addEventListener('touchstart', e => {
+    if (!e.target.closest('#f-city-search') && !e.target.closest('#city-dropdown'))
+        document.getElementById('city-dropdown').classList.add('hidden');
+}, { passive: true });
+
+// ─── STEP 1 SUBMIT ────────────────────────────────────────────────────────────
+
+document.getElementById('checkout-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // If f-city not yet set, try to auto-match the typed text before rejecting
+    if (!document.getElementById('f-city').value) {
+        const typed = document.getElementById('f-city-search').value.trim();
+        if (typed.length >= 2) {
+            const match = allCities.find(c => c.name.toLowerCase() === typed.toLowerCase())
+                || allCities.find(c => c.name.toLowerCase().startsWith(typed.toLowerCase()));
+            if (match) await selectCity(match.name);
+        }
+    }
+    if (!document.getElementById('f-city').value) {
+        const errEl = document.getElementById('f-city-error');
+        const searchEl = document.getElementById('f-city-search');
+        if (errEl) errEl.classList.remove('hidden');
+        if (searchEl) { searchEl.classList.add('ring-2','ring-red-500'); searchEl.focus(); }
+        return;
+    }
+    document.getElementById('f-city-error')?.classList.add('hidden');
+    document.getElementById('f-city-search')?.classList.remove('ring-2','ring-red-500');
+
+    // Check whether any tops item requires embroidery
+    const hasBordir = cartItems.some(item => item.category === 'tops' && (item.bordir_nama || item.bordir_logo));
+    if (hasBordir) {
+        buildBordirForm();
+        goToStep('bordir');
+    } else {
+        await submitOrder();
+    }
+});
+
+// ─── STEP 2: EMBROIDERY FORM ──────────────────────────────────────────────────
+
+function buildBordirForm() {
+    const container = document.getElementById('bordir-form-container');
+    const inputs = [];
+
+    cartItems.forEach((item, itemIdx) => {
+        if (item.category !== 'tops') return;
+        if (!item.bordir_nama && !item.bordir_logo) return;
+        for (let q = 1; q <= item.quantity; q++) {
+            const label = `${item.name} (${item.color}${item.type && item.type !== 'null' ? ', ' + item.type : ''}, ${item.size})${item.quantity > 1 ? ' — Item #' + q : ''}`;
+            inputs.push({ item, itemIdx, q, label });
+        }
+    });
+
+    const cls = 'w-full bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition';
+    const posOpts = (def) => `<option value="kanan" ${def==='kanan'?'selected':''}>Right Chest</option><option value="kiri" ${def==='kiri'?'selected':''}>Left Chest</option>`;
+    const bothBordirNote = (item) => item.bordir_nama && item.bordir_logo
+        ? `<div class="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
+               <i class="fa-solid fa-circle-info mr-1.5"></i>
+               You selected both name <strong>and</strong> logo embroidery — make sure positions differ (one right, one left chest).
+           </div>` : '';
+
+    container.innerHTML = inputs.map(({ item, itemIdx, q, label }) => `
+        <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-white/40 mb-4">${label}</p>
+            ${bothBordirNote(item)}
+            ${item.bordir_nama ? `
+            <div class="mb-4 p-4 rounded-xl" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="bordir-badge bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">✏️ Name Embroidery</span>
+                    <span class="text-gray-500 dark:text-white/40 text-xs">+${fmt(BORDIR_NAMA_PRICE)}</span>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Name to embroider <span class="text-red-500">*</span></label>
+                        <input type="text" id="bordir-nama-${itemIdx}-${q}"
+                            placeholder="Dr. James, M.D. — check spelling & capitalization"
+                            class="${cls}" required maxlength="15">
+                        <p class="text-[10px] text-gray-400 dark:text-white/25 mt-1">Max 15 characters · Letter height ~1.2 cm</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Thread Color</label>
+                            <input type="text" id="bordir-nama-color-${itemIdx}-${q}" placeholder="White, black, red..." class="${cls}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Chest Position</label>
+                            <select id="bordir-nama-pos-${itemIdx}-${q}" class="${cls} cursor-pointer">${posOpts('kanan')}</select>
+                        </div>
+                    </div>
+                </div>
+            </div>` : ''}
+            ${item.bordir_logo ? `
+            <div class="p-4 rounded-xl" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="bordir-badge bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">🎨 Logo Embroidery</span>
+                    <span class="text-gray-500 dark:text-white/40 text-xs">+${fmt(BORDIR_LOGO_PRICE)}</span>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Upload Logo <span class="text-gray-400 font-normal">(PNG/JPG)</span></label>
+                        <label class="w-full py-2.5 rounded-xl border border-dashed border-gray-300 dark:border-white/15 text-gray-400 dark:text-white/40 text-xs font-medium flex items-center justify-center gap-2 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                            <i class="fa-solid fa-upload"></i> Choose File
+                            <input type="file" id="bordir-logo-file-${itemIdx}-${q}" accept="image/*" class="hidden" onchange="coHandleLogoFile(this,${itemIdx},${q})" />
+                        </label>
+                        <div id="bordir-logo-preview-${itemIdx}-${q}" class="hidden mt-2"></div>
+                        <input type="hidden" id="bordir-logo-b64-${itemIdx}-${q}" value="">
+                        <p class="text-[10px] text-gray-400 dark:text-white/25 mt-1">If not uploaded, admin will contact you via WhatsApp.</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Thread Color</label>
+                            <input type="text" id="bordir-logo-color-${itemIdx}-${q}" placeholder="White, black..." class="${cls}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Chest Position</label>
+                            <select id="bordir-logo-pos-${itemIdx}-${q}" class="${cls} cursor-pointer">${posOpts(item.bordir_nama ? 'kiri' : 'kanan')}</select>
+                        </div>
+                    </div>
+                </div>
+            </div>` : ''}
+        </div>
+    `).join('');
+
+    container._inputs = inputs;
+}
+
+// Compress image client-side to keep upload < 500KB (server has 2MB body limit)
+async function coCompressImage(file, maxWidth = 1024, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let { width, height } = img;
+                if (width > maxWidth) {
+                    height = Math.round(height * maxWidth / width);
+                    width = maxWidth;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => reject(new Error('Failed to read image'));
+            img.src = e.target.result;
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function coHandleLogoFile(input, itemIdx, q) {
+    const file = input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+        alert('File must be an image (PNG/JPG)'); input.value = ''; return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+        alert('Maximum file size is 15MB'); input.value = ''; return;
+    }
+    const b64El = document.getElementById(`bordir-logo-b64-${itemIdx}-${q}`);
+    const prev  = document.getElementById(`bordir-logo-preview-${itemIdx}-${q}`);
+    try {
+        const compressed = await coCompressImage(file);
+        if (b64El) b64El.value = compressed;
+        if (prev) {
+            prev.classList.remove('hidden');
+            prev.innerHTML = `<img src="${compressed}" class="max-h-20 rounded-lg border border-gray-200 dark:border-white/10 object-contain" />`;
+        }
+    } catch (err) {
+        alert('Failed to process image: ' + err.message);
+        input.value = '';
+    }
+}
+
+async function submitBordirStep() {
+    const container = document.getElementById('bordir-form-container');
+    const inputs = container._inputs || [];
+    embroideryData = [];
+    const errors = [];
+
+    for (const { item, itemIdx, q } of inputs) {
+        const itemLabel = `${item.name} (${item.color}, ${item.size})`;
+        let namaPos = null, logoPos = null;
+
+        if (item.bordir_nama) {
+            const val   = document.getElementById(`bordir-nama-${itemIdx}-${q}`)?.value?.trim();
+            const color = document.getElementById(`bordir-nama-color-${itemIdx}-${q}`)?.value?.trim() || '';
+            namaPos     = document.getElementById(`bordir-nama-pos-${itemIdx}-${q}`)?.value || 'kanan';
+            if (!val) { errors.push(`Embroidery name for "${item.name}" is empty.`); continue; }
+            embroideryData.push({ item_label: itemLabel, type: 'nama', value: val, color, position: namaPos });
+        }
+        if (item.bordir_logo) {
+            const color = document.getElementById(`bordir-logo-color-${itemIdx}-${q}`)?.value?.trim() || '';
+            logoPos     = document.getElementById(`bordir-logo-pos-${itemIdx}-${q}`)?.value || 'kiri';
+            const b64   = document.getElementById(`bordir-logo-b64-${itemIdx}-${q}`)?.value || '';
+            // Store actual base64 so invoice and order modal can display the logo directly
+            embroideryData.push({ item_label: itemLabel, type: 'logo', value: b64 || 'Logo will be sent via WhatsApp', color, position: logoPos });
+        }
+        if (item.bordir_nama && item.bordir_logo && namaPos && logoPos && namaPos === logoPos) {
+            errors.push(`${item.name}: Name and logo positions must differ (one right, one left).`);
+        }
+    }
+    if (errors.length > 0) { alert('⚠️ Check embroidery details:\n\n' + errors.join('\n')); return; }
+    await submitOrder();
+}
+
+// ─── SUBMIT ORDER ─────────────────────────────────────────────────────────────
+
+async function submitOrder() {
+    const submitBtns = document.querySelectorAll('button[type=submit], #bordir-submit-btn');
+    submitBtns.forEach(b => { b.disabled = true; });
+
+    try {
+        const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
+        const payload = {
+            customer_name: document.getElementById('f-name').value,
+            customer_phone: document.getElementById('f-phone').value,
+            customer_address: document.getElementById('f-address').value,
+            notes: document.getElementById('f-notes').value,
+            shipping_city: selectedCity?.name || '',
+            shipping_cost: selectedCity?.shipping_cost || 0,
+            embroidery_details: embroideryData.length ? embroideryData : null,
+            items: cartItems.map(item => ({
+                product_id: Number(item.product_id),
+                size: item.size,
+                color: item.color,
+                variant_type: item.type || 'null',
+                quantity: Number(item.quantity),
+                bordir_nama: item.bordir_nama || false,
+                bordir_logo: item.bordir_logo || false
+            }))
+        };
+
+        const res = await fetch(API + '/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create order');
+
+        Cart.save([]);
+
+        // Build WA message for user to send proof of payment
+        const bordirNote = embroideryData.length > 0
+            ? `\n🧵 Embroidery:\n` + embroideryData.map(e => {
+                const posLbl = e.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+                if (e.type === 'nama') return `• ✏️ Name: ${e.value}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
+                return `• 🎨 Logo: ${e.value}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
+              }).join('\n')
+            : '';
+        const waMsg = encodeURIComponent(
+            `Hello Wearscrubs! I have made the transfer for my order.\n\n` +
+            `🧾 Invoice: *${data.order_code}*\n` +
+            `💰 Total: ${fmt(data.total_amount)}\n` +
+            `📦 Shipping (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
+            `🏙️ City: ${selectedCity?.name || ''}` +
+            bordirNote +
+            `\n\nPlease confirm. Thank you! 🙏`
+        );
+
+        document.getElementById('order-code-display').textContent = data.order_code;
+        document.getElementById('payment-amount').textContent = fmt(data.total_amount);
+        document.getElementById('wa-confirm-btn').href = `https://wa.me/6287887172220?text=${waMsg}`;
+
+        goToStep('payment');
+
+    } catch (err) {
+        alert('❌ ' + err.message);
+        submitBtns.forEach(b => { b.disabled = false; });
+    }
+}
+
+function copyAccount(btn) {
+    const prev = btn.innerHTML;
+    const done = () => {
+        btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
+        setTimeout(() => btn.innerHTML = prev, 2000);
+    };
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText('8780269791').then(done).catch(() => {});
+    } else {
+        // Fallback for mobile browsers
+        const el = document.createElement('textarea');
+        el.value = '8780269791';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        done();
+    }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+loadCities();
+goToStep('info');
+// renderPreview() needs Cart (defined in main.js which loads after this script).
+// DOMContentLoaded fires after all sync scripts execute but before images load —
+// much faster than 'load' which waits for ALL resources including images.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderPreview);
+} else {
+    renderPreview();
+}
+</script>
+<script src="main.js"></script>
+</body>
+</html>

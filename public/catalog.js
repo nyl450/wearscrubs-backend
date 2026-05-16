@@ -53,9 +53,18 @@ const Cart = {
     save(cart) { localStorage.setItem('ws_cart', JSON.stringify(cart)); Cart.updateBadge(); },
     count() { return Cart.get().reduce((s, i) => s + i.quantity, 0); },
     add(item) {
+        // Match dedup logic must include type and bordir flags — items with different
+        // variant/embroidery options are distinct lines, not stackable.
         const cart = Cart.get();
-        const idx = cart.findIndex(c => c.product_id === item.product_id && c.size === item.size && c.color === item.color);
-        if (idx > -1) cart[idx].quantity += item.quantity;
+        const idx = cart.findIndex(c =>
+            c.product_id === item.product_id &&
+            c.size === item.size &&
+            c.color === item.color &&
+            (c.type || 'null') === (item.type || 'null') &&
+            !!c.bordir_nama === !!item.bordir_nama &&
+            !!c.bordir_logo === !!item.bordir_logo
+        );
+        if (idx > -1) cart[idx].quantity += (item.quantity || 1);
         else cart.push(item);
         Cart.save(cart);
     },
