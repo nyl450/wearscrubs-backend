@@ -1314,21 +1314,34 @@ app.post('/api/orders', async (req, res) => {
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
+        // Aggregate qty per physical variant before stock check — bordir splits share
+        // the same inventory row, so checking per-item allows over-allocation when
+        // the same shirt appears as multiple lines (plain + with name + with logo).
+        const variantTotals = new Map();
+        for (const item of items) {
+            const k = `${item.product_id}|${item.size}|${item.color}|${item.variant_type || 'null'}`;
+            variantTotals.set(k, (variantTotals.get(k) || 0) + Number(item.quantity || 0));
+        }
+        for (const [k, totalQty] of variantTotals) {
+            const [pid, size, color, vtype] = k.split('|');
+            const product = await dbGet('SELECT * FROM products WHERE id = $1', [pid]);
+            if (!product) return res.status(400).json({ error: `Produk ID ${pid} tidak ditemukan` });
+            const inv = await dbGet(
+                'SELECT stock FROM inventory WHERE product_id = $1 AND size = $2 AND color = $3 AND variant_type = $4',
+                [pid, size, color, vtype]
+            );
+            const available = inv ? Number(inv.stock) : 0;
+            if (available < totalQty) {
+                return res.status(400).json({
+                    error: `Stok ${product.name} (${color}, ${vtype}, ${size}) tidak cukup. Tersisa ${available}, diminta ${totalQty}`
+                });
+            }
+        }
+
         let productTotal = 0;
         const itemDetails = [];
         for (const item of items) {
             const product = await dbGet('SELECT * FROM products WHERE id = $1', [item.product_id]);
-            if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
-
-            const inv = await dbGet(
-                'SELECT stock FROM inventory WHERE product_id = $1 AND size = $2 AND color = $3 AND variant_type = $4',
-                [item.product_id, item.size, item.color, item.variant_type || 'null']
-            );
-            if (!inv || inv.stock < item.quantity) {
-                return res.status(400).json({
-                    error: `Stok ${product.name} (${item.color}, ${item.variant_type}, ${item.size}) tidak cukup`
-                });
-            }
             // Per-item price includes base product price + per-item embroidery cost
             const itemEmbroidery = (item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0);
             const unitPrice = product.price + itemEmbroidery;

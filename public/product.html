@@ -800,26 +800,37 @@
         }
     }
 
-    document.getElementById('add-to-cart-btn').addEventListener('click', () => {
+    document.getElementById('add-to-cart-btn').addEventListener('click', async () => {
         if (!currentProduct || !selectedColor || !selectedSize || selectedType === null) return;
-        const bordirNama = currentProduct.category === 'tops' && document.getElementById('bordir-nama-cb').checked;
-        const bordirLogo = currentProduct.category === 'tops' && document.getElementById('bordir-logo-cb').checked;
-        const item = {
-            product_id: currentProduct.id,
-            name: currentProduct.name,
-            category: currentProduct.category,
-            price: currentProduct.price,
-            price_formatted: currentProduct.price_formatted,
-            color: selectedColor,
-            type: selectedType,
-            size: selectedSize,
-            photo: document.getElementById('main-product-image').src,
-            quantity: 1,
-            bordir_nama: bordirNama,
-            bordir_logo: bordirLogo
-        };
-        Cart.add(item);
-        showToast();
+        const btn = document.getElementById('add-to-cart-btn');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+            const bordirNama = currentProduct.category === 'tops' && document.getElementById('bordir-nama-cb').checked;
+            const bordirLogo = currentProduct.category === 'tops' && document.getElementById('bordir-logo-cb').checked;
+            const item = {
+                product_id: currentProduct.id,
+                name: currentProduct.name,
+                category: currentProduct.category,
+                price: currentProduct.price,
+                price_formatted: currentProduct.price_formatted,
+                color: selectedColor,
+                type: selectedType,
+                size: selectedSize,
+                photo: document.getElementById('main-product-image').src,
+                quantity: 1,
+                bordir_nama: bordirNama,
+                bordir_logo: bordirLogo
+            };
+            const result = await Cart.add(item);
+            if (!result.ok) {
+                showStockError(result.stock, result.existing);
+                return;
+            }
+            showToast();
+        } finally {
+            btn.disabled = false;
+        }
     });
 
 
@@ -827,6 +838,28 @@
         const t = document.getElementById('product-toast');
         t.classList.remove('hidden');
         setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    function showStockError(stock, existing) {
+        const isEn = localStorage.getItem('ws_lang') === 'en' || location.pathname.includes('-en.html');
+        const msg = isEn
+            ? `Only ${stock} in stock${existing > 0 ? ` (cart already has ${existing})` : ''}`
+            : `Stok tersisa ${stock}${existing > 0 ? ` (di keranjang sudah ada ${existing})` : ''}`;
+        let el = document.getElementById('product-stock-toast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'product-stock-toast';
+            el.className = 'fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] transition-all duration-300 translate-y-4 opacity-0 pointer-events-none';
+            el.innerHTML = `<div class="bg-red-500 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-medium flex items-center gap-2.5 max-w-xs">
+                <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
+                <span id="product-stock-toast-msg"></span>
+            </div>`;
+            document.body.appendChild(el);
+        }
+        document.getElementById('product-stock-toast-msg').textContent = msg;
+        el.classList.remove('translate-y-4', 'opacity-0');
+        clearTimeout(el._timeout);
+        el._timeout = setTimeout(() => el.classList.add('translate-y-4', 'opacity-0'), 3200);
     }
 
     async function loadRelated() {

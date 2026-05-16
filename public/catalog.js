@@ -52,21 +52,49 @@ const Cart = {
     get() { try { return JSON.parse(localStorage.getItem('ws_cart') || '[]'); } catch { return []; } },
     save(cart) { localStorage.setItem('ws_cart', JSON.stringify(cart)); Cart.updateBadge(); },
     count() { return Cart.get().reduce((s, i) => s + i.quantity, 0); },
-    add(item) {
+    async add(item) {
         // Match dedup logic must include type and bordir flags — items with different
         // variant/embroidery options are distinct lines, not stackable.
+        // Stock check aggregates across bordir-split rows (same physical variant).
+        // Returns { ok: true } on success, { ok: false, stock, existing } when blocked.
         const cart = Cart.get();
+        const itemType = item.type || 'null';
+        const variantKey = `${item.product_id}_${item.size}_${item.color}_${itemType}`;
+        const addQty = item.quantity || 1;
+
+        // Fetch live stock (network fail → permissive; backend re-validates on order)
+        let stock = Infinity;
+        try {
+            const qs = `size=${encodeURIComponent(item.size)}&color=${encodeURIComponent(item.color)}&type=${encodeURIComponent(itemType)}`;
+            const res = await fetch(`${WS_API}/api/inventory/${item.product_id}/check?${qs}`);
+            if (res.ok) {
+                const d = await res.json();
+                stock = Number(d.available) || 0;
+            }
+        } catch (e) { /* network fail → keep Infinity */ }
+
+        // Sum existing qty for same physical variant (bordir splits share inventory)
+        const existingTotal = cart.reduce((sum, c) => {
+            const k = `${c.product_id}_${c.size}_${c.color}_${c.type || 'null'}`;
+            return sum + (k === variantKey ? c.quantity : 0);
+        }, 0);
+
+        if (stock !== Infinity && existingTotal + addQty > stock) {
+            return { ok: false, stock, existing: existingTotal };
+        }
+
         const idx = cart.findIndex(c =>
             c.product_id === item.product_id &&
             c.size === item.size &&
             c.color === item.color &&
-            (c.type || 'null') === (item.type || 'null') &&
+            (c.type || 'null') === itemType &&
             !!c.bordir_nama === !!item.bordir_nama &&
             !!c.bordir_logo === !!item.bordir_logo
         );
-        if (idx > -1) cart[idx].quantity += (item.quantity || 1);
+        if (idx > -1) cart[idx].quantity += addQty;
         else cart.push(item);
         Cart.save(cart);
+        return { ok: true };
     },
     updateBadge() {
         const count = Cart.count();
