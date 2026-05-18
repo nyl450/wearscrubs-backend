@@ -419,15 +419,37 @@ async function initDB() {
         CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal'))`);
 
     // ── Seed default admin ────────────────────────────────────────────────────
+    // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
+    // Dev: fall back to 'admin123' only when explicitly not in production.
+    // This runs once — if an admin already exists, nothing happens.
     const existingAdmin = await dbGet('SELECT id FROM users WHERE username = $1', ['admin']);
     if (!existingAdmin) {
-        const hash = await bcrypt.hash('admin123', 10);
-        await dbRun(
-            'INSERT INTO users (username, password_hash, role, allowed_menus) VALUES ($1, $2, $3, $4)',
-            ['admin', hash, 'admin', null]
-        );
-        console.log('[Auth] Admin default dibuat: username=admin, password=admin123');
-        console.log('[Auth] SEGERA GANTI PASSWORD setelah login pertama!');
+        const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
+        const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
+
+        if (initialPassword) {
+            if (initialPassword.length < 12) {
+                console.error('[Auth] CRITICAL: ADMIN_INITIAL_PASSWORD must be at least 12 characters. Refusing to seed admin. Set a stronger password and restart.');
+                return;
+            }
+            const hash = await bcrypt.hash(initialPassword, 10);
+            await dbRun(
+                'INSERT INTO users (username, password_hash, role, allowed_menus) VALUES ($1, $2, $3, $4)',
+                ['admin', hash, 'admin', null]
+            );
+            console.log('[Auth] Admin seeded from ADMIN_INITIAL_PASSWORD env var. Login as "admin" with that password, then change it via /api/auth/change-password.');
+        } else if (isProduction) {
+            console.error('[Auth] CRITICAL: No admin exists and ADMIN_INITIAL_PASSWORD is not set in production. Refusing to seed weak default credentials. Set ADMIN_INITIAL_PASSWORD env var (min 12 chars) on Railway and restart.');
+            return;
+        } else {
+            // Dev only — convenience fallback
+            const hash = await bcrypt.hash('admin123', 10);
+            await dbRun(
+                'INSERT INTO users (username, password_hash, role, allowed_menus) VALUES ($1, $2, $3, $4)',
+                ['admin', hash, 'admin', null]
+            );
+            console.warn('[Auth] DEV ONLY: created admin/admin123. For production, set ADMIN_INITIAL_PASSWORD env var.');
+        }
     }
 }
 initDB().catch(err => console.error('[DB Init Error]', err));
@@ -991,6 +1013,42 @@ app.get('/api/inventory/all', requireAuth(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/inventory/reservations — pending orders per varian (for Grid View "reserved" badge)
+// "Reserved" = orders that are NOT yet shipped/done/cancelled — i.e. still occupy stock conceptually.
+// Returns map keyed by `${product_id}__${size}__${color}__${variant_type}` so frontend can lookup O(1).
+app.get('/api/inventory/reservations', requireAuth(), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT oi.product_id, oi.size, oi.color, oi.variant_type,
+                    SUM(oi.quantity)::int AS reserved_qty,
+                    COUNT(DISTINCT o.id)::int AS order_count,
+                    json_agg(json_build_object(
+                        'order_id', o.id,
+                        'order_code', o.order_code,
+                        'customer_name', o.customer_name,
+                        'qty', oi.quantity,
+                        'order_status', o.order_status,
+                        'created_at', o.created_at
+                    ) ORDER BY o.created_at DESC) AS buyers
+             FROM order_items oi
+             JOIN orders o ON o.id = oi.order_id
+             WHERE o.order_status IN ('waiting_payment','confirmed','bordir','packed')
+             GROUP BY oi.product_id, oi.size, oi.color, oi.variant_type`,
+            []
+        );
+        const map = {};
+        for (const r of rows) {
+            const key = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
+            map[key] = {
+                reserved_qty: r.reserved_qty,
+                order_count: r.order_count,
+                buyers: r.buyers
+            };
+        }
+        res.json(map);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/inventory/variant/history — riwayat stok + pembeli per varian spesifik
 app.get('/api/inventory/variant/history', requireAuth(), async (req, res) => {
     try {
@@ -1105,59 +1163,73 @@ app.put('/api/inventory/reject-to-normal', requireAuth(['admin','manager']), asy
         const qty = parseInt(quantity);
         if (!qty || qty <= 0) return res.status(400).json({ error: 'Jumlah harus lebih dari 0' });
 
-        const cur = await dbGet(
-            'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
-            [product_id, size, color, variant_type]
-        );
-        if (!cur) return res.status(404).json({ error: 'Varian tidak ditemukan' });
+        // Atomic: lock row → validate → swap reject↔normal → log movement
+        const result = await withTransaction(async (client) => {
+            const curRes = await client.query(
+                'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                [product_id, size, color, variant_type]
+            );
+            const cur = curRes.rows[0];
+            if (!cur) { const e = new Error('Varian tidak ditemukan'); e.status = 404; throw e; }
 
-        const rejectBefore = parseInt(cur.stock_reject || 0);
-        if (qty > rejectBefore) return res.status(400).json({ error: `Stok reject hanya ${rejectBefore}` });
+            const rejectBefore = parseInt(cur.stock_reject || 0);
+            if (qty > rejectBefore) { const e = new Error(`Stok reject hanya ${rejectBefore}`); e.status = 400; throw e; }
 
-        const normalBefore = parseInt(cur.stock || 0);
-        const rejectAfter  = rejectBefore - qty;
-        const normalAfter  = normalBefore + qty;
+            const normalBefore = parseInt(cur.stock || 0);
+            const rejectAfter  = rejectBefore - qty;
+            const normalAfter  = normalBefore + qty;
 
-        await dbRun(
-            'UPDATE inventory SET stock=$1, stock_reject=$2 WHERE product_id=$3 AND size=$4 AND color=$5 AND variant_type=$6',
-            [normalAfter, rejectAfter, product_id, size, color, variant_type]
-        );
-        await dbRun(
-            `INSERT INTO stock_movements
-             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
-             VALUES ($1,$2,$3,$4,'reject_to_normal',$5,$6,$7,$8,$9,$10)`,
-            [product_id, size, color, variant_type, qty, rejectBefore, rejectAfter,
-             `Diubah reject→normal: ${qty} unit`, req.user.username, false]
-        );
+            await client.query(
+                'UPDATE inventory SET stock=$1, stock_reject=$2 WHERE product_id=$3 AND size=$4 AND color=$5 AND variant_type=$6',
+                [normalAfter, rejectAfter, product_id, size, color, variant_type]
+            );
+            await client.query(
+                `INSERT INTO stock_movements
+                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
+                 VALUES ($1,$2,$3,$4,'reject_to_normal',$5,$6,$7,$8,$9,$10)`,
+                [product_id, size, color, variant_type, qty, rejectBefore, rejectAfter,
+                 `Diubah reject→normal: ${qty} unit`, req.user.username, false]
+            );
+            return { normalAfter, rejectAfter };
+        });
+
         invalidateCache('inventory');
-        res.json({ message: `${qty} stok diubah dari reject ke normal`, normal_after: normalAfter, reject_after: rejectAfter });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+        res.json({ message: `${qty} stok diubah dari reject ke normal`, normal_after: result.normalAfter, reject_after: result.rejectAfter });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 // PUT /api/inventory/single — update stok manual, log ke stock_movements
 app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { product_id, size, color, variant_type, stock } = req.body;
-        const cur = await dbGet(
-            'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
-            [product_id, size, color, variant_type]
-        );
-        const before = cur ? parseInt(cur.stock) : 0;
         const after = parseInt(stock);
+        if (isNaN(after) || after < 0) return res.status(400).json({ error: 'Nilai stok tidak valid' });
 
-        await dbRun(
-            `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
-            [product_id, size, color, variant_type, after, after]
-        );
-        if (before !== after) {
-            await dbRun(
-                `INSERT INTO stock_movements
-                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
-                 VALUES ($1,$2,$3,$4,'manual_set',$5,$6,$7,'Update manual stok',$8)`,
-                [product_id, size, color, variant_type, after - before, before, after, req.user.username]
+        // Atomic: lock row → read current → upsert → log movement (only if changed)
+        const before = await withTransaction(async (client) => {
+            const curRes = await client.query(
+                'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                [product_id, size, color, variant_type]
             );
-        }
+            const cur = curRes.rows[0];
+            const beforeVal = cur ? parseInt(cur.stock) : 0;
+
+            await client.query(
+                `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
+                 ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
+                [product_id, size, color, variant_type, after, after]
+            );
+            if (beforeVal !== after) {
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
+                     VALUES ($1,$2,$3,$4,'manual_set',$5,$6,$7,'Update manual stok',$8)`,
+                    [product_id, size, color, variant_type, after - beforeVal, beforeVal, after, req.user.username]
+                );
+            }
+            return beforeVal;
+        });
+
         invalidateCache('inventory');
         res.json({ message: 'Stok diperbarui', before, after });
     } catch (err) { res.status(500).json({ error: err.message }); }
