@@ -185,6 +185,53 @@
     .wa-bordir-price { font-size: 10px; color: rgba(255,255,255,0.25); margin-left: auto; }
     .wa-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 6px; display: block; }
     .wa-optional { font-weight: 400; color: rgba(255,255,255,0.25); }
+
+    /* ── Inventory Grid View (spreadsheet style) ─────────────────────────── */
+    .inv-view-toggle { display: inline-flex; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 2px; gap: 2px; }
+    .inv-view-toggle button { padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 8px; color: rgba(255,255,255,0.5); transition: all 0.15s; }
+    .inv-view-toggle button.active { background: rgba(255,255,255,0.12); color: white; }
+    .inv-view-toggle button:hover:not(.active) { color: rgba(255,255,255,0.8); }
+
+    .grid-product-card { background: #1a1a1a; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; overflow: hidden; margin-bottom: 16px; }
+    .grid-product-header { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .grid-product-header .name { font-weight: 700; font-size: 13px; }
+    .grid-product-header .sku  { font-family: monospace; font-size: 10px; color: rgba(255,255,255,0.3); }
+    .grid-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .grid-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: max-content; }
+    .grid-table th, .grid-table td { padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; text-align: center; vertical-align: middle; }
+    .grid-table thead th { background: #141414; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.4); padding-top: 10px; padding-bottom: 10px; position: sticky; top: 0; z-index: 2; }
+    .grid-table .row-header, .grid-table .row-label { position: sticky; left: 0; min-width: 140px; max-width: 200px; text-align: left; padding-left: 12px; padding-right: 12px; background: #1a1a1a; z-index: 1; }
+    .grid-table thead .row-header { background: #141414; z-index: 3; }
+    .grid-table .row-label { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.7); display: flex; align-items: center; gap: 8px; }
+    .grid-table .row-label .color-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); flex-shrink: 0; }
+    .grid-table .row-label .vt-tag { font-size: 10px; color: rgba(255,255,255,0.45); font-weight: 600; }
+    .grid-table .cell-stock { position: relative; cursor: pointer; min-width: 56px; transition: background 0.12s; }
+    .grid-table .cell-stock:hover { background: rgba(255,255,255,0.04); }
+    .grid-table .cell-stock.s-empty  { background: rgba(239,68,68,0.06); }
+    .grid-table .cell-stock.s-low    { background: rgba(234,179,8,0.06); }
+    .grid-table .cell-stock.s-empty:hover { background: rgba(239,68,68,0.12); }
+    .grid-table .cell-stock.s-low:hover   { background: rgba(234,179,8,0.12); }
+    .grid-table .cell-na { color: rgba(255,255,255,0.15); cursor: not-allowed; }
+    .grid-table .stock-value { font-weight: 600; font-size: 13px; }
+    .grid-table .stock-value.s-empty { color: #f87171; }
+    .grid-table .stock-value.s-low   { color: #facc15; }
+    .grid-table .stock-value.s-ok    { color: rgba(255,255,255,0.85); }
+    .grid-table .cell-input { width: 48px; text-align: center; background: rgba(99,102,241,0.15); border: 1.5px solid #6366f1; border-radius: 4px; padding: 2px 4px; font-size: 13px; color: white; font-weight: 600; outline: none; }
+    .grid-table .reject-corner { position: absolute; top: 2px; right: 3px; font-size: 8px; color: #f87171; cursor: pointer; font-weight: 700; padding: 1px 3px; border-radius: 3px; background: rgba(239,68,68,0.12); line-height: 1; }
+    .grid-table .reject-corner:hover { background: rgba(239,68,68,0.25); }
+    .grid-table .reserved-badge { position: absolute; bottom: 2px; right: 3px; font-size: 8px; color: #60a5fa; cursor: pointer; font-weight: 700; padding: 1px 3px; border-radius: 3px; background: rgba(96,165,250,0.12); line-height: 1; }
+    .grid-table .reserved-badge:hover { background: rgba(96,165,250,0.25); }
+
+    /* Reserved popover */
+    #reserved-popover { position: fixed; z-index: 9999; background: #1f1f1f; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; max-width: 280px; max-height: 320px; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    #reserved-popover .head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.4); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    #reserved-popover .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 6px 0; font-size: 12px; }
+    #reserved-popover .row .name { color: white; font-weight: 500; }
+    #reserved-popover .row .meta { font-size: 10px; color: rgba(255,255,255,0.4); font-family: monospace; margin-top: 2px; }
+    #reserved-popover .row .qty { font-weight: 700; color: #60a5fa; flex-shrink: 0; }
+
+    /* Mobile grid edit modal */
+    #grid-edit-modal .modal-card { max-width: 320px; }
     </style>
 </head>
 <body class="bg-darkbg text-white min-h-screen">
@@ -369,11 +416,17 @@
         <!-- Header bar -->
         <div class="flex justify-between items-center flex-wrap gap-3">
             <h2 class="text-xl font-bold">Manajemen Inventori</h2>
-            <button onclick="filterInventoryCritical()" id="inv-critical-btn"
-                class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-red-500/10 border border-red-400/20 text-red-400 hover:bg-red-500/20 transition">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-                <span id="inv-critical-label">Stok Kritis</span>
-            </button>
+            <div class="flex items-center gap-3 flex-wrap">
+                <div class="inv-view-toggle">
+                    <button id="inv-view-card" onclick="setInvView('card')" class="active"><i class="fa-solid fa-list mr-1"></i> Card</button>
+                    <button id="inv-view-grid" onclick="setInvView('grid')"><i class="fa-solid fa-table-cells mr-1"></i> Grid</button>
+                </div>
+                <button onclick="filterInventoryCritical()" id="inv-critical-btn"
+                    class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-red-500/10 border border-red-400/20 text-red-400 hover:bg-red-500/20 transition">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span id="inv-critical-label">Stok Kritis</span>
+                </button>
+            </div>
         </div>
         <!-- Summary strip -->
         <div class="grid grid-cols-3 gap-3">
@@ -1930,7 +1983,21 @@ document.getElementById('product-form').addEventListener('submit', async e => {
 
 // ─── INVENTORY ────────────────────────────────────────────────────────────────
 let cachedInventoryAll = [];
+let cachedReservations = {};   // key `${pid}__${size}__${color}__${vtype}` → { reserved_qty, order_count, buyers }
 let invShowCriticalOnly = false;
+let invViewMode = localStorage.getItem('ws_inv_view') || 'card';   // 'card' | 'grid'
+
+const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','XXXXL','All Size','One Size','Free Size'];
+function sortSizes(arr) {
+    return Array.from(arr).sort((a, b) => {
+        const ai = SIZE_ORDER.indexOf(a);
+        const bi = SIZE_ORDER.indexOf(b);
+        if (ai === -1 && bi === -1) return a.localeCompare(b);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+    });
+}
 
 function resolveColor(colorId) {
     return ALL_COLORS.find(x => x.id === colorId)
@@ -1941,9 +2008,26 @@ function resolveColor(colorId) {
 
 async function loadInventory() {
     try {
-        cachedInventoryAll = await apiFetch('/api/inventory/all');
+        // Parallel fetch — inventory + reservations
+        const [inv, reservations] = await Promise.all([
+            apiFetch('/api/inventory/all'),
+            apiFetch('/api/inventory/reservations').catch(() => ({}))
+        ]);
+        cachedInventoryAll = inv;
+        cachedReservations = reservations || {};
+        // Apply persisted view mode
+        document.getElementById('inv-view-card')?.classList.toggle('active', invViewMode === 'card');
+        document.getElementById('inv-view-grid')?.classList.toggle('active', invViewMode === 'grid');
         renderInventory();
     } catch(e) { toast('Gagal load inventori: ' + e.message, true); }
+}
+
+function setInvView(mode) {
+    invViewMode = mode;
+    localStorage.setItem('ws_inv_view', mode);
+    document.getElementById('inv-view-card').classList.toggle('active', mode === 'card');
+    document.getElementById('inv-view-grid').classList.toggle('active', mode === 'grid');
+    renderInventory();
 }
 
 function renderInventory() {
@@ -1974,6 +2058,12 @@ function renderInventory() {
         container.innerHTML = `<div class="text-center py-12 text-white/20 text-sm">
             <i class="fa-solid fa-box-open text-3xl mb-3 block"></i>
             Tidak ada varian yang sesuai filter.</div>`;
+        return;
+    }
+
+    // Dispatch to chosen view
+    if (invViewMode === 'grid') {
+        renderInventoryGrid(rows, container);
         return;
     }
 
@@ -2068,6 +2158,274 @@ function filterInventoryCritical() {
     btn.classList.toggle('bg-red-500/30', invShowCriticalOnly);
     btn.classList.toggle('border-red-400/50', invShowCriticalOnly);
     renderInventory();
+}
+
+// ─── Grid View (spreadsheet style) ────────────────────────────────────────────
+// Escape values that will be embedded inside single-quoted JS string literals
+// within an HTML attribute (e.g. onclick="foo('${escAttr(name)}')"). Must escape
+// backslash and single-quote at the JS level; double-quote is fine because the
+// outer HTML attribute is already double-quoted.
+function escAttr(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+function renderInventoryGrid(rows, container) {
+    // Group rows by product, collect sizes + variants
+    const byProduct = {};
+    rows.forEach(r => {
+        if (!byProduct[r.product_id]) {
+            byProduct[r.product_id] = { name: r.product_name, sku: r.sku, sizes: new Set(), variants: {} };
+        }
+        const p = byProduct[r.product_id];
+        p.sizes.add(r.size);
+        const vkey = `${r.color}||${r.variant_type}`;
+        if (!p.variants[vkey]) {
+            p.variants[vkey] = { color: r.color, vtype: r.variant_type, cells: {} };
+        }
+        p.variants[vkey].cells[r.size] = r;
+    });
+
+    let html = '';
+    Object.entries(byProduct).forEach(([pid, prod]) => {
+        const sizes = sortSizes(prod.sizes);
+        const variants = Object.values(prod.variants);
+
+        const headerCols = sizes.map(s => `<th class="size-col">${s}</th>`).join('');
+
+        const tableRows = variants.map(v => {
+            const cm = resolveColor(v.color);
+            const vtTag = (v.vtype && v.vtype !== 'null') ? `<span class="vt-tag">· ${v.vtype}</span>` : '';
+            const cells = sizes.map(size => {
+                const r = v.cells[size];
+                if (!r) return `<td class="cell-na">—</td>`;
+                const stock = parseInt(r.stock);
+                const reject = parseInt(r.stock_reject || 0);
+                const key = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
+                const sClass = stock === 0 ? 's-empty' : stock < 5 ? 's-low' : 's-ok';
+                const rejectBadge = reject > 0
+                    ? `<span class="reject-corner" onclick="event.stopPropagation();openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${reject})" title="${reject} reject — klik konversi">⚠${reject}</span>`
+                    : '';
+                const reserved = cachedReservations[key];
+                const reservedBadge = reserved && reserved.reserved_qty > 0
+                    ? `<span class="reserved-badge" onclick="event.stopPropagation();showReservedPopover(event,'${escAttr(key)}')" title="${reserved.order_count} order pending">ⓘ${reserved.reserved_qty}</span>`
+                    : '';
+                return `<td class="cell-stock ${sClass}"
+                    data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-current="${stock}"
+                    onclick="gridCellClick(this)">
+                    <span class="stock-value ${sClass}">${stock}</span>
+                    ${rejectBadge}
+                    ${reservedBadge}
+                </td>`;
+            }).join('');
+            return `<tr>
+                <td class="row-label">
+                    <span class="color-dot" style="background:${cm.hex}"></span>
+                    <span>${cm.label}</span>
+                    ${vtTag}
+                </td>
+                ${cells}
+            </tr>`;
+        }).join('');
+
+        html += `
+        <div class="grid-product-card">
+            <div class="grid-product-header">
+                <div>
+                    <div class="name">${prod.name}</div>
+                    <div class="sku">${prod.sku || ''}</div>
+                </div>
+                <div class="text-[10px] text-white/30">${variants.length} varian · ${sizes.length} ukuran</div>
+            </div>
+            <div class="grid-scroll-wrap">
+                <table class="grid-table">
+                    <thead><tr><th class="row-header">Varian</th>${headerCols}</tr></thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// ─── Grid cell click → inline edit (desktop) or modal (mobile) ────────────────
+function isTouchDevice() {
+    return window.matchMedia('(max-width: 768px)').matches || window.matchMedia('(pointer: coarse)').matches;
+}
+
+function gridCellClick(td) {
+    if (td.classList.contains('editing')) return;
+    const product_id  = parseInt(td.dataset.pid);
+    const size        = td.dataset.size;
+    const color       = td.dataset.color;
+    const variant_type = td.dataset.vtype;
+    const current     = parseInt(td.dataset.current);
+    if (isTouchDevice()) {
+        openGridEditModal(product_id, size, color, variant_type, current);
+    } else {
+        gridCellInlineEdit(td, product_id, size, color, variant_type, current);
+    }
+}
+
+function gridCellInlineEdit(td, product_id, size, color, variant_type, current) {
+    td.classList.add('editing');
+    const valueSpan = td.querySelector('.stock-value');
+    const originalClasses = valueSpan.className;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = 0;
+    input.value = current;
+    input.className = 'cell-input';
+    valueSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let savedOrCancelled = false;
+    const cleanup = () => { td.classList.remove('editing'); };
+
+    const save = async () => {
+        if (savedOrCancelled) return; savedOrCancelled = true;
+        const newVal = parseInt(input.value);
+        if (isNaN(newVal) || newVal < 0 || newVal === current) {
+            cleanup(); renderInventory(); return;
+        }
+        input.disabled = true;
+        try {
+            await apiFetch('/api/inventory/single', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal })
+            });
+            const item = cachedInventoryAll.find(r =>
+                r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
+            if (item) item.stock = newVal;
+            toast(`Stok ${size} ${size}: ${current} → ${newVal}`);
+        } catch(e) {
+            toast('Gagal simpan: ' + e.message, true);
+        }
+        cleanup(); renderInventory();
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { savedOrCancelled = true; cleanup(); renderInventory(); }
+    });
+}
+
+function openGridEditModal(product_id, size, color, variant_type, current) {
+    let modal = document.getElementById('grid-edit-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'grid-edit-modal';
+        modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[1001] hidden items-center justify-center p-4';
+        modal.innerHTML = `<div class="modal-card bg-darkcard rounded-2xl p-6 w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-base">Edit Stok</h3>
+                <button onclick="closeGridEditModal()" class="text-white/40 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="gem-subtitle" class="text-xs text-white/50 mb-4"></div>
+            <label class="block text-xs font-semibold text-white/60 mb-2">Stok Baru</label>
+            <input id="gem-qty" type="number" min="0" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-base font-semibold focus:outline-none focus:border-white/30 mb-2" />
+            <div id="gem-current" class="text-[11px] text-white/40 mb-4"></div>
+            <div class="flex gap-2">
+                <button onclick="closeGridEditModal()" class="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">Batal</button>
+                <button id="gem-save-btn" onclick="submitGridEditModal()" class="flex-1 py-3 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition">Simpan</button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    const cm = resolveColor(color);
+    const vtText = (variant_type && variant_type !== 'null') ? ` · ${variant_type}` : '';
+    document.getElementById('gem-subtitle').textContent = `${cm.label}${vtText} · Size ${size}`;
+    document.getElementById('gem-current').textContent  = `Stok saat ini: ${current}`;
+    const input = document.getElementById('gem-qty');
+    input.value = current;
+    modal._ctx = { product_id, size, color, variant_type, current };
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+}
+
+function closeGridEditModal() {
+    const modal = document.getElementById('grid-edit-modal');
+    if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+}
+
+async function submitGridEditModal() {
+    const modal = document.getElementById('grid-edit-modal');
+    const ctx = modal._ctx;
+    const newVal = parseInt(document.getElementById('gem-qty').value);
+    if (isNaN(newVal) || newVal < 0) return toast('Nilai stok tidak valid', true);
+    if (newVal === ctx.current) { closeGridEditModal(); return; }
+    const btn = document.getElementById('gem-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+    try {
+        await apiFetch('/api/inventory/single', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: ctx.product_id, size: ctx.size, color: ctx.color, variant_type: ctx.variant_type, stock: newVal })
+        });
+        const item = cachedInventoryAll.find(r =>
+            r.product_id == ctx.product_id && r.size === ctx.size && r.color === ctx.color && r.variant_type === ctx.variant_type);
+        if (item) item.stock = newVal;
+        toast(`Stok diperbarui: ${ctx.current} → ${newVal}`);
+        closeGridEditModal();
+        renderInventory();
+    } catch(e) {
+        toast('Gagal simpan: ' + e.message, true);
+    } finally {
+        btn.disabled = false; btn.textContent = 'Simpan';
+    }
+}
+
+// ─── Reserved popover (customer names per variant) ────────────────────────────
+function showReservedPopover(evt, key) {
+    closeReservedPopover();
+    const data = cachedReservations[key];
+    if (!data) return;
+    const STATUS_LABEL = {
+        waiting_payment: 'Menunggu bayar', confirmed: 'Dikonfirmasi',
+        bordir: 'Proses bordir', packed: 'Siap kirim'
+    };
+    const STATUS_COLOR = {
+        waiting_payment: 'text-yellow-400', confirmed: 'text-blue-400',
+        bordir: 'text-purple-400', packed: 'text-green-400'
+    };
+    const pop = document.createElement('div');
+    pop.id = 'reserved-popover';
+    pop.innerHTML = `
+        <div class="head">${data.order_count} order · ${data.reserved_qty} pcs reserved</div>
+        ${data.buyers.map(b => `
+            <div class="row">
+                <div style="flex:1;min-width:0">
+                    <div class="name">${b.customer_name}</div>
+                    <div class="meta">${b.order_code} · <span class="${STATUS_COLOR[b.order_status]||''}">${STATUS_LABEL[b.order_status]||b.order_status}</span></div>
+                </div>
+                <div class="qty">${b.qty}×</div>
+            </div>
+        `).join('')}
+    `;
+    document.body.appendChild(pop);
+    // Position near click, keep within viewport
+    const rect = evt.target.getBoundingClientRect();
+    const popW = 280, popH = pop.offsetHeight;
+    let left = rect.left;
+    let top = rect.bottom + 6;
+    if (left + popW > window.innerWidth - 8)  left = window.innerWidth - popW - 8;
+    if (top + popH > window.innerHeight - 8)  top = rect.top - popH - 6;
+    pop.style.left = Math.max(8, left) + 'px';
+    pop.style.top  = Math.max(8, top)  + 'px';
+    // Dismiss on outside click
+    setTimeout(() => document.addEventListener('mousedown', _outsideReservedHandler, { once: true }), 0);
+}
+function _outsideReservedHandler(e) {
+    if (!e.target.closest('#reserved-popover') && !e.target.classList.contains('reserved-badge')) {
+        closeReservedPopover();
+    } else {
+        setTimeout(() => document.addEventListener('mousedown', _outsideReservedHandler, { once: true }), 0);
+    }
+}
+function closeReservedPopover() {
+    const pop = document.getElementById('reserved-popover');
+    if (pop) pop.remove();
 }
 
 async function invSaveOnBlur(input) {
