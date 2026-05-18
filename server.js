@@ -200,6 +200,27 @@ const dbAll = async (sql, params = []) => {
     return result.rows;     // ambil semua baris
 };
 
+// Wrap a sequence of queries in a transaction. Pass the `client` to all queries
+// inside the callback — using dbRun/dbGet/dbAll there would grab a DIFFERENT pool
+// connection and bypass the transaction. On throw, rolls back; otherwise commits.
+// External side effects (file uploads, WA notifications) MUST be done OUTSIDE so
+// they don't extend lock duration or block on network latency.
+async function withTransaction(fn) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const result = await fn(client);
+        await client.query('COMMIT');
+        return result;
+    } catch (err) {
+        try { await client.query('ROLLBACK'); }
+        catch (rbErr) { console.error('Transaction rollback failed:', rbErr); }
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
 // ─── DB Initialization: Tables & Seed ────────────────────────────────────────
 // GANTI: Hapus semua PRAGMA (itu khusus SQLite). PostgreSQL tidak butuh itu.
 // GANTI: INTEGER PRIMARY KEY AUTOINCREMENT → SERIAL PRIMARY KEY
@@ -1034,36 +1055,42 @@ app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req,
             return res.status(400).json({ error: 'Jumlah harus lebih dari 0' });
 
         const isReject = stock_type === 'reject';
-        const cur = await dbGet(
-            'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
-            [product_id, size, color, variant_type]
-        );
-        const normalBefore = cur ? parseInt(cur.stock || 0) : 0;
-        const rejectBefore = cur ? parseInt(cur.stock_reject || 0) : 0;
-        const before = isReject ? rejectBefore : normalBefore;
-        const after  = before + qty;
+        // Atomic: lock row → read current → update → log movement
+        const { before, after } = await withTransaction(async (client) => {
+            const curRes = await client.query(
+                'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                [product_id, size, color, variant_type]
+            );
+            const cur = curRes.rows[0];
+            const normalBefore = cur ? parseInt(cur.stock || 0) : 0;
+            const rejectBefore = cur ? parseInt(cur.stock_reject || 0) : 0;
+            const before = isReject ? rejectBefore : normalBefore;
+            const after  = before + qty;
 
-        if (isReject) {
-            await dbRun(
-                `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES ($1,$2,$3,$4,0,$5)
-                 ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock_reject = $6`,
-                [product_id, size, color, variant_type, after, after]
+            if (isReject) {
+                await client.query(
+                    `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES ($1,$2,$3,$4,0,$5)
+                     ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock_reject = $6`,
+                    [product_id, size, color, variant_type, after, after]
+                );
+            } else {
+                await client.query(
+                    `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES ($1,$2,$3,$4,$5,0)
+                     ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
+                    [product_id, size, color, variant_type, after, after]
+                );
+            }
+            await client.query(
+                `INSERT INTO stock_movements
+                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                [product_id, size, color, variant_type, isReject ? 'receive_reject' : 'receive',
+                 qty, before, after, note || (isReject ? 'Terima stok reject' : 'Terima stok baru'),
+                 req.user.username, isReject]
             );
-        } else {
-            await dbRun(
-                `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES ($1,$2,$3,$4,$5,0)
-                 ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
-                [product_id, size, color, variant_type, after, after]
-            );
-        }
-        await dbRun(
-            `INSERT INTO stock_movements
-             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-            [product_id, size, color, variant_type, isReject ? 'receive_reject' : 'receive',
-             qty, before, after, note || (isReject ? 'Terima stok reject' : 'Terima stok baru'),
-             req.user.username, isReject]
-        );
+            return { before, after };
+        });
+
         invalidateCache('inventory');
         res.json({ message: isReject ? 'Stok reject ditambahkan' : 'Stok berhasil ditambahkan', before, after, added: qty, stock_type: isReject ? 'reject' : 'normal' });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1378,38 +1405,45 @@ app.post('/api/orders', async (req, res) => {
             embroidery_details.some(e => e.type === 'logo' && typeof e.value === 'string' && e.value.startsWith('data:image/'));
 
         const orderCode = generateOrderCode(order_source || 'website');
-        const orderResult = await dbRun(
-            `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
-              shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
-              embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
-              payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
-            [orderCode, customer_name, customer_phone, customer_address,
-             shipping_city || '', courier, weightKg, shippingCost, total,
-             embroidery_details ? JSON.stringify(embroidery_details) : null,
-             hasBordirLogo, hasBordirNama,
-             (hasBordirLogo || hasBordirNama) ? 'pending' : null,
-             notes || '',
-             order_source || 'website',
-             payment_method || '',
-             safeDiscountPct,
-             discountAmount,
-             discountLabel,
-             logoAlreadyProvided]
-        );
-        const orderId = orderResult.rows[0].id;
 
-        for (const item of itemDetails) {
-            await dbRun(
-                `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-                [orderId, item.product_id, item.size, item.color,
-                    item.variant_type || 'null', item.quantity, item.price,
-                    item.bordir_nama || false, item.bordir_logo || false]
+        // Atomic: insert order + all items in one transaction. Either all rows land
+        // or none — no orphan orders with missing items.
+        const orderId = await withTransaction(async (client) => {
+            const orderResult = await client.query(
+                `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
+                  shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
+                  embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
+                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
+                [orderCode, customer_name, customer_phone, customer_address,
+                 shipping_city || '', courier, weightKg, shippingCost, total,
+                 embroidery_details ? JSON.stringify(embroidery_details) : null,
+                 hasBordirLogo, hasBordirNama,
+                 (hasBordirLogo || hasBordirNama) ? 'pending' : null,
+                 notes || '',
+                 order_source || 'website',
+                 payment_method || '',
+                 safeDiscountPct,
+                 discountAmount,
+                 discountLabel,
+                 logoAlreadyProvided]
             );
-        }
+            const newOrderId = orderResult.rows[0].id;
 
-        // Rich WA notification for admin
+            for (const item of itemDetails) {
+                await client.query(
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                    [newOrderId, item.product_id, item.size, item.color,
+                        item.variant_type || 'null', item.quantity, item.price,
+                        item.bordir_nama || false, item.bordir_logo || false]
+                );
+            }
+            return newOrderId;
+        });
+
+        // Rich WA notification for admin (sent AFTER commit — failure here doesn't
+        // invalidate the order; just logs and the customer still gets success)
         const itemSummary = itemDetails.map(i => {
             let line = `• ${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) x${i.quantity}`;
             if (i.bordir_nama) line += ` [Bordir Nama]`;
@@ -1448,8 +1482,11 @@ app.post('/api/orders', async (req, res) => {
             `💰 *TOTAL: Rp ${total.toLocaleString('id-ID')}*\n\n` +
             `⏳ Menunggu Pembayaran`;
         // Skip WA notification to admin for manually-input WA orders (admin already knows)
+        // Wrap in try/catch — Fonnte API failure must NOT fail the order response,
+        // since the order is already committed at this point.
         if ((order_source || 'website') !== 'whatsapp') {
-            await sendWANotification(waMsg);
+            try { await sendWANotification(waMsg); }
+            catch (waErr) { console.error('WA notify (new order) failed:', waErr?.message || waErr); }
         }
 
         // ⚠️ Immediate reminder if bordir logo ordered
@@ -1457,13 +1494,14 @@ app.post('/api/orders', async (req, res) => {
             const logoItems = embroidery_details
                 ? embroidery_details.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${safeEmbVal(e)}`).join('\n')
                 : '(lihat detail pesanan)';
-            await sendWANotification(
+            try { await sendWANotification(
                 `🔔 *REMINDER: BORDIR LOGO - #${orderCode}*\n\n` +
                 `Customer ${customer_name} memesan bordir logo!\n\n` +
                 `🎨 Detail logo:\n${logoItems}\n\n` +
                 `❗ Segera hubungi customer untuk meminta file logo bordir.\n` +
                 `📱 WA Customer: ${customer_phone}`
-            );
+            ); }
+            catch (waErr) { console.error('WA notify (bordir reminder) failed:', waErr?.message || waErr); }
         }
 
         res.json({
@@ -1489,56 +1527,77 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.payment_status === 'paid') return res.status(400).json({ error: 'Sudah dikonfirmasi' });
 
+        // Upload to Supabase BEFORE the transaction — external call, can be slow.
+        // If TX later fails, the photo becomes orphan (harmless, tiny size).
         const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
 
-        // Save photo proof
-        await dbRun(`INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-            [order.id, 'payment', photoUrl, req.body.note || '']);
-
-        // Deduct inventory + log order_out
         const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
-        for (const item of items) {
-            const invBefore = await dbGet(
-                'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
-                [item.product_id, item.size, item.color, item.variant_type]
-            );
-            const stockBefore = invBefore ? parseInt(invBefore.stock) : 0;
-            await dbRun(
-                `UPDATE inventory SET stock = GREATEST(0, stock - $1) WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
-                [item.quantity, item.product_id, item.size, item.color, item.variant_type]
-            );
-            const stockAfter = Math.max(0, stockBefore - item.quantity);
-            await dbRun(
-                `INSERT INTO stock_movements
-                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
-                 VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
-                [item.product_id, item.size, item.color, item.variant_type,
-                 -item.quantity, stockBefore, stockAfter,
-                 `Order ${order.order_code}`, order.id, req.user.username]
-            );
-        }
 
-        // Determine next status based on whether order has bordir
-        const nextStatus = order.has_bordir_logo || order.has_bordir_nama ? 'bordir' : 'confirmed';
-        await dbRun(
-            `UPDATE orders SET payment_status = 'paid', order_status = $1, updated_at = NOW() WHERE id = $2`,
-            [nextStatus, order.id]
-        );
-
-        // WA notification to admin if bordir logo not yet requested
-        if ((order.has_bordir_logo || order.has_bordir_nama) && !order.bordir_logo_requested) {
-            await dbRun(`UPDATE orders SET bordir_logo_requested = TRUE WHERE id = $1`, [order.id]);
-            const embDetails = order.embroidery_details ? JSON.parse(order.embroidery_details) : [];
-            const logoItems = embDetails.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${e.value}`).join('\n');
-            const namaItems = embDetails.filter(e => e.type === 'nama').map(e => `• ${e.item_label}: ${e.value}`).join('\n');
-            await sendWANotification(
-                `✅ *BAYAR DIKONFIRMASI - #${order.order_code}*\n\n` +
-                `💰 Pembayaran ${order.customer_name} sudah dikonfirmasi.\n` +
-                `🧵 *Status: Masuk Proses Bordir (estimasi 1 minggu)*\n\n` +
-                (logoItems ? `🎨 Logo bordir:\n${logoItems}\n` : '') +
-                (namaItems ? `✏️ Nama bordir:\n${namaItems}\n` : '') +
-                (order.has_bordir_logo ? `\n❗ Segera request file logo ke customer: ${order.customer_phone}` : '')
+        // Atomic: photo record + inventory deduct (with FOR UPDATE lock) + movement log
+        // + order status update. Either all land or all roll back.
+        const { nextStatus, sendBordirWA } = await withTransaction(async (client) => {
+            // Save photo proof
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
+                [order.id, 'payment', photoUrl, req.body.note || '']
             );
+
+            // Deduct inventory + log order_out. FOR UPDATE locks the inventory row
+            // until COMMIT — prevents concurrent admins from race-confirming the same
+            // variant and over-deducting.
+            for (const item of items) {
+                const invRes = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [item.product_id, item.size, item.color, item.variant_type]
+                );
+                const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+                await client.query(
+                    `UPDATE inventory SET stock = GREATEST(0, stock - $1) WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
+                    [item.quantity, item.product_id, item.size, item.color, item.variant_type]
+                );
+                const stockAfter = Math.max(0, stockBefore - item.quantity);
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+                    [item.product_id, item.size, item.color, item.variant_type,
+                     -item.quantity, stockBefore, stockAfter,
+                     `Order ${order.order_code}`, order.id, req.user.username]
+                );
+            }
+
+            // Determine next status based on whether order has bordir
+            const ns = order.has_bordir_logo || order.has_bordir_nama ? 'bordir' : 'confirmed';
+            await client.query(
+                `UPDATE orders SET payment_status = 'paid', order_status = $1, updated_at = NOW() WHERE id = $2`,
+                [ns, order.id]
+            );
+
+            // Mark bordir_logo_requested if applicable (inside TX so it's consistent
+            // with the status change)
+            const shouldSendBordirWA = (order.has_bordir_logo || order.has_bordir_nama) && !order.bordir_logo_requested;
+            if (shouldSendBordirWA) {
+                await client.query(`UPDATE orders SET bordir_logo_requested = TRUE WHERE id = $1`, [order.id]);
+            }
+            return { nextStatus: ns, sendBordirWA: shouldSendBordirWA };
+        });
+
+        // WA notification AFTER commit — failure here doesn't roll back the payment
+        // confirmation, which is already durably persisted.
+        if (sendBordirWA) {
+            try {
+                const embDetails = order.embroidery_details ? JSON.parse(order.embroidery_details) : [];
+                const logoItems = embDetails.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${e.value}`).join('\n');
+                const namaItems = embDetails.filter(e => e.type === 'nama').map(e => `• ${e.item_label}: ${e.value}`).join('\n');
+                await sendWANotification(
+                    `✅ *BAYAR DIKONFIRMASI - #${order.order_code}*\n\n` +
+                    `💰 Pembayaran ${order.customer_name} sudah dikonfirmasi.\n` +
+                    `🧵 *Status: Masuk Proses Bordir (estimasi 1 minggu)*\n\n` +
+                    (logoItems ? `🎨 Logo bordir:\n${logoItems}\n` : '') +
+                    (namaItems ? `✏️ Nama bordir:\n${namaItems}\n` : '') +
+                    (order.has_bordir_logo ? `\n❗ Segera request file logo ke customer: ${order.customer_phone}` : '')
+                );
+            } catch (waErr) { console.error('WA notify (payment confirmed) failed:', waErr?.message || waErr); }
         }
 
         res.json({ message: 'Pembayaran dikonfirmasi', next_status: nextStatus, photo_url: photoUrl });
