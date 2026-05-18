@@ -1235,6 +1235,63 @@ app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, r
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/inventory/bulk — apply same operation (set/add/subtract) to multiple
+// variants at once. All in one transaction, all-or-nothing. Logs one movement
+// per changed cell. Cell list capped at 200 for safety.
+app.post('/api/inventory/bulk', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const { operation, value, cells, note } = req.body;
+        if (!['set', 'add', 'subtract'].includes(operation))
+            return res.status(400).json({ error: 'Operation harus set/add/subtract' });
+        const num = parseInt(value);
+        if (isNaN(num) || num < 0) return res.status(400).json({ error: 'Nilai tidak valid' });
+        if (!Array.isArray(cells) || cells.length === 0) return res.status(400).json({ error: 'Pilih minimal 1 cell' });
+        if (cells.length > 200) return res.status(400).json({ error: 'Maksimal 200 cell sekaligus' });
+
+        const opLabel = operation === 'set' ? `→ ${num}` : operation === 'add' ? `+${num}` : `−${num}`;
+        const noteFinal = `Bulk ${operation}: ${opLabel}${note ? ' · ' + note : ''}`;
+
+        const results = await withTransaction(async (client) => {
+            const out = [];
+            for (const cell of cells) {
+                const { product_id, size, color, variant_type } = cell;
+                if (!product_id || !size || !color || !variant_type) continue;
+
+                const curRes = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [product_id, size, color, variant_type]
+                );
+                const cur = curRes.rows[0];
+                const before = cur ? parseInt(cur.stock) : 0;
+                let after;
+                if (operation === 'set')      after = num;
+                else if (operation === 'add') after = before + num;
+                else                          after = Math.max(0, before - num);
+
+                await client.query(
+                    `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
+                     ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
+                    [product_id, size, color, variant_type, after, after]
+                );
+                if (before !== after) {
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
+                         VALUES ($1,$2,$3,$4,'manual_set',$5,$6,$7,$8,$9)`,
+                        [product_id, size, color, variant_type, after - before, before, after, noteFinal, req.user.username]
+                    );
+                }
+                out.push({ product_id, size, color, variant_type, before, after, changed: before !== after });
+            }
+            return out;
+        });
+
+        invalidateCache('inventory');
+        const changed = results.filter(r => r.changed).length;
+        res.json({ message: `${changed} dari ${results.length} stok diperbarui`, results });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // PUT /api/inventory (bulk)
 app.put('/api/inventory', requireAuth(['admin','manager']), async (req, res) => {
     try {

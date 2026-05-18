@@ -232,6 +232,23 @@
 
     /* Mobile grid edit modal */
     #grid-edit-modal .modal-card { max-width: 320px; }
+
+    /* Bulk mode */
+    .grid-table.bulk-mode .cell-stock { cursor: copy; }
+    .grid-table .cell-stock.selected { background: rgba(99,102,241,0.22) !important; box-shadow: inset 0 0 0 2px #6366f1; position: relative; z-index: 1; }
+    .grid-table .cell-stock.selected:hover { background: rgba(99,102,241,0.3) !important; }
+
+    #bulk-action-bar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 1000; background: #1f1f1f; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 10px 14px; box-shadow: 0 12px 36px rgba(0,0,0,0.6); display: none; align-items: center; gap: 10px; max-width: calc(100vw - 32px); flex-wrap: wrap; }
+    #bulk-action-bar.visible { display: flex; }
+    #bulk-action-bar .count { font-size: 11px; font-weight: 700; color: white; padding: 4px 10px; background: rgba(99,102,241,0.18); border: 1px solid rgba(99,102,241,0.35); border-radius: 999px; }
+    #bulk-action-bar select, #bulk-action-bar input { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px 8px; font-size: 12px; color: white; outline: none; }
+    #bulk-action-bar select { padding-right: 24px; }
+    #bulk-action-bar input { width: 70px; text-align: center; }
+    #bulk-action-bar button.apply { font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 8px; background: white; color: black; transition: opacity 0.15s; }
+    #bulk-action-bar button.apply:hover { opacity: 0.85; }
+    #bulk-action-bar button.apply:disabled { opacity: 0.4; cursor: not-allowed; }
+    #bulk-action-bar button.cancel { font-size: 11px; padding: 6px 10px; color: rgba(255,255,255,0.4); }
+    #bulk-action-bar button.cancel:hover { color: white; }
     </style>
 </head>
 <body class="bg-darkbg text-white min-h-screen">
@@ -421,6 +438,11 @@
                     <button id="inv-view-card" onclick="setInvView('card')" class="active"><i class="fa-solid fa-list mr-1"></i> Card</button>
                     <button id="inv-view-grid" onclick="setInvView('grid')"><i class="fa-solid fa-table-cells mr-1"></i> Grid</button>
                 </div>
+                <button id="inv-bulk-btn" onclick="toggleBulkMode()"
+                    class="hidden items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 hover:bg-indigo-500/20 transition">
+                    <i class="fa-solid fa-square-check"></i>
+                    <span id="inv-bulk-label">Pilih Banyak</span>
+                </button>
                 <button onclick="filterInventoryCritical()" id="inv-critical-btn"
                     class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-red-500/10 border border-red-400/20 text-red-400 hover:bg-red-500/20 transition">
                     <i class="fa-solid fa-triangle-exclamation"></i>
@@ -2015,10 +2037,8 @@ async function loadInventory() {
         ]);
         cachedInventoryAll = inv;
         cachedReservations = reservations || {};
-        // Apply persisted view mode
-        document.getElementById('inv-view-card')?.classList.toggle('active', invViewMode === 'card');
-        document.getElementById('inv-view-grid')?.classList.toggle('active', invViewMode === 'grid');
-        renderInventory();
+        // Apply persisted view mode (via setInvView so bulk-button visibility syncs too)
+        setInvView(invViewMode);
     } catch(e) { toast('Gagal load inventori: ' + e.message, true); }
 }
 
@@ -2027,7 +2047,182 @@ function setInvView(mode) {
     localStorage.setItem('ws_inv_view', mode);
     document.getElementById('inv-view-card').classList.toggle('active', mode === 'card');
     document.getElementById('inv-view-grid').classList.toggle('active', mode === 'grid');
+    // Bulk button only meaningful in Grid view
+    const bulkBtn = document.getElementById('inv-bulk-btn');
+    if (bulkBtn) {
+        bulkBtn.classList.toggle('hidden', mode !== 'grid');
+        bulkBtn.classList.toggle('flex', mode === 'grid');
+    }
+    // Exit bulk mode when leaving Grid view
+    if (mode !== 'grid' && bulkMode) setBulkMode(false);
     renderInventory();
+}
+
+// ─── Bulk select mode ─────────────────────────────────────────────────────────
+let bulkMode = false;
+let bulkSelection = new Set();   // keys `${pid}__${size}__${color}__${vtype}`
+
+function toggleBulkMode() {
+    setBulkMode(!bulkMode);
+}
+
+function setBulkMode(on) {
+    bulkMode = on;
+    bulkSelection.clear();
+    const btn = document.getElementById('inv-bulk-btn');
+    const lbl = document.getElementById('inv-bulk-label');
+    if (btn) {
+        btn.classList.toggle('bg-indigo-500/30', on);
+        btn.classList.toggle('border-indigo-400/50', on);
+    }
+    if (lbl) lbl.textContent = on ? 'Selesai' : 'Pilih Banyak';
+    if (on) ensureBulkBar();
+    else hideBulkBar();
+    renderInventory();
+}
+
+function ensureBulkBar() {
+    let bar = document.getElementById('bulk-action-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'bulk-action-bar';
+        bar.innerHTML = `
+            <span class="count" id="bulk-count">0 dipilih</span>
+            <select id="bulk-op">
+                <option value="set">Set ke</option>
+                <option value="add">+ Tambah</option>
+                <option value="subtract">− Kurangi</option>
+            </select>
+            <input id="bulk-val" type="number" min="0" placeholder="Nilai" />
+            <button class="apply" onclick="applyBulk()">Terapkan</button>
+            <button class="cancel" onclick="setBulkMode(false)">Batal</button>
+        `;
+        document.body.appendChild(bar);
+    }
+    bar.classList.add('visible');
+    updateBulkBar();
+}
+
+function hideBulkBar() {
+    const bar = document.getElementById('bulk-action-bar');
+    if (bar) bar.classList.remove('visible');
+}
+
+function updateBulkBar() {
+    const lbl = document.getElementById('bulk-count');
+    if (lbl) lbl.textContent = `${bulkSelection.size} dipilih`;
+    const applyBtn = document.querySelector('#bulk-action-bar button.apply');
+    if (applyBtn) applyBtn.disabled = bulkSelection.size === 0;
+}
+
+function applyBulk() {
+    if (bulkSelection.size === 0) return toast('Pilih cell dulu', true);
+    const op    = document.getElementById('bulk-op').value;
+    const value = parseInt(document.getElementById('bulk-val').value);
+    if (isNaN(value) || value < 0) return toast('Masukkan nilai valid (≥0)', true);
+
+    // Build preview: before → after per cell
+    const cells = [];
+    const preview = [];
+    bulkSelection.forEach(key => {
+        const [pid, size, color, vtype] = key.split('__');
+        const product_id = parseInt(pid);
+        const r = cachedInventoryAll.find(x =>
+            x.product_id == product_id && x.size === size && x.color === color && x.variant_type === vtype);
+        const before = r ? parseInt(r.stock) : 0;
+        let after;
+        if (op === 'set')      after = value;
+        else if (op === 'add') after = before + value;
+        else                   after = Math.max(0, before - value);
+        cells.push({ product_id, size, color, variant_type: vtype });
+        preview.push({ product_name: r?.product_name || '?', size, color, vtype, before, after, changed: before !== after });
+    });
+
+    showBulkPreviewModal(op, value, cells, preview);
+}
+
+function showBulkPreviewModal(op, value, cells, preview) {
+    const opLabel = op === 'set' ? `Set ke ${value}` : op === 'add' ? `+ ${value}` : `− ${value}`;
+    const changedCount = preview.filter(p => p.changed).length;
+    let modal = document.getElementById('bulk-preview-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'bulk-preview-modal';
+        modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4';
+        document.body.appendChild(modal);
+    }
+    const rows = preview.map(p => {
+        const cm = resolveColor(p.color);
+        const vtText = (p.vtype && p.vtype !== 'null') ? ` · ${p.vtype}` : '';
+        const arrow = p.changed ? `<span class="text-white/40">→</span>` : `<span class="text-white/20">=</span>`;
+        const afterCls = p.changed ? (p.after === 0 ? 'text-red-400' : p.after < 5 ? 'text-yellow-400' : 'text-green-400') : 'text-white/30';
+        return `<tr class="${p.changed ? '' : 'opacity-40'}">
+            <td class="px-2 py-1.5 text-[11px]">${p.product_name}</td>
+            <td class="px-2 py-1.5 text-[11px] text-white/60">${cm.label}${vtText} · ${p.size}</td>
+            <td class="px-2 py-1.5 text-[11px] text-center text-white/40 font-mono">${p.before}</td>
+            <td class="px-2 py-1.5 text-[11px] text-center">${arrow}</td>
+            <td class="px-2 py-1.5 text-[11px] text-center font-mono font-bold ${afterCls}">${p.after}</td>
+        </tr>`;
+    }).join('');
+    modal.innerHTML = `
+        <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-sm">Konfirmasi Perubahan Bulk</h3>
+                    <p class="text-[11px] text-white/40 mt-0.5">Operasi: <strong class="text-indigo-300">${opLabel}</strong> · ${changedCount} dari ${preview.length} cell akan berubah</p>
+                </div>
+                <button onclick="closeBulkPreview()" class="text-white/40 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-3">
+                <table class="w-full">
+                    <thead class="text-[10px] uppercase tracking-wider text-white/30 border-b border-white/5">
+                        <tr>
+                            <th class="px-2 py-1.5 text-left">Produk</th>
+                            <th class="px-2 py-1.5 text-left">Varian</th>
+                            <th class="px-2 py-1.5 text-center">Sebelum</th>
+                            <th class="px-2 py-1.5"></th>
+                            <th class="px-2 py-1.5 text-center">Sesudah</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">${rows}</tbody>
+                </table>
+            </div>
+            <div class="px-5 py-3 border-t border-white/5 flex gap-2 justify-end">
+                <button onclick="closeBulkPreview()" class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-medium hover:bg-white/10 transition">Batal</button>
+                <button id="bulk-confirm-btn" onclick="confirmBulkApply()" class="px-5 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-white/90 transition">
+                    Terapkan ke ${changedCount} cell
+                </button>
+            </div>
+        </div>
+    `;
+    modal._payload = { op, value, cells };
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+
+function closeBulkPreview() {
+    const modal = document.getElementById('bulk-preview-modal');
+    if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+}
+
+async function confirmBulkApply() {
+    const modal = document.getElementById('bulk-preview-modal');
+    const { op, value, cells } = modal._payload;
+    const btn = document.getElementById('bulk-confirm-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+    try {
+        const res = await apiFetch('/api/inventory/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operation: op, value, cells })
+        });
+        toast(`✅ ${res.message}`);
+        closeBulkPreview();
+        setBulkMode(false);
+        await loadInventory();
+    } catch(e) {
+        toast('Gagal: ' + e.message, true);
+        btn.disabled = false; btn.textContent = 'Coba Lagi';
+    }
 }
 
 function renderInventory() {
@@ -2200,6 +2395,7 @@ function renderInventoryGrid(rows, container) {
                 const reject = parseInt(r.stock_reject || 0);
                 const key = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
                 const sClass = stock === 0 ? 's-empty' : stock < 5 ? 's-low' : 's-ok';
+                const selectedClass = (bulkMode && bulkSelection.has(key)) ? ' selected' : '';
                 const rejectBadge = reject > 0
                     ? `<span class="reject-corner" onclick="event.stopPropagation();openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${reject})" title="${reject} reject — klik konversi">⚠${reject}</span>`
                     : '';
@@ -2207,7 +2403,7 @@ function renderInventoryGrid(rows, container) {
                 const reservedBadge = reserved && reserved.reserved_qty > 0
                     ? `<span class="reserved-badge" onclick="event.stopPropagation();showReservedPopover(event,'${escAttr(key)}')" title="${reserved.order_count} order pending">ⓘ${reserved.reserved_qty}</span>`
                     : '';
-                return `<td class="cell-stock ${sClass}"
+                return `<td class="cell-stock ${sClass}${selectedClass}"
                     data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-current="${stock}"
                     onclick="gridCellClick(this)">
                     <span class="stock-value ${sClass}">${stock}</span>
@@ -2235,7 +2431,7 @@ function renderInventoryGrid(rows, container) {
                 <div class="text-[10px] text-white/30">${variants.length} varian · ${sizes.length} ukuran</div>
             </div>
             <div class="grid-scroll-wrap">
-                <table class="grid-table">
+                <table class="grid-table${bulkMode ? ' bulk-mode' : ''}">
                     <thead><tr><th class="row-header">Varian</th>${headerCols}</tr></thead>
                     <tbody>${tableRows}</tbody>
                 </table>
@@ -2258,6 +2454,21 @@ function gridCellClick(td) {
     const color       = td.dataset.color;
     const variant_type = td.dataset.vtype;
     const current     = parseInt(td.dataset.current);
+
+    // Bulk mode: toggle selection instead of edit
+    if (bulkMode) {
+        const key = `${product_id}__${size}__${color}__${variant_type}`;
+        if (bulkSelection.has(key)) {
+            bulkSelection.delete(key);
+            td.classList.remove('selected');
+        } else {
+            bulkSelection.add(key);
+            td.classList.add('selected');
+        }
+        updateBulkBar();
+        return;
+    }
+
     if (isTouchDevice()) {
         openGridEditModal(product_id, size, color, variant_type, current);
     } else {
