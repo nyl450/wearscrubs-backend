@@ -221,6 +221,13 @@ async function withTransaction(fn) {
     }
 }
 
+// Fire-and-log WA notification — Fonnte downtime should never cause an order
+// endpoint to return 500 after the DB state is already committed.
+async function safeWA(message, context = '') {
+    try { await sendWANotification(message); }
+    catch (e) { console.error(`WA notify failed${context ? ' ('+context+')' : ''}:`, e?.message || e); }
+}
+
 // ─── DB Initialization: Tables & Seed ────────────────────────────────────────
 // GANTI: Hapus semua PRAGMA (itu khusus SQLite). PostgreSQL tidak butuh itu.
 // GANTI: INTEGER PRIMARY KEY AUTOINCREMENT → SERIAL PRIMARY KEY
@@ -1741,16 +1748,28 @@ app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'bordir') return res.status(400).json({ error: 'Pesanan tidak dalam status bordir' });
 
+        // Upload before TX (external, may be slow). Orphan photo on rollback is harmless.
         const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
-        await dbRun(`INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-            [order.id, 'bordir', photoUrl, req.body.note || '']);
-        await dbRun(`UPDATE orders SET order_status = 'confirmed', updated_at = NOW() WHERE id = $1`, [order.id]);
 
-        await sendWANotification(
+        // Atomic: photo record + status transition
+        await withTransaction(async (client) => {
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
+                [order.id, 'bordir', photoUrl, req.body.note || '']
+            );
+            await client.query(
+                `UPDATE orders SET order_status = 'confirmed', updated_at = NOW() WHERE id = $1`,
+                [order.id]
+            );
+        });
+
+        // After commit — WA failure must not fail the response
+        await safeWA(
             `🧵 *BORDIR SELESAI - #${order.order_code}*\n\n` +
             `Bordir untuk pesanan ${order.customer_name} sudah selesai.\n` +
             `📸 Foto bordir sudah diupload di dashboard.\n` +
-            `➡️ Status: Siap dikemas`
+            `➡️ Status: Siap dikemas`,
+            'bordir-done'
         );
 
         res.json({ message: 'Bordir selesai, siap dikemas', photo_url: photoUrl });
@@ -1766,15 +1785,24 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
         if (order.order_status !== 'confirmed') return res.status(400).json({ error: 'Pesanan belum berstatus confirmed/siap kemas' });
 
         const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
-        await dbRun(`INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-            [order.id, 'pack', photoUrl, req.body.note || '']);
-        await dbRun(`UPDATE orders SET order_status = 'packed', updated_at = NOW() WHERE id = $1`, [order.id]);
 
-        await sendWANotification(
+        await withTransaction(async (client) => {
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
+                [order.id, 'pack', photoUrl, req.body.note || '']
+            );
+            await client.query(
+                `UPDATE orders SET order_status = 'packed', updated_at = NOW() WHERE id = $1`,
+                [order.id]
+            );
+        });
+
+        await safeWA(
             `📦 *DIKEMAS - #${order.order_code}*\n\n` +
             `Pesanan ${order.customer_name} sudah dikemas.\n` +
             `📸 Foto kemasan sudah diupload.\n` +
-            `➡️ Siap dikirim via ${order.shipping_courier}`
+            `➡️ Siap dikirim via ${order.shipping_courier}`,
+            'pack'
         );
 
         res.json({ message: 'Pesanan dikemas', photo_url: photoUrl });
@@ -1792,51 +1820,61 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         if (order.order_status === 'done') return res.status(400).json({ error: 'Pesanan sudah selesai, tidak bisa dibatalkan' });
 
         const { cancel_reason } = req.body;
+        // Refund proof wajib kalau payment sudah confirmed — cek dulu sebelum upload
+        if (order.payment_status === 'paid' && !req.file) {
+            return res.status(400).json({ error: 'Foto bukti refund wajib diupload karena pembayaran sudah dikonfirmasi' });
+        }
+
+        // Upload before TX (slow external call). Orphan photo on rollback is harmless.
         const refundProofUrl = req.file
             ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
             : null;
 
-        // If payment was already confirmed, return stock + log restore
-        if (order.payment_status === 'paid') {
-            if (!req.file) return res.status(400).json({ error: 'Foto bukti refund wajib diupload karena pembayaran sudah dikonfirmasi' });
-            const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
-            for (const item of items) {
-                const invBefore = await dbGet(
-                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
-                    [item.product_id, item.size, item.color, item.variant_type]
-                );
-                const stockBefore = invBefore ? parseInt(invBefore.stock) : 0;
-                await dbRun(
-                    `UPDATE inventory SET stock = stock + $1 WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
-                    [item.quantity, item.product_id, item.size, item.color, item.variant_type]
-                );
-                const stockAfter = stockBefore + item.quantity;
-                await dbRun(
-                    `INSERT INTO stock_movements
-                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
-                     VALUES ($1,$2,$3,$4,'order_cancel_restore',$5,$6,$7,$8,$9,$10)`,
-                    [item.product_id, item.size, item.color, item.variant_type,
-                     item.quantity, stockBefore, stockAfter,
-                     `Pembatalan ${order.order_code}`, order.id, user.username]
+        // Atomic: stock restore (if paid) + photo + cancel update — all-or-nothing
+        await withTransaction(async (client) => {
+            if (order.payment_status === 'paid') {
+                const itemsRes = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+                for (const item of itemsRes.rows) {
+                    const invRes = await client.query(
+                        'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                        [item.product_id, item.size, item.color, item.variant_type]
+                    );
+                    const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+                    await client.query(
+                        `UPDATE inventory SET stock = stock + $1 WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
+                        [item.quantity, item.product_id, item.size, item.color, item.variant_type]
+                    );
+                    const stockAfter = stockBefore + item.quantity;
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                         VALUES ($1,$2,$3,$4,'order_cancel_restore',$5,$6,$7,$8,$9,$10)`,
+                        [item.product_id, item.size, item.color, item.variant_type,
+                         item.quantity, stockBefore, stockAfter,
+                         `Pembatalan ${order.order_code}`, order.id, user.username]
+                    );
+                }
+            }
+
+            if (refundProofUrl) {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
+                    [order.id, 'refund', refundProofUrl, cancel_reason || '']
                 );
             }
-        }
 
-        if (refundProofUrl) {
-            await dbRun(`INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                [order.id, 'refund', refundProofUrl, cancel_reason || '']);
-        }
+            await client.query(
+                `UPDATE orders SET order_status = 'cancelled', cancel_reason = $1, cancelled_by = $2, updated_at = NOW() WHERE id = $3`,
+                [cancel_reason || '', user.username, order.id]
+            );
+        });
 
-        await dbRun(
-            `UPDATE orders SET order_status = 'cancelled', cancel_reason = $1, cancelled_by = $2, updated_at = NOW() WHERE id = $3`,
-            [cancel_reason || '', user.username, order.id]
-        );
-
-        await sendWANotification(
+        await safeWA(
             `❌ *PESANAN DIBATALKAN - #${order.order_code}*\n\n` +
             `Pesanan ${order.customer_name} dibatalkan oleh admin ${user.username}.\n` +
             `📝 Alasan: ${cancel_reason || '-'}\n` +
-            (order.payment_status === 'paid' ? `💰 Refund akan diproses ke ${order.customer_phone}` : '')
+            (order.payment_status === 'paid' ? `💰 Refund akan diproses ke ${order.customer_phone}` : ''),
+            'cancel'
         );
 
         res.json({ message: 'Pesanan dibatalkan', refund_proof: refundProofUrl });
@@ -1854,11 +1892,36 @@ app.get('/api/orders/:id/photos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Allowed forward transitions. Admin must use dedicated endpoints for steps that
+// require proof (confirm-payment, bordir-done, pack, ship, cancel). This generic
+// endpoint is for `shipped → done` (delivery confirmation) and similar low-risk
+// progressions. Backward transitions / step-skipping are rejected.
+const STATUS_FORWARD = {
+    waiting_payment: ['confirmed', 'bordir', 'cancelled'],
+    confirmed:       ['packed', 'cancelled'],
+    bordir:          ['confirmed', 'cancelled'],
+    packed:          ['shipped', 'cancelled'],
+    shipped:         ['done'],
+    done:            [],
+    cancelled:       [],
+};
+
 app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { order_status } = req.body;
         const valid = ['waiting_payment', 'confirmed', 'packed', 'shipped', 'done', 'cancelled', 'bordir'];
         if (!valid.includes(order_status)) return res.status(400).json({ error: 'Status tidak valid' });
+
+        const order = await dbGet('SELECT order_status FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+
+        const allowed = STATUS_FORWARD[order.order_status] || [];
+        if (!allowed.includes(order_status)) {
+            return res.status(400).json({
+                error: `Transisi tidak diizinkan: ${order.order_status} → ${order_status}. Allowed: ${allowed.join(', ') || '(terminal state)'}`
+            });
+        }
+
         await dbRun(
             `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
             [order_status, req.params.id]
@@ -1926,14 +1989,15 @@ app.put('/api/orders/:id/request-logo', requireAuth(['admin','manager']), upload
         try { embDetails = order.embroidery_details ? JSON.parse(order.embroidery_details) : []; } catch(e) {}
         const logoItems = embDetails.filter(e => e.type === 'logo');
 
-        await sendWANotification(
+        await safeWA(
             `🎨 *PERMINTAAN FILE LOGO BORDIR - #${order.order_code}*\n\n` +
             `Halo team! Mohon segera hubungi customer:\n` +
             `👤 ${order.customer_name}\n` +
             `📱 ${order.customer_phone}\n\n` +
             `Untuk meminta file logo bordir mereka.\n` +
             (logoItems.length ? `📋 Detail logo: ${logoItems.map(e => e.item_label + ': ' + e.value).join(', ')}\n\n` : '') +
-            `⏰ Proses bordir estimasi 1 minggu setelah file logo diterima.`
+            `⏰ Proses bordir estimasi 1 minggu setelah file logo diterima.`,
+            'request-logo'
         );
 
         res.json({ message: 'Logo bordir sudah diminta ke customer', order_code: order.order_code });
