@@ -4146,24 +4146,39 @@ async function markLogoRequested(orderId) {
 
 async function reviewBordir(orderId, action) {
     try {
-        let reason = '';
+        let payload = null;
         if (action === 'reject') {
-            reason = await promptBordirReject();
-            if (reason === null) return; // user cancel
+            // For reject, capture both reason + which types are rejected (nama/logo)
+            const o = cachedOrders.find(x => x.id === orderId);
+            const availableTypes = [];
+            if (o?.has_bordir_nama) availableTypes.push('nama');
+            if (o?.has_bordir_logo) availableTypes.push('logo');
+
+            payload = await promptBordirReject(availableTypes);
+            if (payload === null) return; // user cancel
         }
         const fd = new FormData();
         fd.append('action', action);
-        if (reason) fd.append('reason', reason);
+        if (payload) {
+            if (payload.reason) fd.append('reason', payload.reason);
+            if (payload.reject_types && payload.reject_types.length) {
+                payload.reject_types.forEach(t => fd.append('reject_types', t));
+            }
+        }
         const res = await apiFetch(`/api/orders/${orderId}/bordir-review`, { method: 'PUT', body: fd });
         // Update local cache so UI refresh shows new state
         const o = cachedOrders.find(x => x.id === orderId);
         if (o) {
-            o.bordir_status = action === 'approve' ? 'approved' : 'rejected';
-            if (action === 'reject') o.bordir_reject_reason = res.reason || reason;
+            o.bordir_status = action === 'approve' ? 'approved'
+                : (res.rejected_types && res.rejected_types.length < ((o.has_bordir_nama?1:0)+(o.has_bordir_logo?1:0)) ? 'partial_rejected' : 'rejected');
+            if (action === 'reject') o.bordir_reject_reason = res.reason || (payload && payload.reason);
         }
         if (action === 'reject' && res.wa_url) {
             window.open(res.wa_url, '_blank');
-            toast('✕ Bordir ditolak. WA template terbuka di tab baru — kirim ke customer.');
+            const refundInfo = res.refunds_created?.length
+                ? ` · ${res.refunds_created.length} refund record dibuat`
+                : '';
+            toast(`✕ Bordir ditolak${refundInfo}. WA template terbuka — kirim ke customer.`);
         } else {
             toast('✓ Bordir disetujui — order siap diproses.');
         }
@@ -4173,37 +4188,55 @@ async function reviewBordir(orderId, action) {
     } catch(e) { toast('Gagal: ' + e.message, true); }
 }
 
-// Modal-based replacement for prompt() — consistent UX, better mobile support
-function promptBordirReject() {
+// Modal for bordir reject: pick which types (nama/logo) + reason
+// Returns { reason, reject_types } or null on cancel
+function promptBordirReject(availableTypes) {
     return new Promise((resolve) => {
+        // Rebuild modal each time (different available types per order)
         let modal = document.getElementById('bordir-reject-modal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'bordir-reject-modal';
-            modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[1003] hidden items-center justify-center p-4';
-            modal.innerHTML = `
-                <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md p-5 space-y-3">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h3 class="font-bold text-base">Tolak Bordir</h3>
-                            <p class="text-[11px] text-white/40 mt-0.5">Alasan akan dikirim ke customer via WA</p>
-                        </div>
-                        <button onclick="_brmDone(null)" class="text-white/40 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        if (modal) modal.remove();
+        modal = document.createElement('div');
+        modal.id = 'bordir-reject-modal';
+        modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[1003] hidden items-center justify-center p-4';
+
+        // Type selection checkboxes — only show types that exist on order
+        const typeChecks = availableTypes.map(t => {
+            const label = t === 'nama' ? '✏️ Bordir Nama' : '🎨 Bordir Logo';
+            const accent = t === 'nama' ? 'purple' : 'blue';
+            return `<label class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-${accent}-400/20 bg-${accent}-500/5 cursor-pointer hover:bg-${accent}-500/10 transition">
+                <input type="checkbox" name="brm-type" value="${t}" checked class="w-4 h-4 accent-${accent}-500">
+                <span class="text-sm font-semibold text-${accent}-200">${label}</span>
+            </label>`;
+        }).join('');
+
+        modal.innerHTML = `
+            <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md p-5 space-y-3">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-bold text-base">Tolak Bordir</h3>
+                        <p class="text-[11px] text-white/40 mt-0.5">Pilih tipe yang ditolak + alasan. Refund auto-dibuat.</p>
                     </div>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button onclick="_brmPick('Bordir terlalu rumit (logo detail kecil) untuk diproses dengan kualitas terbaik')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Logo terlalu rumit</button>
-                        <button onclick="_brmPick('Nama bordir melebihi 15 karakter — terlalu panjang')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Nama terlalu panjang</button>
-                        <button onclick="_brmPick('Warna benang yang diminta tidak tersedia')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Benang tidak ada</button>
+                    <button onclick="_brmDone(null)" class="text-white/40 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-white/40 mb-2">Tipe yang Ditolak</p>
+                    <div class="space-y-1.5">${typeChecks}</div>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-white/40 mb-2">Alasan</p>
+                    <div class="flex flex-wrap gap-1.5 mb-2">
+                        <button type="button" onclick="_brmPick('Bordir terlalu rumit (logo detail kecil) untuk diproses dengan kualitas terbaik')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Logo terlalu rumit</button>
+                        <button type="button" onclick="_brmPick('Nama bordir melebihi 15 karakter — terlalu panjang')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Nama terlalu panjang</button>
+                        <button type="button" onclick="_brmPick('Warna benang yang diminta tidak tersedia')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Benang tidak ada</button>
                     </div>
-                    <textarea id="brm-reason" rows="4" placeholder="Tulis alasan penolakan..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30 resize-none"></textarea>
-                    <div class="flex gap-2">
-                        <button onclick="_brmDone(null)" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
-                        <button onclick="_brmDone(document.getElementById('brm-reason').value.trim())" class="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm font-bold hover:bg-red-500/30">Tolak Bordir</button>
-                    </div>
-                </div>`;
-            document.body.appendChild(modal);
-        }
-        document.getElementById('brm-reason').value = '';
+                    <textarea id="brm-reason" rows="3" placeholder="Tulis alasan penolakan..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30 resize-none"></textarea>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="_brmDone(null)" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+                    <button onclick="_brmSubmit()" class="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm font-bold hover:bg-red-500/30">Tolak & Buat Refund</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
         modal.classList.remove('hidden'); modal.classList.add('flex');
         setTimeout(() => document.getElementById('brm-reason').focus(), 50);
         window._brmResolve = resolve;
@@ -4213,10 +4246,16 @@ function _brmPick(text) {
     const ta = document.getElementById('brm-reason');
     if (ta) { ta.value = text; ta.focus(); }
 }
+function _brmSubmit() {
+    const reason = document.getElementById('brm-reason').value.trim();
+    const types = Array.from(document.querySelectorAll('input[name="brm-type"]:checked')).map(c => c.value);
+    if (types.length === 0) { toast('Pilih minimal 1 tipe bordir yang ditolak', true); return; }
+    _brmDone({ reason, reject_types: types });
+}
 function _brmDone(value) {
     const modal = document.getElementById('bordir-reject-modal');
     if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
-    if (window._brmResolve) { window._brmResolve(value === '' ? null : value); window._brmResolve = null; }
+    if (window._brmResolve) { window._brmResolve(value === '' || value === undefined ? null : value); window._brmResolve = null; }
 }
 
 function closeOrderModal() {

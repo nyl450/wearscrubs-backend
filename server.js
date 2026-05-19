@@ -2073,10 +2073,14 @@ app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, 
 });
 
 // PUT /api/orders/:id/bordir-review — admin approve / reject bordir
-// Body: { action: 'approve' | 'reject', reason?: string }
+// Body: { action: 'approve' | 'reject', reason?: string,
+//         reject_types?: ['nama'] | ['logo'] | ['nama','logo'] (default: both available types) }
+// Per-type rejection lets admin reject only the logo while approving the name
+// (or vice versa). Auto-creates refund records for each rejected type with the
+// matching per-item embroidery cost.
 app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
     try {
-        const { action, reason } = req.body;
+        const { action, reason, reject_types } = req.body;
         if (!['approve','reject'].includes(action))
             return res.status(400).json({ error: 'Action harus approve atau reject' });
 
@@ -2093,27 +2097,102 @@ app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), uploa
             return res.json({ message: 'Bordir disetujui, order siap diproses' });
         }
 
-        // Reject: simpan alasan + generate WA link untuk admin kirim ke customer
-        const rejectReason = (reason || '').trim() || 'Bordir terlalu rumit atau nama terlalu panjang untuk diproses';
-        await dbRun(
-            `UPDATE orders SET bordir_status = 'rejected', bordir_reject_reason = $1, updated_at = NOW() WHERE id = $2`,
-            [rejectReason, order.id]
-        );
+        // Parse reject_types — accept array or comma-string; default to all available types
+        let parsedTypes = reject_types;
+        if (typeof parsedTypes === 'string') parsedTypes = parsedTypes.split(',').map(s => s.trim()).filter(Boolean);
+        if (!Array.isArray(parsedTypes) || parsedTypes.length === 0) {
+            parsedTypes = [];
+            if (order.has_bordir_nama) parsedTypes.push('nama');
+            if (order.has_bordir_logo) parsedTypes.push('logo');
+        }
+        parsedTypes = parsedTypes.filter(t => ['nama','logo'].includes(t));
+        // Validate types actually exist on order
+        if (parsedTypes.includes('nama') && !order.has_bordir_nama)
+            return res.status(400).json({ error: 'Order ini tidak punya bordir nama' });
+        if (parsedTypes.includes('logo') && !order.has_bordir_logo)
+            return res.status(400).json({ error: 'Order ini tidak punya bordir logo' });
+        if (parsedTypes.length === 0)
+            return res.status(400).json({ error: 'Pilih tipe bordir yang ditolak (nama / logo)' });
 
-        const phone = (order.customer_phone || '').replace(/[^0-9]/g, '').replace(/^0/, '62');
+        const rejectReason = (reason || '').trim() || 'Bordir terlalu rumit atau detail tidak sesuai untuk diproses';
+
+        // Calculate refund amount per type by summing per-item embroidery cost
+        // from order_items where the matching bordir flag is true.
+        const items = await dbAll('SELECT quantity, bordir_nama, bordir_logo FROM order_items WHERE order_id = $1', [order.id]);
+        const BORDIR_NAMA_PRICE = 20000;
+        const BORDIR_LOGO_PRICE = 30000;
+        const refundsByType = {};
+        if (parsedTypes.includes('nama')) {
+            refundsByType.nama = items.reduce((sum, i) => sum + (i.bordir_nama ? BORDIR_NAMA_PRICE * i.quantity : 0), 0);
+        }
+        if (parsedTypes.includes('logo')) {
+            refundsByType.logo = items.reduce((sum, i) => sum + (i.bordir_logo ? BORDIR_LOGO_PRICE * i.quantity : 0), 0);
+        }
+
+        // Determine new bordir_status: full reject if all types rejected, partial otherwise
+        const allTypesAvailable = (order.has_bordir_nama ? 1 : 0) + (order.has_bordir_logo ? 1 : 0);
+        const newStatus = parsedTypes.length === allTypesAvailable ? 'rejected' : 'partial_rejected';
+        const reasonStored = parsedTypes.length === 1
+            ? `[${parsedTypes[0].toUpperCase()} ditolak] ${rejectReason}`
+            : `[BORDIR ditolak] ${rejectReason}`;
+
+        // Atomic: update order + insert refund per rejected type (only if not already exists)
+        const createdRefunds = await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE orders SET bordir_status = $1, bordir_reject_reason = $2, updated_at = NOW() WHERE id = $3`,
+                [newStatus, reasonStored, order.id]
+            );
+            const out = [];
+            for (const t of parsedTypes) {
+                const amount = refundsByType[t] || 0;
+                if (amount <= 0) continue;
+                const refundType = t === 'nama' ? 'bordir_nama' : 'bordir_logo';
+                // Skip if duplicate (admin re-trigger)
+                const exist = await client.query(
+                    'SELECT id FROM refunds WHERE order_id = $1 AND refund_type = $2',
+                    [order.id, refundType]
+                );
+                if (exist.rows.length > 0) continue;
+                const itemsSummary = `Bordir ${t === 'nama' ? 'nama' : 'logo'} pada order ${order.order_code}`;
+                await client.query(
+                    `INSERT INTO refunds (order_id, refund_type, amount, reason, items_summary,
+                                          customer_name, customer_phone, status, admin_user)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
+                    [order.id, refundType, amount, rejectReason, itemsSummary,
+                     order.customer_name, order.customer_phone, req.user.username]
+                );
+                out.push({ type: t, amount });
+            }
+            return out;
+        });
+
+        // Build WA template message for admin to send to customer
+        const phoneDigits = (order.customer_phone || '').replace(/[^0-9]/g, '');
+        const phone = phoneDigits.startsWith('62') ? phoneDigits
+            : phoneDigits.startsWith('0') ? '62' + phoneDigits.slice(1)
+            : phoneDigits.startsWith('8') ? '62' + phoneDigits : phoneDigits;
+        const typeLabel = parsedTypes.length === 2 ? 'nama & logo'
+            : parsedTypes[0] === 'nama' ? 'nama' : 'logo';
+        const totalRefund = createdRefunds.reduce((s, r) => s + r.amount, 0);
         const msg = encodeURIComponent(
             `Halo ${order.customer_name},\n\n` +
-            `Mohon maaf, untuk pesanan *${order.order_code}* bordir yang Anda minta tidak dapat kami proses karena:\n` +
+            `Mohon maaf, untuk pesanan *${order.order_code}*, bordir *${typeLabel}* yang Anda minta tidak dapat kami proses karena:\n` +
             `${rejectReason}\n\n` +
-            `Silakan pilih salah satu opsi berikut:\n` +
+            `Silakan pilih salah satu opsi:\n` +
             `1. Revisi bordir (kirim ulang detail/file)\n` +
-            `2. Lanjut tanpa bordir (kami refund biaya bordir)\n` +
+            `2. Lanjut tanpa bordir ${typeLabel} — kami refund biaya bordir sebesar *Rp ${totalRefund.toLocaleString('id-ID')}*\n` +
             `3. Batal pesanan (full refund)\n\n` +
-            `Mohon konfirmasi via balasan WA ini. Terima kasih.`
+            `Mohon konfirmasi via balasan WA. Terima kasih.`
         );
         const waUrl = phone ? `https://wa.me/${phone}?text=${msg}` : null;
 
-        res.json({ message: 'Bordir ditolak. Kirim WA ke customer.', wa_url: waUrl, reason: rejectReason });
+        res.json({
+            message: `Bordir ${typeLabel} ditolak. Refund Rp ${totalRefund.toLocaleString('id-ID')} dibuat (status pending).`,
+            wa_url: waUrl,
+            reason: rejectReason,
+            rejected_types: parsedTypes,
+            refunds_created: createdRefunds
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
