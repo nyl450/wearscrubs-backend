@@ -3072,8 +3072,8 @@ function renderOrders() {
                 ${o.payment_status==='pending' && o.order_status!='cancelled' ? `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>` : ''}
                 ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Bordir Selesai</button>` : ''}
                 ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas</button>` : ''}
-                ${o.order_status==='packed' ? `<button onclick="updateOrderStatus(${o.id},'shipped')" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Kirim</button>` : ''}
-                ${o.order_status==='shipped' ? `<button onclick="updateOrderStatus(${o.id},'done')" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Selesai</button>` : ''}
+                ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Kirim</button>` : ''}
+                ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Selesai</button>` : ''}
                 ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20">❌ Batalkan</button>` : ''}
             </div>
         </div>`;
@@ -3287,6 +3287,7 @@ async function viewOrder(id) {
             payment: '✅ Bukti Pembayaran',
             bordir:  '🧵 Bukti Bordir Selesai',
             pack:    '📦 Bukti Pengemasan',
+            ship:    '🚚 Bukti Pengiriman',
             refund:  '💰 Bukti Refund'
         };
         const photosHTML = photos.length ? `
@@ -3323,8 +3324,8 @@ async function viewOrder(id) {
             ${o.payment_status==='pending' ? `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-circle"></i> Konfirmasi Bayar</button>` : ''}
             ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Bordir Selesai</button>` : ''}
             ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas</button>` : ''}
-            ${o.order_status==='packed' ? `<button onclick="updateOrderStatus(${o.id},'shipped')" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Kirim</button>` : ''}
-            ${o.order_status==='shipped' ? `<button onclick="updateOrderStatus(${o.id},'done')" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Selesai</button>` : ''}
+            ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Kirim</button>` : ''}
+            ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Selesai</button>` : ''}
             ${isAdmin && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
@@ -3347,6 +3348,7 @@ async function viewOrder(id) {
             </div>
             ${o.shipping_city ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kota</p><p class="font-bold">${o.shipping_city}</p></div>` : ''}
             ${o.shipping_courier ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kurir</p><p class="font-bold">${o.shipping_courier}</p></div>` : ''}
+            ${o.tracking_number ? `<div class="col-span-2 bg-indigo-500/10 border border-indigo-400/20 rounded-xl p-3"><p class="text-indigo-300/70 text-xs mb-1 uppercase tracking-wider font-bold">📦 Nomor Resi</p><p class="font-mono font-bold text-indigo-200 text-base select-all">${o.tracking_number}</p></div>` : ''}
             ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${o.notes}</p></div>` : ''}
         </div>
 
@@ -3485,7 +3487,17 @@ function resetPhotoUpload() {
 async function submitPhotoModal() {
     if (!_photoModalAction) return;
     const file = document.getElementById('photo-file-input').files[0];
-    if (!file) { toast('Pilih foto terlebih dahulu', true); return; }
+    if (!file && !_photoModalAction.optionalFile) { toast('Pilih foto terlebih dahulu', true); return; }
+
+    // Validate required fields in extra panel (e.g. tracking_number for ship)
+    const requiredFields = document.getElementById('photo-modal-extra').querySelectorAll('input[required],textarea[required]');
+    for (const el of requiredFields) {
+        if (!el.value.trim()) {
+            toast(`Lengkapi: ${el.previousElementSibling?.textContent?.replace(/\*$/, '').trim() || el.name}`, true);
+            el.focus();
+            return;
+        }
+    }
 
     const btn = document.getElementById('photo-modal-submit');
     btn.disabled = true;
@@ -3493,7 +3505,7 @@ async function submitPhotoModal() {
 
     try {
         const fd = new FormData();
-        fd.append(_photoModalAction.fieldName, file);
+        if (file) fd.append(_photoModalAction.fieldName, file);
         // Append any extra fields from inputs inside photo-modal-extra
         document.getElementById('photo-modal-extra').querySelectorAll('input,textarea,select').forEach(el => {
             if (el.name && el.value) fd.append(el.name, el.value);
@@ -3553,6 +3565,57 @@ function openPackOrder(orderId) {
             <input name="note" type="text" placeholder="Contoh: sudah dikemas rapi, siap kirim..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
         </div>`
     );
+}
+
+function openShipOrder(orderId) {
+    // Find existing courier from cached orders (admin can override)
+    const order = cachedOrders.find(o => o.id === orderId);
+    const existingCourier = order?.shipping_courier || '';
+
+    // Photo modal accepts optional file — backend still requires tracking_number
+    // (the photo-modal "submit" path uses the file as the named field, so we
+    // need a non-empty file. We use a placeholder approach below.)
+    _photoModalAction = {
+        endpoint: `/api/orders/${orderId}/ship`,
+        method: 'PUT',
+        fieldName: 'ship_proof',
+        optionalFile: true
+    };
+    document.getElementById('photo-modal-title').textContent = '🚚 Kirim Pesanan — Input Resi';
+    document.getElementById('photo-modal-extra').innerHTML = `
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Nomor Resi *</label>
+                <input name="tracking_number" type="text" required placeholder="Contoh: JX1234567890 / TLJ123ABC..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
+                <p class="text-[10px] text-white/30 mt-1">Resi akan dikirim ke customer via WhatsApp otomatis</p>
+            </div>
+            <div>
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Kurir Final (opsional)</label>
+                <input name="shipping_courier_final" type="text" placeholder="${existingCourier || 'JNE / J&T / Lion Parcel...'}" value="${existingCourier && (existingCourier.includes('/') || existingCourier.includes(','))? '' : existingCourier}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
+                <p class="text-[10px] text-white/30 mt-1">Kosongkan jika tidak berubah dari pilihan awal (<span class="text-white/50">${existingCourier || '-'}</span>)</p>
+            </div>
+            <div>
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan (opsional)</label>
+                <input name="note" type="text" placeholder="Contoh: dikirim siang, sample bordir disertakan..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+            </div>
+            <div class="bg-white/5 border border-white/10 rounded-xl p-2 text-[10px] text-white/40">
+                <i class="fa-solid fa-circle-info mr-1 text-white/30"></i> Foto bukti kirim opsional — kalau ada tanda terima kurir, upload di bawah.
+            </div>
+        </div>
+    `;
+    document.getElementById('photo-file-input').value = '';
+    document.getElementById('photo-preview-wrap').classList.add('hidden');
+    document.getElementById('photo-upload-zone').classList.remove('hidden');
+    document.getElementById('photo-change-btn').classList.add('hidden');
+    document.getElementById('photo-modal').classList.remove('hidden');
+    document.getElementById('photo-modal').classList.add('flex');
+}
+
+function confirmMarkDone(orderId) {
+    const order = cachedOrders.find(o => o.id === orderId);
+    const code = order?.order_code || 'order';
+    if (!confirm(`Tandai ${code} sebagai SELESAI?\n\nPastikan paket sudah diterima customer dengan baik.`)) return;
+    updateOrderStatus(orderId, 'done');
 }
 
 function openCancelOrder(orderId) {

@@ -223,8 +223,8 @@ async function withTransaction(fn) {
 
 // Fire-and-log WA notification — Fonnte downtime should never cause an order
 // endpoint to return 500 after the DB state is already committed.
-async function safeWA(message, context = '') {
-    try { await sendWANotification(message); }
+async function safeWA(message, context = '', targetOverride = null) {
+    try { await sendWANotification(message, targetOverride); }
     catch (e) { console.error(`WA notify failed${context ? ' ('+context+')' : ''}:`, e?.message || e); }
 }
 
@@ -380,6 +380,9 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_status_check`).catch(() => {});
     await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_status_check CHECK(order_status IN ('waiting_payment','confirmed','bordir','packed','shipped','done','cancelled'))`).catch(() => {});
 
+    // ── Migrate: tracking_number for shipment ─────────────────────────────────
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`).catch(() => {});
+
 
     // ── Stock Movements (log semua perubahan stok) ────────────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS stock_movements (
@@ -463,11 +466,17 @@ initDB().catch(err => console.error('[DB Init Error]', err));
 
 
 // ─── WhatsApp Notification (Fonnte) ──────────────────────────────────────────
-async function sendWANotification(message) {
+// Sends to ADMIN_WA_NUMBER by default; pass `targetOverride` (e.g. customer phone)
+// to send to a different recipient.
+async function sendWANotification(message, targetOverride = null) {
     const token = process.env.FONNTE_TOKEN;
-    const target = process.env.ADMIN_WA_NUMBER;
+    const target = targetOverride || process.env.ADMIN_WA_NUMBER;
     if (!token || token === 'GANTI_DENGAN_TOKEN_FONNTE_ANDA') {
         console.log('[WA] Token belum dikonfigurasi. Notifikasi dilewati.');
+        return;
+    }
+    if (!target) {
+        console.log('[WA] Target kosong, notifikasi dilewati.');
         return;
     }
     try {
@@ -477,7 +486,7 @@ async function sendWANotification(message) {
             body: JSON.stringify({ target, message, countryCode: '62' })
         });
         const data = await res.json();
-        console.log('[WA] Notifikasi terkirim:', data);
+        console.log('[WA] Notifikasi terkirim ke', target, ':', data?.status || data);
     } catch (err) {
         console.error('[WA] Gagal kirim notifikasi:', err.message);
     }
@@ -1806,6 +1815,80 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
         );
 
         res.json({ message: 'Pesanan dikemas', photo_url: photoUrl });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/orders/:id/ship  (multipart: tracking_number wajib + ship_proof opsional)
+// Status transition: packed → shipped. Records tracking number and (optionally)
+// a delivery photo. Sends WA notification to the customer with the resi.
+app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single('ship_proof'), async (req, res) => {
+    try {
+        const tracking = (req.body.tracking_number || '').trim();
+        if (!tracking) return res.status(400).json({ error: 'Nomor resi wajib diisi' });
+        const courierOverride = (req.body.shipping_courier_final || '').trim();
+
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.order_status !== 'packed') return res.status(400).json({ error: 'Pesanan belum siap dikirim (harus berstatus dikemas dulu)' });
+
+        const finalCourier = courierOverride || order.shipping_courier || 'Kurir';
+
+        // Upload before TX (slow external)
+        const photoUrl = req.file
+            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
+            : null;
+
+        await withTransaction(async (client) => {
+            if (photoUrl) {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
+                    [order.id, 'ship', photoUrl, `Resi: ${tracking}${req.body.note ? ' · ' + req.body.note : ''}`]
+                );
+            }
+            if (courierOverride) {
+                await client.query(
+                    `UPDATE orders SET order_status = 'shipped', tracking_number = $1, shipping_courier = $2, updated_at = NOW() WHERE id = $3`,
+                    [tracking, courierOverride, order.id]
+                );
+            } else {
+                await client.query(
+                    `UPDATE orders SET order_status = 'shipped', tracking_number = $1, updated_at = NOW() WHERE id = $2`,
+                    [tracking, order.id]
+                );
+            }
+        });
+
+        // Notify customer with tracking number via WA (uses Fonnte target override per-message)
+        const customerPhoneDigits = (order.customer_phone || '').replace(/[^0-9]/g, '');
+        const customerPhone = customerPhoneDigits.startsWith('62')
+            ? customerPhoneDigits
+            : customerPhoneDigits.startsWith('0')
+                ? '62' + customerPhoneDigits.slice(1)
+                : customerPhoneDigits;
+
+        if (customerPhone) {
+            await safeWA(
+                `🚚 *PESANAN DIKIRIM - #${order.order_code}*\n\n` +
+                `Halo ${order.customer_name},\n\n` +
+                `Pesanan Anda sudah dikirim via *${finalCourier}*.\n\n` +
+                `📦 Nomor Resi: *${tracking}*\n\n` +
+                `Silakan lacak melalui website kurir atau aplikasi pengiriman dengan nomor resi di atas.\n\n` +
+                `Terima kasih sudah berbelanja di Wearscrubs! 🙏`,
+                'ship-customer',
+                customerPhone   // send to customer, not admin
+            );
+        }
+
+        // Notify admin team
+        await safeWA(
+            `🚚 *DIKIRIM - #${order.order_code}*\n\n` +
+            `Pesanan ${order.customer_name} sudah dikirim.\n` +
+            `📦 Resi: ${tracking}\n` +
+            `📮 Kurir: ${finalCourier}`,
+            'ship-admin'
+        );
+
+        res.json({ message: 'Pesanan dikirim, resi tercatat', tracking_number: tracking, shipping_courier: finalCourier, photo_url: photoUrl });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
