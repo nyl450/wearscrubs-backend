@@ -486,7 +486,53 @@ async function initDB() {
         }
     }
 }
-initDB().catch(err => console.error('[DB Init Error]', err));
+initDB()
+    .then(() => backfillCancelledRefunds())
+    .catch(err => console.error('[DB Init Error]', err));
+
+// Idempotent backfill — creates a 'pending' refund record for any cancelled-paid
+// order that doesn't already have one. Runs once at startup. Safe to re-run.
+async function backfillCancelledRefunds() {
+    try {
+        const orphans = await dbAll(
+            `SELECT o.id, o.order_code, o.total_amount, o.cancel_reason,
+                    o.customer_name, o.customer_phone, o.cancelled_by
+             FROM orders o
+             WHERE o.order_status = 'cancelled' AND o.payment_status = 'paid'
+               AND NOT EXISTS (SELECT 1 FROM refunds r
+                               WHERE r.order_id = o.id AND r.refund_type = 'cancellation')`,
+            []
+        );
+        if (orphans.length === 0) {
+            console.log('[Refund Backfill] No orphan cancelled-paid orders.');
+            return;
+        }
+        for (const o of orphans) {
+            const items = await dbAll(
+                `SELECT oi.quantity, oi.size, oi.color, oi.variant_type, p.name AS product_name
+                 FROM order_items oi JOIN products p ON p.id = oi.product_id
+                 WHERE oi.order_id = $1`,
+                [o.id]
+            );
+            const itemsSummary = items
+                .map(i => `${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) ×${i.quantity}`)
+                .join('; ');
+            await dbRun(
+                `INSERT INTO refunds (order_id, refund_type, amount, reason, items_summary,
+                                      customer_name, customer_phone, status, admin_user, note)
+                 VALUES ($1, 'cancellation', $2, $3, $4, $5, $6, 'pending', $7, $8)`,
+                [o.id, parseInt(o.total_amount) || 0,
+                 o.cancel_reason || '(refund record auto-dibuat dari backfill)',
+                 itemsSummary, o.customer_name, o.customer_phone,
+                 o.cancelled_by || 'system-backfill',
+                 'Refund record auto-dibuat untuk pesanan yang sudah dibatalkan sebelum modul Refund aktif.']
+            );
+        }
+        console.log(`[Refund Backfill] Created ${orphans.length} refund record(s) for previously cancelled-paid orders.`);
+    } catch (err) {
+        console.error('[Refund Backfill] Error:', err.message);
+    }
+}
 
 
 // ─── WhatsApp Notification (Fonnte) ──────────────────────────────────────────

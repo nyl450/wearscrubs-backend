@@ -278,6 +278,12 @@
             <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
             <span id="header-pending-count" class="text-xs font-bold text-red-400">0 Pesanan Baru</span>
         </div>
+        <button id="header-refund-badge" onclick="showModule('refund')" type="button"
+            class="hidden items-center gap-2 bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-full hover:bg-orange-500/20 transition cursor-pointer"
+            title="Buka menu Refund">
+            <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+            <span id="header-refund-count" class="text-xs font-bold text-orange-300">0 Refund</span>
+        </button>
         <span id="header-clock" class="hidden md:block text-[11px] font-mono text-white/25 tracking-tight"></span>
         <a href="index.html" target="_blank" class="text-xs text-white/40 hover:text-white transition flex items-center gap-1.5">
             <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> <span class="hidden sm:inline">Lihat Website</span>
@@ -4895,7 +4901,39 @@ setInterval(async () => {
             document.getElementById('orders-badge').classList.remove('hidden');
         }
     } catch(e) {}
+    refreshRefundStats();   // refund stats polled in same interval
 }, 60000);
+
+// Fetch refund stats only (no full list) — updates sidebar + header badges.
+// Used on initial load + periodic poll so admin sees pending refunds without
+// having to open the Refund menu first.
+async function refreshRefundStats() {
+    try {
+        const s = await apiFetch('/api/refunds/stats');
+        const needAttn = (s.pending || 0) + (s.transferred || 0);
+        // Sidebar badge
+        const sidebarBadge = document.getElementById('refund-sidebar-badge');
+        if (sidebarBadge) {
+            sidebarBadge.textContent = needAttn;
+            sidebarBadge.classList.toggle('hidden', needAttn === 0);
+        }
+        // Header badge — only show pending (urgent), not transferred (already in progress)
+        const headerBadge = document.getElementById('header-refund-badge');
+        const headerCount = document.getElementById('header-refund-count');
+        if (headerBadge && headerCount) {
+            if (s.pending > 0) {
+                headerBadge.classList.remove('hidden'); headerBadge.classList.add('flex');
+                const pendingAmount = (s.pending_total || 0).toLocaleString('id-ID');
+                headerCount.textContent = `${s.pending} Refund · Rp ${pendingAmount}`;
+            } else {
+                headerBadge.classList.add('hidden'); headerBadge.classList.remove('flex');
+            }
+        }
+    } catch(e) { /* silent — admin not authorized or network fail; will retry next tick */ }
+}
+
+// Initial fetch on dashboard load — don't wait 60s for first stats render
+refreshRefundStats();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SETTINGS — Change Password & User Management
