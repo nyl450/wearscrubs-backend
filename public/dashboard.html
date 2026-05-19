@@ -528,10 +528,10 @@
                     <option value="custom">Custom...</option>
                 </select>
                 <div id="order-date-range" class="hidden flex items-center gap-1.5">
-                    <input id="order-date-from" type="date" onchange="renderOrders();updateOrderTabCounts();"
+                    <input id="order-date-from" type="date" onchange="orderPage=1;renderOrders();updateOrderTabCounts();"
                         class="!py-1.5 !px-2 !text-xs bg-white/5 border border-white/10 rounded-lg text-white">
                     <span class="text-white/30 text-xs">→</span>
-                    <input id="order-date-to" type="date" onchange="renderOrders();updateOrderTabCounts();"
+                    <input id="order-date-to" type="date" onchange="orderPage=1;renderOrders();updateOrderTabCounts();"
                         class="!py-1.5 !px-2 !text-xs bg-white/5 border border-white/10 rounded-lg text-white">
                 </div>
                 <button onclick="exportOrdersCSV()"
@@ -545,7 +545,7 @@
                 </button>
                 <div class="relative">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
-                    <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="renderOrders()"
+                    <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="orderPage=1;renderOrders()"
                         class="pl-8 pr-4 py-1.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 w-52">
                 </div>
             </div>
@@ -3019,6 +3019,8 @@ async function savePopular() {
 // ─── ORDERS ───────────────────────────────────────────────────────────────────
 let cachedOrders = [];
 let currentDateFilter = 'all';   // all | today | yesterday | week | month | last-month | custom
+let orderPage = 1;
+const ORDER_PAGE_SIZE = 50;
 async function loadOrders() {
     try { cachedOrders = await apiFetch('/api/orders'); updateOrderTabCounts(); renderOrders(); }
     catch(e) { toast('Gagal: '+e.message, true); }
@@ -3028,6 +3030,7 @@ async function loadOrders() {
 function onOrderDateChange() {
     const sel = document.getElementById('order-date-filter');
     currentDateFilter = sel.value;
+    orderPage = 1;
     const rangeEl = document.getElementById('order-date-range');
     if (currentDateFilter === 'custom') {
         rangeEl.classList.remove('hidden'); rangeEl.classList.add('flex');
@@ -3170,13 +3173,21 @@ function renderOrderSubtabs() {
 
 function setOrderSubFilter(key) {
     currentSubFilter = key;
+    orderPage = 1;             // reset pagination on sub-filter change
     renderOrderSubtabs();
     renderOrders();
+}
+
+function goToOrderPage(p) {
+    orderPage = Math.max(1, p);
+    renderOrders();
+    document.getElementById('orders-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function filterOrders(filter) {
     currentOrderFilter = filter;
     currentSubFilter = null;   // reset sub-filter when switching group
+    orderPage = 1;             // reset pagination
     document.querySelectorAll('.order-tab-btn').forEach(b => {
         const a = b.dataset.tab === filter;
         b.className = `order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shrink-0 ${a ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10'}`;
@@ -3212,6 +3223,15 @@ function renderOrders() {
 
     const el = document.getElementById('orders-list');
     if (!filtered.length) { el.innerHTML = '<div class="text-center py-12 text-white/30 text-sm">Tidak ada pesanan</div>'; return; }
+
+    // Pagination — slice to current page (F-#6)
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / ORDER_PAGE_SIZE));
+    if (orderPage > totalPages) orderPage = totalPages;
+    const startIdx = (orderPage - 1) * ORDER_PAGE_SIZE;
+    const pageRows = filtered.slice(startIdx, startIdx + ORDER_PAGE_SIZE);
+    const filteredAll = filtered;
+    filtered = pageRows;
 
     const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
     const isAdmin = user.role === 'admin';
@@ -3257,10 +3277,46 @@ function renderOrders() {
                 ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas</button>` : ''}
                 ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Kirim</button>` : ''}
                 ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Selesai</button>` : ''}
-                ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20">❌ Batalkan</button>` : ''}
+                ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="event.stopPropagation();openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20">❌ Batalkan</button>` : ''}
             </div>
         </div>`;
     }).join('');
+
+    // Append pagination controls (F-#6)
+    if (totalPages > 1) {
+        const startNum = startIdx + 1;
+        const endNum   = startIdx + pageRows.length;
+        // Build page button list: first, prev, current ± 2, next, last (compact for mobile)
+        const pageBtn = (p, label, disabled = false, active = false) => `
+            <button onclick="goToOrderPage(${p})" ${disabled ? 'disabled' : ''}
+                class="text-xs font-bold px-2.5 py-1.5 rounded-lg ${active ? 'bg-white text-black' : 'bg-white/5 text-white/70 hover:bg-white/10'} ${disabled ? 'opacity-30 cursor-not-allowed' : ''}">
+                ${label}
+            </button>`;
+        const numbers = [];
+        const window2 = 2;
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= orderPage - window2 && p <= orderPage + window2)) {
+                numbers.push(p);
+            } else if (numbers[numbers.length - 1] !== '…') {
+                numbers.push('…');
+            }
+        }
+        const numbersHtml = numbers.map(n => n === '…'
+            ? `<span class="text-xs text-white/30 px-1">…</span>`
+            : pageBtn(n, n, false, n === orderPage)
+        ).join('');
+
+        el.insertAdjacentHTML('beforeend', `
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-2 border-t border-white/5">
+                <p class="text-[11px] text-white/40">Menampilkan <strong class="text-white/60">${startNum}–${endNum}</strong> dari <strong class="text-white/60">${filteredAll.length}</strong> order</p>
+                <div class="flex items-center gap-1.5 flex-wrap justify-center">
+                    ${pageBtn(orderPage - 1, '‹ Prev', orderPage === 1)}
+                    ${numbersHtml}
+                    ${pageBtn(orderPage + 1, 'Next ›', orderPage === totalPages)}
+                </div>
+            </div>
+        `);
+    }
 }
 
 // Normalize Indonesian phone for wa.me link.
