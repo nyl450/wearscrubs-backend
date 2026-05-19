@@ -4744,13 +4744,22 @@ function openRefundEdit(id) {
     const r = cachedRefunds.find(x => x.id === id);
     if (!r) return;
     _refundEditId = id;
-    document.getElementById('refund-edit-subtitle').textContent = `${r.customer_name} · ${r.order_code || '-'}`;
+    const isTransferred = r.status === 'transferred';
+    document.getElementById('refund-edit-subtitle').textContent = `${r.customer_name} · ${r.order_code || '-'}${isTransferred ? ' · 🔒 Sudah Transfer (hanya note editable)' : ''}`;
     document.getElementById('refund-edit-amount').value       = r.amount || 0;
     document.getElementById('refund-edit-reason').value       = r.reason || '';
     document.getElementById('refund-edit-bank-name').value    = r.customer_bank_name || '';
     document.getElementById('refund-edit-bank-account').value = r.customer_bank_account || '';
     document.getElementById('refund-edit-bank-holder').value  = r.customer_bank_holder || '';
     document.getElementById('refund-edit-note').value         = r.note || '';
+    // Lock financial/identity fields if already transferred — note still editable
+    ['refund-edit-amount','refund-edit-reason','refund-edit-bank-name','refund-edit-bank-account','refund-edit-bank-holder'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = isTransferred;
+        el.classList.toggle('opacity-40', isTransferred);
+        el.classList.toggle('cursor-not-allowed', isTransferred);
+    });
     const modal = document.getElementById('refund-edit-modal');
     modal.classList.remove('hidden'); modal.classList.add('flex');
 }
@@ -4763,14 +4772,20 @@ function closeRefundEdit() {
 
 async function saveRefundEdit() {
     if (!_refundEditId) return;
-    const payload = {
-        amount: parseInt(document.getElementById('refund-edit-amount').value) || 0,
-        reason: document.getElementById('refund-edit-reason').value.trim(),
-        customer_bank_name:    document.getElementById('refund-edit-bank-name').value.trim(),
-        customer_bank_account: document.getElementById('refund-edit-bank-account').value.trim(),
-        customer_bank_holder:  document.getElementById('refund-edit-bank-holder').value.trim(),
-        note: document.getElementById('refund-edit-note').value.trim(),
-    };
+    const r = cachedRefunds.find(x => x.id === _refundEditId);
+    const isTransferred = r && r.status === 'transferred';
+
+    // After transferred → only `note` allowed in payload (backend enforces too)
+    const payload = isTransferred
+        ? { note: document.getElementById('refund-edit-note').value.trim() }
+        : {
+            amount: parseInt(document.getElementById('refund-edit-amount').value) || 0,
+            reason: document.getElementById('refund-edit-reason').value.trim(),
+            customer_bank_name:    document.getElementById('refund-edit-bank-name').value.trim(),
+            customer_bank_account: document.getElementById('refund-edit-bank-account').value.trim(),
+            customer_bank_holder:  document.getElementById('refund-edit-bank-holder').value.trim(),
+            note: document.getElementById('refund-edit-note').value.trim(),
+        };
     const btn = document.getElementById('refund-edit-save-btn');
     btn.disabled = true; btn.textContent = 'Menyimpan...';
     try {

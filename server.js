@@ -2272,14 +2272,36 @@ app.get('/api/refunds/:id', requireAuth(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT /api/refunds/:id — update bank info / note (admin can edit before transfer)
+// PUT /api/refunds/:id — update fields. Permission depends on current status:
+//   - pending    → any field editable (amount, bank, reason, note)
+//   - transferred → only `note` (locked: amount/bank/reason since transfer proof
+//                    & WA already sent to customer with those values)
+//   - completed / cancelled → nothing editable
 app.put('/api/refunds/:id', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const refund = await dbGet('SELECT status FROM refunds WHERE id = $1', [req.params.id]);
         if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
         if (refund.status === 'completed') return res.status(400).json({ error: 'Refund sudah selesai, tidak bisa diubah' });
+        if (refund.status === 'cancelled') return res.status(400).json({ error: 'Refund sudah dibatalkan, tidak bisa diubah' });
 
         const { customer_bank_name, customer_bank_account, customer_bank_holder, note, reason, amount } = req.body;
+
+        // Lock financial/identity fields once transferred — those were already
+        // communicated to the customer via WA at mark-transferred and can't drift.
+        if (refund.status === 'transferred') {
+            const lockedTouched =
+                customer_bank_name !== undefined ||
+                customer_bank_account !== undefined ||
+                customer_bank_holder !== undefined ||
+                reason !== undefined ||
+                amount !== undefined;
+            if (lockedTouched) {
+                return res.status(400).json({
+                    error: 'Refund sudah ditransfer — hanya catatan (note) yang boleh diedit. Untuk koreksi nominal/rekening, batalkan refund ini dan buat manual baru.'
+                });
+            }
+        }
+
         const fields = [];
         const values = [];
         let idx = 1;
@@ -2302,11 +2324,15 @@ app.put('/api/refunds/:id', requireAuth(['admin','manager']), async (req, res) =
 });
 
 // PUT /api/refunds/:id/mark-transferred (multipart: proof — wajib)
+// Refund must be in 'pending' state. Re-upload to overwrite a wrong proof is
+// blocked — admin must cancel the refund record and create a manual one
+// (preserves audit trail of what was originally uploaded + when).
 app.put('/api/refunds/:id/mark-transferred', requireAuth(['admin','manager']), upload.single('proof'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Foto bukti transfer wajib diupload' });
         const refund = await dbGet('SELECT * FROM refunds WHERE id = $1', [req.params.id]);
         if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
+        if (refund.status === 'transferred') return res.status(400).json({ error: 'Refund sudah ditandai sudah transfer — tidak bisa diupload ulang. Batalkan refund ini lalu buat manual baru kalau ada koreksi.' });
         if (refund.status === 'completed') return res.status(400).json({ error: 'Refund sudah selesai' });
         if (refund.status === 'cancelled') return res.status(400).json({ error: 'Refund sudah dibatalkan' });
 
