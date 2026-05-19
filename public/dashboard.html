@@ -17,9 +17,9 @@
         #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
         .sidebar-btn.active { background: rgba(255,255,255,0.1); color: white; }
         .status-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; }
-        .spin { animation: spin 1s linear infinite; }
+        .spin { animation: spin 600ms linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .photo-drop-zone { border: 2px dashed rgba(255,255,255,0.12); transition: all 0.2s; }
+        .photo-drop-zone { border: 2px dashed rgba(255,255,255,0.12); transition: border-color 200ms cubic-bezier(0.23,1,0.32,1), background-color 200ms cubic-bezier(0.23,1,0.32,1); }
         .photo-drop-zone:hover { border-color: rgba(99,102,241,0.6); background: rgba(99,102,241,0.05); }
         /* Form controls — consistent height, breathing room for descenders, custom select arrow */
         input[type=text], input[type=number], input[type=tel], input[type=email], input[type=date], select {
@@ -74,13 +74,14 @@
         select.input-sm { padding-right: 2.25rem; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         .sidebar-group-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.18); padding: 14px 16px 4px; }
-        .pop-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
+        .pop-card { cursor: pointer; transition: border-color 200ms cubic-bezier(0.23,1,0.32,1), background-color 200ms cubic-bezier(0.23,1,0.32,1), transform 160ms cubic-bezier(0.23,1,0.32,1); border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
         .pop-card.selected { border-color: rgba(99,102,241,0.7); background: rgba(99,102,241,0.08); }
+        .pop-card:active { transform: scale(0.98); }
         .chart-tab-btn.active { background: white; color: black; }
 
         /* ═══ SIDEBAR TOGGLE & MOBILE ═══ */
         #sidebar {
-            transition: transform 0.25s ease, width 0.25s ease;
+            transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1), width 280ms cubic-bezier(0.32, 0.72, 0, 1);
             width: 13rem;
         }
         #sidebar-overlay {
@@ -107,6 +108,71 @@
         @media (max-width: 640px) {
             .module-section, [id^="module-"] { padding: 1rem !important; }
             .grid-cols-2 { grid-template-columns: 1fr !important; }
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           POLISH LAYER (Emil design eng principles)
+           CSS-only — does not touch HTML/JS logic
+        ═══════════════════════════════════════════════════════════ */
+        :root {
+            --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+            --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+            --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        /* Press feedback — instant tactile response on tap/click.
+           Excludes buttons positioned via translate (eye-toggle icons inside inputs, search icons)
+           to avoid clobbering their positioning transform. */
+        button:not(.absolute):not([class*="translate-"]):not(:disabled):active {
+            transform: scale(0.97);
+            transition: transform 80ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        label[class*="cursor-pointer"]:not([class*="translate-"]):active {
+            transform: scale(0.98);
+            transition: transform 80ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        /* Hover-scale guard — skip on touch/coarse-pointer devices to prevent sticky scale after tap */
+        @media (hover: none), (pointer: coarse) {
+            .hover\:scale-105:hover,
+            .hover\:scale-110:hover,
+            .group:hover .group-hover\:scale-105,
+            .group:hover .group-hover\:scale-110 {
+                transform: none !important;
+            }
+        }
+
+        /* Tighten product/image hover scale (was 500ms — too slow) */
+        .group-hover\:scale-105 {
+            transition-duration: 300ms !important;
+            transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1) !important;
+        }
+
+        /* Modal entrance — fires when JS adds .flex class.
+           Re-runs each open because animation property re-applies when selector matches again. */
+        [id$="-modal"].flex {
+            animation: modalBackdropIn 220ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        [id$="-modal"].flex > div:first-child {
+            animation: modalContentIn 240ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        @keyframes modalBackdropIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes modalContentIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Accessibility — respect prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
         }
 
         /* ═══════════════════════════════════════════════════════════
