@@ -397,6 +397,33 @@ async function initDB() {
     await dbRun(`ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_movement_type_check
         CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal'))`);
 
+    // ── Refunds (state machine: pending → transferred → completed) ────────────
+    // Separate table because: 1 order can have multiple refunds (cancel + partial bordir).
+    // Fields are LOCKED after status='transferred' except internal_notes.
+    await dbRun(`CREATE TABLE IF NOT EXISTS refunds (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL,
+        refund_type TEXT NOT NULL DEFAULT 'order_cancel' CHECK(refund_type IN ('order_cancel','bordir_reject','partial')),
+        amount INTEGER NOT NULL DEFAULT 0,
+        reason TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','transferred','completed','cancelled')),
+        bank_name TEXT DEFAULT '',
+        bank_account_number TEXT DEFAULT '',
+        bank_account_holder TEXT DEFAULT '',
+        proof_url TEXT DEFAULT NULL,
+        internal_notes TEXT DEFAULT '',
+        created_by TEXT DEFAULT '',
+        transferred_by TEXT DEFAULT NULL,
+        transferred_at TIMESTAMP DEFAULT NULL,
+        completed_at TIMESTAMP DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT fk_refunds_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    )`);
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_refunds_order ON refunds(order_id)').catch(() => {});
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_refunds_status ON refunds(status)').catch(() => {});
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_refunds_created ON refunds(created_at DESC)').catch(() => {});
+
     // ── Seed default admin ────────────────────────────────────────────────────
     const existingAdmin = await dbGet('SELECT id FROM users WHERE username = $1', ['admin']);
     if (!existingAdmin) {
@@ -1631,14 +1658,238 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             [cancel_reason || '', user.username, order.id]
         );
 
+        // Auto-create refund record (status='pending') for paid orders.
+        // Dedup: skip if a non-cancelled refund of same type already exists for this order.
+        let refundCreated = null;
+        if (order.payment_status === 'paid') {
+            const existing = await dbGet(
+                `SELECT id FROM refunds WHERE order_id = $1 AND refund_type = 'order_cancel' AND status != 'cancelled'`,
+                [order.id]
+            );
+            if (!existing) {
+                refundCreated = await dbGet(
+                    `INSERT INTO refunds (order_id, refund_type, amount, reason, status, created_by)
+                     VALUES ($1, 'order_cancel', $2, $3, 'pending', $4) RETURNING id, amount, status`,
+                    [order.id, order.total_amount || 0, cancel_reason || '', user.username]
+                );
+            }
+        }
+
         await sendWANotification(
             `❌ *PESANAN DIBATALKAN - #${order.order_code}*\n\n` +
             `Pesanan ${order.customer_name} dibatalkan oleh admin ${user.username}.\n` +
             `📝 Alasan: ${cancel_reason || '-'}\n` +
-            (order.payment_status === 'paid' ? `💰 Refund akan diproses ke ${order.customer_phone}` : '')
+            (order.payment_status === 'paid' ? `💰 Refund Rp${(order.total_amount || 0).toLocaleString('id-ID')} akan diproses ke ${order.customer_phone}` : '')
         );
 
-        res.json({ message: 'Pesanan dibatalkan', refund_proof: refundProofUrl });
+        res.json({ message: 'Pesanan dibatalkan', refund_proof: refundProofUrl, refund: refundCreated });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REFUND ENDPOINTS — state machine: pending → transferred → completed
+// Lock rule: after status='transferred', only internal_notes is editable.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/refunds — list all refunds (admin/manager). Optional ?status= filter.
+app.get('/api/refunds', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const { status } = req.query;
+        const where = status ? `WHERE r.status = $1` : '';
+        const params = status ? [status] : [];
+        const rows = await dbAll(
+            `SELECT r.*, o.order_code, o.customer_name, o.customer_phone, o.total_amount AS order_total
+             FROM refunds r
+             LEFT JOIN orders o ON o.id = r.order_id
+             ${where}
+             ORDER BY r.created_at DESC`,
+            params
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/orders/:id/refunds — list refunds for a specific order
+app.get('/api/orders/:id/refunds', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT * FROM refunds WHERE order_id = $1 ORDER BY created_at DESC`,
+            [req.params.id]
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/orders/:id/refunds — manually create a refund (e.g. bordir reject)
+// Dedup: prevents Rp0 / duplicate refund creation for same type.
+app.post('/api/orders/:id/refunds', requireAuth(['admin']), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.payment_status !== 'paid') {
+            return res.status(400).json({ error: 'Refund hanya berlaku untuk pesanan yang sudah dibayar' });
+        }
+
+        const { refund_type = 'bordir_reject', amount, reason, bank_name, bank_account_number, bank_account_holder } = req.body;
+        if (!['order_cancel','bordir_reject','partial'].includes(refund_type)) {
+            return res.status(400).json({ error: 'refund_type tidak valid' });
+        }
+        const amt = parseInt(amount, 10);
+        if (!Number.isFinite(amt) || amt <= 0) {
+            return res.status(400).json({ error: 'Nominal refund harus lebih dari 0' });
+        }
+
+        // Dedup: cek apakah sudah ada refund aktif (bukan cancelled) untuk type yg sama
+        const existing = await dbGet(
+            `SELECT id, status, amount FROM refunds WHERE order_id = $1 AND refund_type = $2 AND status != 'cancelled'`,
+            [order.id, refund_type]
+        );
+        if (existing) {
+            return res.status(409).json({
+                error: `Refund untuk ${refund_type === 'bordir_reject' ? 'bordir' : 'pesanan'} ini sudah pernah dibuat`,
+                existing_refund: existing
+            });
+        }
+
+        const created = await dbGet(
+            `INSERT INTO refunds (order_id, refund_type, amount, reason, status,
+                                  bank_name, bank_account_number, bank_account_holder, created_by)
+             VALUES ($1,$2,$3,$4,'pending',$5,$6,$7,$8) RETURNING *`,
+            [order.id, refund_type, amt, reason || '',
+             bank_name || '', bank_account_number || '', bank_account_holder || '',
+             req.user.username]
+        );
+        res.json({ message: 'Refund dibuat', refund: created });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/refunds/:id — edit refund. Locked fields rejected if status=transferred|completed.
+app.put('/api/refunds/:id', requireAuth(['admin']), upload.none(), async (req, res) => {
+    try {
+        const refund = await dbGet('SELECT * FROM refunds WHERE id = $1', [req.params.id]);
+        if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
+
+        const locked = refund.status === 'transferred' || refund.status === 'completed';
+        const { amount, reason, bank_name, bank_account_number, bank_account_holder, internal_notes } = req.body;
+
+        if (locked) {
+            // Only internal_notes editable
+            const lockedAttempt = [amount, reason, bank_name, bank_account_number, bank_account_holder].some(v => v !== undefined);
+            if (lockedAttempt) {
+                return res.status(423).json({
+                    error: `Refund sudah ${refund.status} — hanya internal_notes yang boleh diedit`
+                });
+            }
+            await dbRun(
+                `UPDATE refunds SET internal_notes = COALESCE($1, internal_notes), updated_at = NOW() WHERE id = $2`,
+                [internal_notes ?? null, refund.id]
+            );
+        } else {
+            // All fields editable when pending
+            const amt = amount !== undefined ? parseInt(amount, 10) : refund.amount;
+            if (amount !== undefined && (!Number.isFinite(amt) || amt <= 0)) {
+                return res.status(400).json({ error: 'Nominal refund harus lebih dari 0' });
+            }
+            await dbRun(
+                `UPDATE refunds SET
+                    amount = $1,
+                    reason = COALESCE($2, reason),
+                    bank_name = COALESCE($3, bank_name),
+                    bank_account_number = COALESCE($4, bank_account_number),
+                    bank_account_holder = COALESCE($5, bank_account_holder),
+                    internal_notes = COALESCE($6, internal_notes),
+                    updated_at = NOW()
+                 WHERE id = $7`,
+                [amt, reason ?? null, bank_name ?? null, bank_account_number ?? null,
+                 bank_account_holder ?? null, internal_notes ?? null, refund.id]
+            );
+        }
+        const updated = await dbGet('SELECT * FROM refunds WHERE id = $1', [refund.id]);
+        res.json({ message: 'Refund diperbarui', refund: updated });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/refunds/:id/mark-transferred — upload proof, set status=transferred.
+// Dedup: rejects if already transferred/completed (cegah re-upload & WA dobel).
+app.put('/api/refunds/:id/mark-transferred', requireAuth(['admin']), upload.single('proof'), async (req, res) => {
+    try {
+        const refund = await dbGet('SELECT * FROM refunds WHERE id = $1', [req.params.id]);
+        if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
+        if (refund.status === 'transferred' || refund.status === 'completed') {
+            return res.status(409).json({
+                error: `Refund sudah berstatus ${refund.status} — bukti transfer tidak bisa diubah`
+            });
+        }
+        if (refund.status === 'cancelled') {
+            return res.status(400).json({ error: 'Refund sudah dibatalkan' });
+        }
+        if (!req.file) return res.status(400).json({ error: 'Foto bukti transfer wajib diupload' });
+
+        const proofUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
+        const { note } = req.body;
+        const updated = await dbGet(
+            `UPDATE refunds SET
+                proof_url = $1,
+                status = 'transferred',
+                transferred_by = $2,
+                transferred_at = NOW(),
+                internal_notes = CASE WHEN $3::text IS NOT NULL AND $3 != '' THEN $3 ELSE internal_notes END,
+                updated_at = NOW()
+             WHERE id = $4 RETURNING *`,
+            [proofUrl, req.user.username, note || null, refund.id]
+        );
+
+        // Save proof to order_photos for backwards compat with existing UI
+        await dbRun(
+            `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1, 'refund', $2, $3)`,
+            [refund.order_id, proofUrl, note || `Refund #${refund.id} transferred`]
+        );
+
+        const order = await dbGet('SELECT order_code, customer_name, customer_phone FROM orders WHERE id = $1', [refund.order_id]);
+        await sendWANotification(
+            `💸 *REFUND TERKIRIM - #${order?.order_code || refund.order_id}*\n\n` +
+            `Refund Rp${(refund.amount || 0).toLocaleString('id-ID')} ke ${order?.customer_name || '-'} telah ditransfer.\n` +
+            `Mohon customer konfirmasi penerimaan.`
+        );
+
+        res.json({ message: 'Refund ditandai transferred', refund: updated });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/refunds/:id/confirm — set status=completed (customer confirmed receipt).
+app.put('/api/refunds/:id/confirm', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const refund = await dbGet('SELECT * FROM refunds WHERE id = $1', [req.params.id]);
+        if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
+        if (refund.status !== 'transferred') {
+            return res.status(400).json({ error: `Hanya refund 'transferred' yang bisa di-confirm (sekarang: ${refund.status})` });
+        }
+        const updated = await dbGet(
+            `UPDATE refunds SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+             WHERE id = $1 RETURNING *`,
+            [refund.id]
+        );
+        res.json({ message: 'Refund completed', refund: updated });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/refunds/:id/cancel-refund — soft cancel a pending refund (admin only).
+app.put('/api/refunds/:id/cancel-refund', requireAuth(['admin']), upload.none(), async (req, res) => {
+    try {
+        const refund = await dbGet('SELECT * FROM refunds WHERE id = $1', [req.params.id]);
+        if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
+        if (refund.status !== 'pending') {
+            return res.status(400).json({ error: `Hanya refund 'pending' yang bisa dibatalkan (sekarang: ${refund.status})` });
+        }
+        const { reason } = req.body;
+        const updated = await dbGet(
+            `UPDATE refunds SET status = 'cancelled',
+                                internal_notes = COALESCE(internal_notes, '') || E'\n[CANCELLED] ' || $1,
+                                updated_at = NOW()
+             WHERE id = $2 RETURNING *`,
+            [reason || 'No reason given', refund.id]
+        );
+        res.json({ message: 'Refund dibatalkan', refund: updated });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
