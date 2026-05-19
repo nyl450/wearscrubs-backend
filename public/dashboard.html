@@ -550,15 +550,16 @@
                 </div>
             </div>
         </div>
+        <!-- Primary group tabs (always visible, mobile-friendly) -->
         <div class="flex gap-2 overflow-x-auto pb-1 -mb-1" style="-webkit-overflow-scrolling:touch; scrollbar-width:none;">
-            <button onclick="filterOrders('all')" data-tab="all" aria-label="Filter: Semua" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">Semua <span id="order-count-all" class="ml-1 text-[9px] font-bold opacity-50">0</span></button>
-            <button onclick="filterOrders('pending')" data-tab="pending" aria-label="Filter: Belum Bayar" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">⏳ Belum Bayar <span id="order-count-pending" class="hidden ml-1 bg-yellow-400/20 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
-            <button onclick="filterOrders('paid')" data-tab="paid" aria-label="Filter: Dikonfirmasi" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✅ Dikonfirmasi <span id="order-count-paid" class="hidden ml-1 bg-green-400/20 text-green-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
-            <button onclick="filterOrders('bordir')" data-tab="bordir" aria-label="Filter: Bordir" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🧵 Bordir <span id="order-count-bordir" class="hidden ml-1 bg-purple-400/20 text-purple-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
-            <button onclick="filterOrders('packed')" data-tab="packed" aria-label="Filter: Dikemas" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">📦 Dikemas <span id="order-count-packed" class="hidden ml-1 bg-teal-400/20 text-teal-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
-            <button onclick="filterOrders('shipped')" data-tab="shipped" aria-label="Filter: Dikirim" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🚚 Dikirim <span id="order-count-shipped" class="hidden ml-1 bg-indigo-400/20 text-indigo-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
-            <button onclick="filterOrders('done')" data-tab="done" aria-label="Filter: Selesai" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✔ Selesai <span id="order-count-done" class="hidden ml-1 bg-white/10 text-white/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
-            <button onclick="filterOrders('cancelled')" data-tab="cancelled" aria-label="Filter: Dibatalkan" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">❌ Dibatalkan <span id="order-count-cancelled" class="hidden ml-1 bg-red-400/20 text-red-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">Semua <span id="order-count-all" class="ml-1 text-[9px] font-bold opacity-50">0</span></button>
+            <button onclick="filterOrders('action_needed')" data-tab="action_needed" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🔴 Perlu Aksi <span id="order-count-action_needed" class="hidden ml-1 bg-red-400/20 text-red-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterOrders('in_progress')" data-tab="in_progress" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🟡 Proses <span id="order-count-in_progress" class="hidden ml-1 bg-yellow-400/20 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterOrders('archive')" data-tab="archive" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✓ Arsip <span id="order-count-archive" class="hidden ml-1 bg-white/10 text-white/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+        </div>
+        <!-- Secondary detail tabs (contextual to selected group) -->
+        <div id="order-subtabs" class="hidden flex-wrap gap-1.5">
+            <!-- populated by renderOrderSubtabs() -->
         </div>
         <div id="orders-list" class="space-y-3"></div>
     </div>
@@ -3090,17 +3091,50 @@ function applyDateFilter(orders) {
     });
 }
 
+// Predicates per status — single source of truth shared by counts + filter + subtabs
+const ORDER_PREDS = {
+    pending:   o => o.payment_status === 'pending' && o.order_status !== 'cancelled',
+    paid:      o => o.payment_status === 'paid'    && o.order_status !== 'cancelled',
+    bordir:    o => o.order_status === 'bordir',
+    packed:    o => o.order_status === 'packed',
+    shipped:   o => o.order_status === 'shipped',
+    done:      o => o.order_status === 'done',
+    cancelled: o => o.order_status === 'cancelled',
+    // Group predicates
+    action_needed: o =>
+        (o.payment_status === 'pending' && o.order_status !== 'cancelled') ||      // belum bayar
+        (o.has_bordir_logo && !o.bordir_logo_requested && o.payment_status === 'paid') ||  // perlu minta logo
+        (o.payment_status === 'paid' && (o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status === 'pending'),  // bordir perlu review
+    in_progress: o =>
+        o.payment_status === 'paid' && ['confirmed','bordir','packed','shipped'].includes(o.order_status),
+    archive: o => o.order_status === 'done' || o.order_status === 'cancelled',
+};
+
+// Sub-tab definitions per group
+const SUBTABS = {
+    action_needed: [
+        { key: 'pending', label: '⏳ Belum Bayar', color: 'yellow' },
+    ],
+    in_progress: [
+        { key: 'bordir',  label: '🧵 Bordir',  color: 'purple' },
+        { key: 'packed',  label: '📦 Dikemas', color: 'teal' },
+        { key: 'shipped', label: '🚚 Dikirim', color: 'indigo' },
+    ],
+    archive: [
+        { key: 'done',      label: '✔ Selesai',     color: 'green' },
+        { key: 'cancelled', label: '❌ Dibatalkan', color: 'red' },
+    ],
+};
+
+let currentSubFilter = null;   // null = group total, or specific status key
+
 function updateOrderTabCounts() {
     const dateScoped = applyDateFilter(cachedOrders);
     const counts = {
-        all:       dateScoped.length,
-        pending:   dateScoped.filter(o => o.payment_status === 'pending' && o.order_status !== 'cancelled').length,
-        paid:      dateScoped.filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled').length,
-        bordir:    dateScoped.filter(o => o.order_status === 'bordir').length,
-        packed:    dateScoped.filter(o => o.order_status === 'packed').length,
-        shipped:   dateScoped.filter(o => o.order_status === 'shipped').length,
-        done:      dateScoped.filter(o => o.order_status === 'done').length,
-        cancelled: dateScoped.filter(o => o.order_status === 'cancelled').length,
+        all:           dateScoped.length,
+        action_needed: dateScoped.filter(ORDER_PREDS.action_needed).length,
+        in_progress:   dateScoped.filter(ORDER_PREDS.in_progress).length,
+        archive:       dateScoped.filter(ORDER_PREDS.archive).length,
     };
     Object.entries(counts).forEach(([tab, count]) => {
         const badge = document.getElementById('order-count-' + tab);
@@ -3111,25 +3145,62 @@ function updateOrderTabCounts() {
     });
 }
 
+function renderOrderSubtabs() {
+    const wrap = document.getElementById('order-subtabs');
+    if (!wrap) return;
+    const subs = SUBTABS[currentOrderFilter];
+    if (!subs) {
+        wrap.classList.add('hidden');
+        wrap.classList.remove('flex');
+        return;
+    }
+    wrap.classList.remove('hidden');
+    wrap.classList.add('flex');
+    const dateScoped = applyDateFilter(cachedOrders);
+    // "Semua" subtab for this group
+    const groupCount = dateScoped.filter(ORDER_PREDS[currentOrderFilter]).length;
+    let html = `<button onclick="setOrderSubFilter(null)" class="text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap ${currentSubFilter === null ? 'bg-white/20 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}">Semua <span class="ml-1 text-[9px] opacity-60">${groupCount}</span></button>`;
+    subs.forEach(sub => {
+        const cnt = dateScoped.filter(ORDER_PREDS[sub.key]).length;
+        const active = currentSubFilter === sub.key;
+        html += `<button onclick="setOrderSubFilter('${sub.key}')" class="text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap ${active ? `bg-${sub.color}-500/25 text-${sub.color}-200 border border-${sub.color}-400/30` : 'bg-white/5 text-white/50 hover:bg-white/10'}">${sub.label} <span class="ml-1 text-[9px] opacity-60">${cnt}</span></button>`;
+    });
+    wrap.innerHTML = html;
+}
+
+function setOrderSubFilter(key) {
+    currentSubFilter = key;
+    renderOrderSubtabs();
+    renderOrders();
+}
+
 function filterOrders(filter) {
     currentOrderFilter = filter;
+    currentSubFilter = null;   // reset sub-filter when switching group
     document.querySelectorAll('.order-tab-btn').forEach(b => {
         const a = b.dataset.tab === filter;
-        b.className = `order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl ${a ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10'}`;
+        b.className = `order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shrink-0 ${a ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10'}`;
     });
+    renderOrderSubtabs();
     renderOrders();
 }
 
 function renderOrders() {
     const searchQ = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
-    // Apply date filter FIRST, then status tab filter
+    // Apply date filter FIRST, then group + sub-filter
     const dateScoped = applyDateFilter(cachedOrders);
-    let filtered = currentOrderFilter === 'all'      ? dateScoped
-        : currentOrderFilter === 'pending'   ? dateScoped.filter(o => o.payment_status==='pending' && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'paid'      ? dateScoped.filter(o => o.payment_status==='paid'    && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'bordir'    ? dateScoped.filter(o => o.order_status==='bordir')
-        : currentOrderFilter === 'cancelled' ? dateScoped.filter(o => o.order_status==='cancelled')
-        : dateScoped.filter(o => o.order_status===currentOrderFilter);
+    let filtered;
+    if (currentOrderFilter === 'all') {
+        filtered = dateScoped;
+    } else if (ORDER_PREDS[currentOrderFilter]) {
+        filtered = dateScoped.filter(ORDER_PREDS[currentOrderFilter]);
+        // Apply sub-filter within the group if set
+        if (currentSubFilter && ORDER_PREDS[currentSubFilter]) {
+            filtered = filtered.filter(ORDER_PREDS[currentSubFilter]);
+        }
+    } else {
+        filtered = [];
+    }
     // Apply search filter
     if (searchQ) {
         filtered = filtered.filter(o =>
@@ -3428,12 +3499,17 @@ function csvEscape(v) {
 function exportOrdersCSV() {
     const searchQ = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
     const dateScoped = applyDateFilter(cachedOrders);
-    let rows = currentOrderFilter === 'all'      ? dateScoped
-        : currentOrderFilter === 'pending'   ? dateScoped.filter(o => o.payment_status==='pending' && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'paid'      ? dateScoped.filter(o => o.payment_status==='paid'    && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'bordir'    ? dateScoped.filter(o => o.order_status==='bordir')
-        : currentOrderFilter === 'cancelled' ? dateScoped.filter(o => o.order_status==='cancelled')
-        : dateScoped.filter(o => o.order_status===currentOrderFilter);
+    let rows;
+    if (currentOrderFilter === 'all') {
+        rows = dateScoped;
+    } else if (ORDER_PREDS[currentOrderFilter]) {
+        rows = dateScoped.filter(ORDER_PREDS[currentOrderFilter]);
+        if (currentSubFilter && ORDER_PREDS[currentSubFilter]) {
+            rows = rows.filter(ORDER_PREDS[currentSubFilter]);
+        }
+    } else {
+        rows = [];
+    }
     if (searchQ) {
         rows = rows.filter(o =>
             (o.customer_name||'').toLowerCase().includes(searchQ) ||
@@ -3501,7 +3577,7 @@ function exportOrdersCSV() {
     // Generate filename with current filter context
     const today = new Date().toISOString().slice(0, 10);
     const dateScope = currentDateFilter === 'all' ? 'semua' : currentDateFilter;
-    const statusScope = currentOrderFilter === 'all' ? '' : '-' + currentOrderFilter;
+    const statusScope = currentOrderFilter === 'all' ? '' : '-' + currentOrderFilter + (currentSubFilter ? '-' + currentSubFilter : '');
     const filename = `orders-${dateScope}${statusScope}-${today}.csv`;
 
     const a = document.createElement('a');
