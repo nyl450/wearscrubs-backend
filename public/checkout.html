@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Checkout | WearScrubs</title>
+    <title>Checkout | Wearscrubs</title>
     <link rel="icon" type="image/png" href="images/logo/fav ws.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } } }</script>
@@ -33,8 +33,8 @@
 <header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10">
     <div class="container mx-auto px-6 py-4 flex items-center justify-between">
         <a href="index.html">
-            <img src="images/logo/logo%20ws%20black%20250x55.png" alt="WearScrubs" class="h-8 w-auto block dark:hidden">
-            <img src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-8 w-auto hidden dark:block">
+            <img src="images/logo/logo%20ws%20black%20250x55.png" alt="Wearscrubs" class="h-8 w-auto block dark:hidden">
+            <img src="images/logo/logo%20ws%20white%20250x55.png" alt="Wearscrubs" class="h-8 w-auto hidden dark:block">
         </a>
         <h1 class="hidden md:block text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-white/50">Checkout</h1>
         <a href="cart.html" class="hidden md:flex text-sm text-gray-500 hover:text-black dark:hover:text-white transition">← Kembali ke Keranjang</a>
@@ -697,7 +697,7 @@ async function submitOrder() {
               }).join('\n')
             : '';
         const waMsg = encodeURIComponent(
-            `Halo WearScrubs! Saya sudah melakukan transfer untuk pesanan saya.\n\n` +
+            `Halo Wearscrubs! Saya sudah melakukan transfer untuk pesanan saya.\n\n` +
             `🧾 Invoice: *${data.order_code}*\n` +
             `💰 Total: ${fmt(data.total_amount)}\n` +
             `📦 Ongkir (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +

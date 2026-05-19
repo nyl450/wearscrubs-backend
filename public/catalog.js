@@ -1,5 +1,5 @@
 /**
- * catalog.js — WearScrubs Dynamic Catalog Engine
+ * catalog.js — Wearscrubs Dynamic Catalog Engine
  * Handles: product loading from API, filtering (with inventory), sorting, cart management
  */
 

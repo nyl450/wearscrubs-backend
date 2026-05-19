@@ -2091,7 +2091,7 @@ app.put('/api/orders/:id/request-logo', requireAuth(['admin','manager']), upload
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-    console.log(`\n🚀 WearScrubs Backend berjalan di http://localhost:${PORT}`);
+    console.log(`\n🚀 Wearscrubs Backend berjalan di http://localhost:${PORT}`);
     console.log(`   API: http://localhost:${PORT}/api/products`);
     console.log(`   WA Token: ${process.env.FONNTE_TOKEN ? 'Terkonfigurasi ✅' : 'Belum ⚠️'}\n`);
 });
