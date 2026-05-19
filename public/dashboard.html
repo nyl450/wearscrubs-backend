@@ -3851,7 +3851,11 @@ async function markLogoRequested(orderId) {
         const o = cachedOrders.find(x => x.id === orderId);
         if (o) o.bordir_logo_requested = true;
         toast('✅ Logo bordir sudah ditandai sebagai diminta');
-    } catch(e) { /* silent — WA link still works */ }
+    } catch(e) {
+        // WA link masih kebuka, tapi DB belum ter-update — admin perlu tau supaya
+        // bisa coba lagi nanti (kalau enggak, reminder akan muncul terus)
+        toast(`⚠️ WA terbuka, tapi gagal update status di sistem: ${e.message}. Coba refresh & klik lagi.`, true);
+    }
 }
 
 async function reviewBordir(orderId, action) {
@@ -4148,6 +4152,38 @@ async function updateOrderStatus(id, status) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 loadOverview();
+
+// ─── Global Escape key handler for modals (P-#2) ──────────────────────────────
+// Closes the top-most visible modal on Escape. Modals stack by z-index — find
+// the one with highest z-index that is currently flex-visible.
+const MODAL_CLOSE_FNS = {
+    'order-modal':           () => typeof closeOrderModal       === 'function' && closeOrderModal(),
+    'photo-modal':           () => typeof closePhotoModal       === 'function' && closePhotoModal(),
+    'receive-stock-modal':   () => typeof closeReceiveStock     === 'function' && closeReceiveStock(),
+    'history-modal':         () => typeof closeHistoryModal     === 'function' && closeHistoryModal(),
+    'r2n-modal':             () => typeof closeR2N              === 'function' && closeR2N(),
+    'grid-edit-modal':       () => typeof closeGridEditModal    === 'function' && closeGridEditModal(),
+    'bulk-preview-modal':    () => typeof closeBulkPreview      === 'function' && closeBulkPreview(),
+    'batch-ship-modal':      () => typeof closeBatchShipModal   === 'function' && closeBatchShipModal(),
+    'bordir-reject-modal':   () => typeof _brmDone              === 'function' && _brmDone(null),
+};
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    // Find the visible modal with the highest z-index (most recently opened)
+    let topModal = null, topZ = -1;
+    for (const id of Object.keys(MODAL_CLOSE_FNS)) {
+        const el = document.getElementById(id);
+        if (!el || el.classList.contains('hidden')) continue;
+        const z = parseInt(getComputedStyle(el).zIndex) || 0;
+        if (z > topZ) { topZ = z; topModal = id; }
+    }
+    if (topModal) {
+        e.preventDefault();
+        MODAL_CLOSE_FNS[topModal]();
+    }
+});
+
 setInterval(async () => {
     try {
         const s = await apiFetch('/api/stats/overview');
