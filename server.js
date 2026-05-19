@@ -1922,13 +1922,13 @@ app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, 
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT /api/orders/:id/bordir-review — admin approve / reject bordir
-// Body: { action: 'approve' | 'reject', reason?: string }
+// PUT /api/orders/:id/bordir-review — admin approve / reject / partial_reject bordir
+// Body: { action: 'approve' | 'reject' | 'partial_reject', reason?: string }
 app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
     try {
         const { action, reason } = req.body;
-        if (!['approve','reject'].includes(action))
-            return res.status(400).json({ error: 'Action harus approve atau reject' });
+        if (!['approve','reject','partial_reject'].includes(action))
+            return res.status(400).json({ error: 'Action harus approve, reject, atau partial_reject' });
 
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -1943,11 +1943,14 @@ app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), uploa
             return res.json({ message: 'Bordir disetujui, order siap diproses' });
         }
 
-        // Reject: simpan alasan + generate WA link untuk admin kirim ke customer
-        const rejectReason = (reason || '').trim() || 'Bordir terlalu rumit atau nama terlalu panjang untuk diproses';
+        // Reject (or partial_reject): simpan alasan + generate WA link untuk admin kirim ke customer
+        const isPartial = action === 'partial_reject';
+        const newStatus = isPartial ? 'partial_rejected' : 'rejected';
+        const rejectReason = (reason || '').trim() ||
+            (isPartial ? 'Sebagian item bordir tidak dapat diproses' : 'Bordir terlalu rumit atau nama terlalu panjang untuk diproses');
         await dbRun(
-            `UPDATE orders SET bordir_status = 'rejected', bordir_reject_reason = $1, updated_at = NOW() WHERE id = $2`,
-            [rejectReason, order.id]
+            `UPDATE orders SET bordir_status = $1, bordir_reject_reason = $2, updated_at = NOW() WHERE id = $3`,
+            [newStatus, rejectReason, order.id]
         );
 
         const phone = (order.customer_phone || '').replace(/[^0-9]/g, '').replace(/^0/, '62');
@@ -1963,7 +1966,12 @@ app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), uploa
         );
         const waUrl = phone ? `https://wa.me/${phone}?text=${msg}` : null;
 
-        res.json({ message: 'Bordir ditolak. Kirim WA ke customer.', wa_url: waUrl, reason: rejectReason });
+        res.json({
+            message: isPartial ? 'Bordir sebagian ditolak. Kirim WA ke customer.' : 'Bordir ditolak. Kirim WA ke customer.',
+            wa_url: waUrl,
+            reason: rejectReason,
+            status: newStatus
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

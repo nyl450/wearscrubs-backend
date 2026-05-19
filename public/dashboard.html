@@ -325,6 +325,10 @@
             <button onclick="showModule('manual-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="manual-order">
                 <i class="fa-brands fa-whatsapp w-4 text-xs"></i> Input Order WA
             </button>
+            <button onclick="showModule('refunds')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="refunds">
+                <i class="fa-solid fa-money-bill-transfer w-4 text-xs"></i> Refund
+                <span id="refunds-badge" class="hidden ml-auto bg-yellow-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
+            </button>
         </div>
     </nav>
     <!-- Settings (Admin only) -->
@@ -518,6 +522,25 @@
             <button onclick="filterOrders('cancelled')" data-tab="cancelled" aria-label="Filter: Dibatalkan" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">❌ Dibatalkan <span id="order-count-cancelled" class="hidden ml-1 bg-red-400/20 text-red-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
         </div>
         <div id="orders-list" class="space-y-3"></div>
+    </div>
+
+    <!-- REFUNDS -->
+    <div id="module-refunds" class="hidden p-6 space-y-4">
+        <div class="flex justify-between items-center flex-wrap gap-3">
+            <h2 class="text-xl font-bold">Manajemen Refund</h2>
+            <button onclick="loadRefunds()" class="text-xs text-white/40 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-rotate text-[10px]"></i> Refresh
+            </button>
+        </div>
+        <div class="flex gap-2 overflow-x-auto pb-1 -mb-1" style="-webkit-overflow-scrolling:touch; scrollbar-width:none;">
+            <button onclick="filterRefunds('all')" data-rtab="all" class="refund-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">Semua <span id="refund-count-all" class="ml-1 text-[9px] font-bold opacity-50">0</span></button>
+            <button onclick="filterRefunds('pending')" data-rtab="pending" class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">⏳ Pending <span id="refund-count-pending" class="hidden ml-1 bg-yellow-400/20 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterRefunds('transferred')" data-rtab="transferred" class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">💸 Terkirim <span id="refund-count-transferred" class="hidden ml-1 bg-blue-400/20 text-blue-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterRefunds('completed')" data-rtab="completed" class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✔ Selesai <span id="refund-count-completed" class="hidden ml-1 bg-green-400/20 text-green-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterRefunds('cancelled')" data-rtab="cancelled" class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">⊘ Dibatalkan <span id="refund-count-cancelled" class="hidden ml-1 bg-white/10 text-white/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+        </div>
+        <div id="refunds-list" class="space-y-3"></div>
+        <div id="refunds-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada refund di kategori ini.</div>
     </div>
 
     <!-- MODULE: INPUT ORDER MANUAL WA -->
@@ -1406,6 +1429,7 @@ function showModule(name) {
     if (name === 'orders')        loadOrders();
     if (name === 'settings')      loadSettings();
     if (name === 'manual-order')  waInitModule();
+    if (name === 'refunds')       loadRefunds();
 }
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
@@ -2759,21 +2783,26 @@ async function viewOrder(id) {
                     <p class="text-[11px] font-bold text-purple-300/80 uppercase tracking-wider">Review Bordir</p>
                     ${o.bordir_status === 'approved' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-green-500/15 text-green-300 border border-green-500/25">✓ Disetujui</span>'
                       : o.bordir_status === 'rejected' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-red-500/15 text-red-300 border border-red-500/25">✕ Ditolak</span>'
+                      : o.bordir_status === 'partial_rejected' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-orange-500/15 text-orange-300 border border-orange-500/25">◐ Sebagian Bordir Ditolak</span>'
                       : '<span class="text-[10px] px-2 py-1 rounded-md bg-yellow-500/15 text-yellow-300 border border-yellow-500/25">⏳ Pending Review</span>'}
                 </div>
-                ${o.bordir_status === 'rejected' && o.bordir_reject_reason ? `
-                    <p class="text-[11px] text-red-300/80 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2 mb-2">
-                        <strong>Alasan tolak:</strong> ${o.bordir_reject_reason}
+                ${(o.bordir_status === 'rejected' || o.bordir_status === 'partial_rejected') && o.bordir_reject_reason ? `
+                    <p class="text-[11px] ${o.bordir_status === 'partial_rejected' ? 'text-orange-300/80 bg-orange-500/5 border-orange-500/15' : 'text-red-300/80 bg-red-500/5 border-red-500/15'} border rounded-lg px-3 py-2 mb-2">
+                        <strong>${o.bordir_status === 'partial_rejected' ? 'Sebagian ditolak' : 'Alasan tolak'}:</strong> ${o.bordir_reject_reason}
                     </p>` : ''}
                 ${o.bordir_status !== 'approved' ? `
-                    <div class="flex gap-2">
+                    <div class="flex flex-col sm:flex-row gap-2">
                         <button onclick="reviewBordir(${o.id}, 'approve')"
                             class="flex-1 text-[11px] px-3 py-2 rounded-lg bg-green-500/15 text-green-300 border border-green-500/25 hover:bg-green-500/25 transition">
                             <i class="fa-solid fa-check mr-1"></i> Setujui
                         </button>
+                        <button onclick="reviewBordir(${o.id}, 'partial_reject')"
+                            class="flex-1 text-[11px] px-3 py-2 rounded-lg bg-orange-500/15 text-orange-300 border border-orange-500/25 hover:bg-orange-500/25 transition">
+                            <i class="fa-solid fa-circle-half-stroke mr-1"></i> Tolak Sebagian
+                        </button>
                         <button onclick="reviewBordir(${o.id}, 'reject')"
                             class="flex-1 text-[11px] px-3 py-2 rounded-lg bg-red-500/15 text-red-300 border border-red-500/25 hover:bg-red-500/25 transition">
-                            <i class="fa-solid fa-xmark mr-1"></i> Tolak (terlalu rumit / nama panjang)
+                            <i class="fa-solid fa-xmark mr-1"></i> Tolak Semua
                         </button>
                     </div>` : ''}
             </div>` : ''}
@@ -2899,28 +2928,34 @@ async function reviewBordir(orderId, action) {
         let reason = '';
         if (action === 'reject') {
             reason = prompt(
-                'Alasan tolak bordir (akan dikirim ke customer via WA):',
+                'Alasan tolak SEMUA bordir (akan dikirim ke customer via WA):',
                 'Bordir terlalu rumit untuk diproses dengan kualitas terbaik'
             );
-            if (reason === null) return; // user cancel
+            if (reason === null) return;
+        } else if (action === 'partial_reject') {
+            reason = prompt(
+                'Alasan tolak SEBAGIAN bordir (sebutkan item mana yang tidak bisa diproses):',
+                'Bordir logo OK, tapi nama dengan font script tidak bisa diproses'
+            );
+            if (reason === null) return;
         }
         const fd = new FormData();
         fd.append('action', action);
         if (reason) fd.append('reason', reason);
         const res = await apiFetch(`/api/orders/${orderId}/bordir-review`, { method: 'PUT', body: fd });
-        // Update local cache so UI refresh shows new state
         const o = cachedOrders.find(x => x.id === orderId);
         if (o) {
-            o.bordir_status = action === 'approve' ? 'approved' : 'rejected';
-            if (action === 'reject') o.bordir_reject_reason = res.reason || reason;
+            o.bordir_status = res.status || (action === 'approve' ? 'approved' : action === 'partial_reject' ? 'partial_rejected' : 'rejected');
+            if (action === 'reject' || action === 'partial_reject') o.bordir_reject_reason = res.reason || reason;
         }
-        if (action === 'reject' && res.wa_url) {
+        if ((action === 'reject' || action === 'partial_reject') && res.wa_url) {
             window.open(res.wa_url, '_blank');
-            toast('✕ Bordir ditolak. WA template terbuka di tab baru — kirim ke customer.');
+            toast(action === 'partial_reject'
+                ? '◐ Bordir sebagian ditolak. WA template terbuka — kirim ke customer.'
+                : '✕ Bordir ditolak. WA template terbuka — kirim ke customer.');
         } else {
             toast('✓ Bordir disetujui — order siap diproses.');
         }
-        // Reopen modal to refresh
         closeOrderModal();
         viewOrder(orderId);
     } catch(e) { toast('Gagal: ' + e.message, true); }
@@ -2933,9 +2968,11 @@ function closeOrderModal() {
 
 // ── Photo Upload Modal ─────────────────────────────────────────────────────────
 let _photoModalAction = null; // { endpoint, method, fieldName, orderId }
+let _photoModalOnSuccess = null; // optional callback after successful submit
 
-function openPhotoModal(title, action, extraHTML = '') {
+function openPhotoModal(title, action, extraHTML = '', onSuccess = null) {
     _photoModalAction = action;
+    _photoModalOnSuccess = onSuccess;
     document.getElementById('photo-modal-title').textContent = title;
     document.getElementById('photo-modal-extra').innerHTML = extraHTML;
     document.getElementById('photo-file-input').value = '';
@@ -2951,6 +2988,7 @@ function closePhotoModal() {
     document.getElementById('photo-modal').classList.add('hidden');
     document.getElementById('photo-modal').classList.remove('flex');
     _photoModalAction = null;
+    _photoModalOnSuccess = null;
 }
 
 // Standalone trigger — NOT inside a <label> so only fires once
@@ -3006,9 +3044,14 @@ async function submitPhotoModal() {
         if (!res.ok) throw new Error(data.error || 'Gagal');
 
         toast('✅ ' + (data.message || 'Berhasil'));
+        const cb = _photoModalOnSuccess;
         closePhotoModal();
-        closeOrderModal();
-        loadOrders();
+        if (cb) {
+            cb(data);
+        } else {
+            closeOrderModal();
+            loadOrders();
+        }
     } catch(e) {
         toast('❌ ' + e.message, true);
     } finally {
@@ -3079,6 +3122,231 @@ async function updateOrderStatus(id, status) {
         toast('Status diperbarui');
         loadOrders();
     } catch(e) { toast('Gagal: '+e.message, true); }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REFUND MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+let cachedRefunds = [];
+let currentRefundFilter = 'all';
+
+const REFUND_STATUS_META = {
+    pending:     { label: '⏳ Pending',  cls: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25' },
+    transferred: { label: '💸 Terkirim', cls: 'bg-blue-500/15 text-blue-300 border-blue-500/25' },
+    completed:   { label: '✔ Selesai',   cls: 'bg-green-500/15 text-green-300 border-green-500/25' },
+    cancelled:   { label: '⊘ Dibatalkan',cls: 'bg-white/5 text-white/40 border-white/10' }
+};
+const REFUND_TYPE_LABEL = {
+    order_cancel:  'Batal Pesanan',
+    bordir_reject: 'Bordir Ditolak',
+    partial:       'Refund Sebagian'
+};
+
+async function loadRefunds() {
+    try {
+        cachedRefunds = await apiFetch('/api/refunds');
+        renderRefunds();
+    } catch(e) { toast('Gagal memuat refund: ' + e.message, true); }
+}
+
+function filterRefunds(status) {
+    currentRefundFilter = status;
+    document.querySelectorAll('.refund-tab-btn').forEach(b => {
+        const active = b.getAttribute('data-rtab') === status;
+        b.classList.toggle('active', active);
+        b.classList.toggle('bg-white', active);
+        b.classList.toggle('text-black', active);
+        b.classList.toggle('bg-white/5', !active);
+    });
+    renderRefunds();
+}
+
+function renderRefunds() {
+    const counts = { all: cachedRefunds.length, pending: 0, transferred: 0, completed: 0, cancelled: 0 };
+    cachedRefunds.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+    Object.entries(counts).forEach(([k,v]) => {
+        const el = document.getElementById('refund-count-' + k);
+        if (!el) return;
+        el.textContent = v;
+        if (k !== 'all') el.classList.toggle('hidden', v === 0);
+    });
+    document.getElementById('refunds-badge').textContent = counts.pending;
+    document.getElementById('refunds-badge').classList.toggle('hidden', counts.pending === 0);
+
+    const list = currentRefundFilter === 'all'
+        ? cachedRefunds
+        : cachedRefunds.filter(r => r.status === currentRefundFilter);
+    const container = document.getElementById('refunds-list');
+    const empty = document.getElementById('refunds-empty');
+    if (!list.length) {
+        container.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+    container.innerHTML = list.map(refundCardHTML).join('');
+}
+
+function refundCardHTML(r) {
+    const meta = REFUND_STATUS_META[r.status] || REFUND_STATUS_META.pending;
+    const locked = r.status === 'transferred' || r.status === 'completed';
+    const amount = 'Rp ' + (parseInt(r.amount, 10) || 0).toLocaleString('id-ID');
+    const created = r.created_at ? new Date(r.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+    const transferred = r.transferred_at ? new Date(r.transferred_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+
+    return `
+    <div class="bg-darkcard border border-darkborder rounded-2xl p-4 sm:p-5 space-y-3">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap mb-1">
+                    <span class="text-[10px] font-mono text-white/40">#${r.id}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-md ${meta.cls} border font-bold">${meta.label}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-white/50 border border-white/10">${REFUND_TYPE_LABEL[r.refund_type] || r.refund_type}</span>
+                    ${locked ? '<span class="text-[10px] text-white/30"><i class="fa-solid fa-lock"></i> Terkunci</span>' : ''}
+                </div>
+                <p class="text-sm font-bold text-white">${escapeHtml(r.customer_name || '—')}</p>
+                <p class="text-[11px] text-white/40 font-mono">${escapeHtml(r.order_code || '—')} · ${escapeHtml(r.customer_phone || '—')}</p>
+            </div>
+            <div class="text-right shrink-0">
+                <p class="text-base font-bold text-white">${amount}</p>
+                <p class="text-[10px] text-white/30">${created}</p>
+            </div>
+        </div>
+
+        ${r.reason ? `<p class="text-[11px] text-white/60 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2"><strong class="text-white/40">Alasan:</strong> ${escapeHtml(r.reason)}</p>` : ''}
+
+        ${(r.bank_name || r.bank_account_number) ? `
+            <div class="text-[11px] text-white/60 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">
+                <strong class="text-white/40">Rekening tujuan:</strong>
+                ${escapeHtml(r.bank_name || '—')} · ${escapeHtml(r.bank_account_number || '—')} · ${escapeHtml(r.bank_account_holder || '—')}
+            </div>` : ''}
+
+        ${r.proof_url ? `
+            <div>
+                <p class="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1.5">Bukti Transfer ${transferred ? `· ${transferred}` : ''} ${r.transferred_by ? `· oleh ${escapeHtml(r.transferred_by)}` : ''}</p>
+                <a href="${r.proof_url}" target="_blank" class="block">
+                    <img loading="lazy" src="${r.proof_url}" class="rounded-lg max-h-40 object-contain border border-white/10">
+                </a>
+            </div>` : ''}
+
+        ${r.internal_notes ? `<p class="text-[11px] text-white/40 italic">📝 ${escapeHtml(r.internal_notes)}</p>` : ''}
+
+        <div class="flex flex-wrap gap-2 pt-1">
+            ${r.status === 'pending' ? `
+                <button onclick="openEditRefund(${r.id})" class="text-[11px] px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition">
+                    <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+                </button>
+                <button onclick="openMarkTransferred(${r.id})" class="text-[11px] px-3 py-2 rounded-lg bg-blue-500/15 border border-blue-500/25 text-blue-300 hover:bg-blue-500/25 transition font-bold">
+                    <i class="fa-solid fa-upload mr-1"></i> Upload Bukti Transfer
+                </button>
+                <button onclick="cancelRefundAction(${r.id})" class="text-[11px] px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300/80 hover:bg-red-500/20 transition">
+                    <i class="fa-solid fa-xmark mr-1"></i> Batalkan
+                </button>
+            ` : ''}
+            ${r.status === 'transferred' ? `
+                <button onclick="confirmRefundAction(${r.id})" class="text-[11px] px-3 py-2 rounded-lg bg-green-500/15 border border-green-500/25 text-green-300 hover:bg-green-500/25 transition font-bold">
+                    <i class="fa-solid fa-check mr-1"></i> Tandai Selesai (Customer Konfirmasi)
+                </button>
+                <button onclick="openEditRefund(${r.id})" class="text-[11px] px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition">
+                    <i class="fa-solid fa-pen-to-square mr-1"></i> Edit Catatan
+                </button>
+            ` : ''}
+            ${(r.status === 'completed' || r.status === 'cancelled') ? `
+                <button onclick="openEditRefund(${r.id})" class="text-[11px] px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition">
+                    <i class="fa-solid fa-pen-to-square mr-1"></i> Edit Catatan
+                </button>
+            ` : ''}
+        </div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function openMarkTransferred(refundId) {
+    const r = cachedRefunds.find(x => x.id === refundId);
+    if (!r) return;
+    openPhotoModal(
+        '💸 Upload Bukti Transfer Refund',
+        { endpoint: `/api/refunds/${refundId}/mark-transferred`, method: 'PUT', fieldName: 'proof' },
+        `<div class="space-y-3">
+            <div class="bg-blue-900/20 border border-blue-500/20 rounded-xl p-3 text-xs text-blue-200">
+                Refund <strong>Rp ${(parseInt(r.amount,10)||0).toLocaleString('id-ID')}</strong> untuk
+                <strong>${escapeHtml(r.customer_name || '-')}</strong> (${escapeHtml(r.order_code || '-')}).
+                Setelah upload, status berubah jadi <strong>transferred</strong> dan tidak bisa di-upload ulang.
+            </div>
+            <div>
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan internal (opsional)</label>
+                <input name="note" type="text" placeholder="Misal: transfer BCA 18:30" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+            </div>
+        </div>`,
+        () => loadRefunds()
+    );
+}
+
+async function confirmRefundAction(refundId) {
+    if (!confirm('Tandai refund ini sebagai SELESAI? Customer sudah mengonfirmasi penerimaan.')) return;
+    try {
+        await apiFetch(`/api/refunds/${refundId}/confirm`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: '{}' });
+        toast('✔ Refund completed');
+        loadRefunds();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+async function cancelRefundAction(refundId) {
+    const reason = prompt('Alasan batalkan refund ini?', '');
+    if (reason === null) return;
+    try {
+        const fd = new FormData();
+        fd.append('reason', reason);
+        await apiFetch(`/api/refunds/${refundId}/cancel-refund`, { method: 'PUT', body: fd });
+        toast('Refund dibatalkan');
+        loadRefunds();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+async function openEditRefund(refundId) {
+    const r = cachedRefunds.find(x => x.id === refundId);
+    if (!r) return;
+    const locked = r.status === 'transferred' || r.status === 'completed';
+    if (locked) {
+        const notes = prompt('Edit catatan internal (refund sudah ' + r.status + ', field lain terkunci):', r.internal_notes || '');
+        if (notes === null) return;
+        try {
+            const fd = new FormData();
+            fd.append('internal_notes', notes);
+            await apiFetch(`/api/refunds/${refundId}`, { method: 'PUT', body: fd });
+            toast('Catatan diperbarui');
+            loadRefunds();
+        } catch(e) { toast('Gagal: ' + e.message, true); }
+        return;
+    }
+    // Pending: edit semua field
+    const amount = prompt('Nominal refund (Rp):', r.amount);
+    if (amount === null) return;
+    const reason = prompt('Alasan:', r.reason || '');
+    if (reason === null) return;
+    const bankName = prompt('Bank tujuan:', r.bank_name || '');
+    if (bankName === null) return;
+    const bankAcc = prompt('No rekening:', r.bank_account_number || '');
+    if (bankAcc === null) return;
+    const bankHolder = prompt('Nama pemilik rekening:', r.bank_account_holder || '');
+    if (bankHolder === null) return;
+    const notes = prompt('Catatan internal:', r.internal_notes || '');
+    if (notes === null) return;
+    try {
+        const fd = new FormData();
+        fd.append('amount', amount);
+        fd.append('reason', reason);
+        fd.append('bank_name', bankName);
+        fd.append('bank_account_number', bankAcc);
+        fd.append('bank_account_holder', bankHolder);
+        fd.append('internal_notes', notes);
+        await apiFetch(`/api/refunds/${refundId}`, { method: 'PUT', body: fd });
+        toast('Refund diperbarui');
+        loadRefunds();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
