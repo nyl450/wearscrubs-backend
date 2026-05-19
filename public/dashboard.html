@@ -1110,6 +1110,25 @@
 </div>
 </div>
 
+<!-- IMAGE LIGHTBOX (full-screen image viewer with download) -->
+<div id="image-lightbox" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[1100] hidden items-center justify-center p-4" onclick="if(event.target.id==='image-lightbox')closeImageLightbox()">
+    <div class="relative max-w-[95vw] max-h-[95vh] flex flex-col items-center">
+        <div class="absolute -top-12 right-0 flex items-center gap-2">
+            <button id="image-lightbox-download" onclick="downloadCurrentLightboxImage()"
+                class="text-xs font-bold px-3 py-2 rounded-lg bg-white text-black hover:bg-white/90 transition flex items-center gap-2">
+                <i class="fa-solid fa-download"></i> Download
+            </button>
+            <button onclick="closeImageLightbox()"
+                class="w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center transition" title="Tutup (Esc)">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <img id="image-lightbox-img" src="" alt=""
+            class="max-w-[95vw] max-h-[85vh] object-contain rounded-lg shadow-2xl bg-white/5">
+        <p id="image-lightbox-caption" class="text-white/60 text-xs mt-3 text-center"></p>
+    </div>
+</div>
+
 <!-- PHOTO UPLOAD MODAL -->
 <div id="photo-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
 <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md">
@@ -3818,9 +3837,18 @@ async function viewOrder(id) {
                         ${o.bordir_logo_requested ? '✓ Logo Sudah Diminta' : '⚠️ Minta Logo ke Customer'}
                     </a>`) : ''}
             </div>
-            ${bordirDetails.map(e => {
+            ${bordirDetails.map((e, idx) => {
                 const posLbl = e.position === 'kanan' ? 'Kanan Dada' : e.position === 'kiri' ? 'Kiri Dada' : '';
                 const isLogoUploaded = e.type === 'logo' && e.value && e.value.startsWith('data:image/');
+                // Stable filename for download — order_code + item label + index
+                const cleanLabel = (e.item_label || '').replace(/[^a-zA-Z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
+                const dlFilename = `bordir-logo-${o.order_code}-${cleanLabel}-${idx+1}`;
+                const caption = `Logo Bordir · ${o.order_code} · ${e.item_label||''}`;
+                // Stash on window for handler call (avoids escaping issues with base64 in inline onclick)
+                if (isLogoUploaded) {
+                    window._bordirLogos = window._bordirLogos || {};
+                    window._bordirLogos[`${o.id}-${idx}`] = { src: e.value, caption, filename: dlFilename };
+                }
                 return `
             <div class="flex items-start gap-3 py-2.5 border-b border-purple-500/10 last:border-0">
                 <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0
@@ -3830,7 +3858,23 @@ async function viewOrder(id) {
                 <div class="min-w-0 flex-1">
                     <p class="text-[10px] text-white/40">${e.item_label||''}</p>
                     ${isLogoUploaded
-                        ? `<img loading="lazy" decoding="async" src="${e.value}" alt="Logo Bordir" class="max-h-14 max-w-[90px] object-contain rounded border border-white/10 mt-1 mb-1" />`
+                        ? `<div class="flex items-end gap-2 mt-1 mb-1">
+                               <img loading="lazy" decoding="async" src="${e.value}" alt="Logo Bordir"
+                                    onclick="openBordirLogoLightbox(${o.id}, ${idx})"
+                                    class="max-h-20 max-w-[120px] object-contain rounded border border-white/10 cursor-zoom-in hover:border-blue-400/40 transition" />
+                               <div class="flex flex-col gap-1">
+                                   <button onclick="openBordirLogoLightbox(${o.id}, ${idx})"
+                                       class="text-[10px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition flex items-center gap-1.5"
+                                       title="Buka full screen">
+                                       <i class="fa-solid fa-expand"></i> Lihat
+                                   </button>
+                                   <button onclick="downloadBordirLogo(${o.id}, ${idx})"
+                                       class="text-[10px] px-2 py-1 rounded-lg bg-blue-500/15 border border-blue-400/25 text-blue-300 hover:bg-blue-500/25 transition flex items-center gap-1.5"
+                                       title="Download untuk kirim ke pihak bordir">
+                                       <i class="fa-solid fa-download"></i> Unduh
+                                   </button>
+                               </div>
+                           </div>`
                         : `<p class="text-sm font-semibold">${e.value||''}</p>`
                     }
                     <div class="flex flex-wrap gap-x-3 mt-1">
@@ -3878,17 +3922,30 @@ async function viewOrder(id) {
             ship:    '🚚 Bukti Pengiriman',
             refund:  '💰 Bukti Refund'
         };
+        // Stash photo URLs for lightbox access (avoids escape issues in inline onclick)
+        window._orderPhotos = window._orderPhotos || {};
+        window._orderPhotos[o.id] = photos.map(p => ({
+            src: API + p.photo_url,
+            caption: `${stepLabels[p.step]||p.step} · ${o.order_code}`,
+            filename: `${o.order_code}-${p.step}-${new Date(p.created_at).toISOString().slice(0,10)}`,
+        }));
         const photosHTML = photos.length ? `
         <div>
             <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">📸 Foto Bukti Proses</p>
             <div class="grid grid-cols-2 gap-3">
-                ${photos.map(p => `
+                ${photos.map((p, pIdx) => `
                 <div class="bg-white/5 rounded-xl overflow-hidden">
-                    <a href="${API}${p.photo_url}" target="_blank">
+                    <div class="relative group">
                         <img loading="lazy" decoding="async" src="${API}${p.photo_url}"
+                             onclick="openOrderPhotoLightbox(${o.id}, ${pIdx})"
                              class="w-full h-32 object-cover hover:scale-105 transition-transform cursor-zoom-in"
                              onerror="this.parentElement.innerHTML='<div class=\\'p-4 text-center text-white/20 text-xs\\'>Foto tidak tersedia</div>'">
-                    </a>
+                        <button onclick="event.stopPropagation();downloadOrderPhoto(${o.id}, ${pIdx})"
+                            class="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 text-white/90 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition flex items-center justify-center"
+                            title="Download foto">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                    </div>
                     <div class="p-2.5">
                         <p class="text-[10px] font-bold text-white/60">${stepLabels[p.step]||p.step}</p>
                         ${p.note ? `<p class="text-[10px] text-white/30 mt-0.5">${p.note}</p>` : ''}
@@ -4069,6 +4126,116 @@ function _brmDone(value) {
 function closeOrderModal() {
     document.getElementById('order-modal').classList.add('hidden');
     document.getElementById('order-modal').classList.remove('flex');
+}
+
+// ── Image Lightbox (full-screen viewer + download) ─────────────────────────────
+let _lightboxSrc = '';
+let _lightboxFilename = 'image.png';
+
+function openImageLightbox(src, caption = '', suggestedFilename = '') {
+    _lightboxSrc = src;
+    _lightboxFilename = suggestedFilename || _inferFilenameFromSrc(src, caption);
+    document.getElementById('image-lightbox-img').src = src;
+    document.getElementById('image-lightbox-caption').textContent = caption || '';
+    const modal = document.getElementById('image-lightbox');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeImageLightbox() {
+    const modal = document.getElementById('image-lightbox');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    // Don't clear src — browser may already be in mid-frame transition
+}
+
+// Infer a friendly filename from the image source URL or data URL
+function _inferFilenameFromSrc(src, caption) {
+    // Detect extension
+    let ext = 'png';
+    if (src.startsWith('data:')) {
+        const m = /^data:image\/(\w+);/.exec(src);
+        if (m) ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+    } else {
+        const m = /\.(\w{2,5})(\?|$)/.exec(src);
+        if (m) ext = m[1].toLowerCase();
+    }
+    const base = (caption || 'image').replace(/[^a-zA-Z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'image';
+    return `${base}.${ext}`;
+}
+
+async function downloadCurrentLightboxImage() {
+    const btn = document.getElementById('image-lightbox-download');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+    try {
+        await downloadImageFile(_lightboxSrc, _lightboxFilename);
+    } catch (e) {
+        toast('Gagal download: ' + e.message, true);
+        // Fallback: open in new tab so user can save manually
+        window.open(_lightboxSrc, '_blank');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function downloadImageFile(src, filename) {
+    if (src.startsWith('data:')) {
+        // Data URL — direct anchor download works
+        const a = document.createElement('a');
+        a.href = src;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+    }
+    // External URL (Supabase) — fetch as blob to bypass CORS download issues
+    const res = await fetch(src, { mode: 'cors' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Open bordir logo (base64 stashed on window) in lightbox + handle download
+function openBordirLogoLightbox(orderId, idx) {
+    const data = window._bordirLogos?.[`${orderId}-${idx}`];
+    if (!data) return toast('Logo tidak ditemukan', true);
+    openImageLightbox(data.src, data.caption, data.filename);
+}
+
+async function downloadBordirLogo(orderId, idx) {
+    const data = window._bordirLogos?.[`${orderId}-${idx}`];
+    if (!data) return toast('Logo tidak ditemukan', true);
+    try {
+        await downloadImageFile(data.src, data.filename);
+        toast('✅ Logo terdownload');
+    } catch(e) { toast('Gagal download: ' + e.message, true); }
+}
+
+// Order photo (Supabase URL) lightbox + download
+function openOrderPhotoLightbox(orderId, idx) {
+    const data = window._orderPhotos?.[orderId]?.[idx];
+    if (!data) return toast('Foto tidak ditemukan', true);
+    openImageLightbox(data.src, data.caption, data.filename);
+}
+
+async function downloadOrderPhoto(orderId, idx) {
+    const data = window._orderPhotos?.[orderId]?.[idx];
+    if (!data) return toast('Foto tidak ditemukan', true);
+    try {
+        await downloadImageFile(data.src, data.filename);
+        toast('✅ Foto terdownload');
+    } catch(e) { toast('Gagal download: ' + e.message, true); }
 }
 
 // ── Photo Upload Modal ─────────────────────────────────────────────────────────
@@ -4299,6 +4466,7 @@ const MODAL_CLOSE_FNS = {
     'bulk-preview-modal':    () => typeof closeBulkPreview      === 'function' && closeBulkPreview(),
     'batch-ship-modal':      () => typeof closeBatchShipModal   === 'function' && closeBatchShipModal(),
     'bordir-reject-modal':   () => typeof _brmDone              === 'function' && _brmDone(null),
+    'image-lightbox':        () => typeof closeImageLightbox    === 'function' && closeImageLightbox(),
 };
 
 document.addEventListener('keydown', (e) => {
