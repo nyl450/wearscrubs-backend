@@ -1595,9 +1595,9 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
             : null;
 
-        // If payment was already confirmed, return stock + log restore
+        // If payment was already confirmed, return stock + log restore.
+        // Refund proof is NOT required here — refund flow handled separately (status pending → transferred).
         if (order.payment_status === 'paid') {
-            if (!req.file) return res.status(400).json({ error: 'Foto bukti refund wajib diupload karena pembayaran sudah dikonfirmasi' });
             const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
             for (const item of items) {
                 const invBefore = await dbGet(
@@ -1656,7 +1656,12 @@ app.get('/api/orders/:id/photos', async (req, res) => {
 app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, res) => {
     try {
         const { order_status } = req.body;
-        const valid = ['waiting_payment', 'confirmed', 'packed', 'shipped', 'done', 'cancelled', 'bordir'];
+        const valid = ['waiting_payment', 'confirmed', 'packed', 'shipped', 'done', 'bordir'];
+        // 'cancelled' deliberately excluded — must use PUT /api/orders/:id/cancel
+        // (that endpoint restores stock, logs audit trail, creates refund record).
+        if (order_status === 'cancelled') {
+            return res.status(400).json({ error: 'Gunakan endpoint /cancel untuk membatalkan pesanan' });
+        }
         if (!valid.includes(order_status)) return res.status(400).json({ error: 'Status tidak valid' });
         await dbRun(
             `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
