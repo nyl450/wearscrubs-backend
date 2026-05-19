@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WearScrubs — Admin Dashboard</title>
+    <title>Wearscrubs — Admin Dashboard</title>
     <link rel="icon" type="image/png" href="images/logo/fav ws.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { darkbg: '#0f0f0f', darkcard: '#1a1a1a', darkborder: 'rgba(255,255,255,0.07)' } } } }</script>
@@ -264,7 +264,7 @@
         <span class="block w-3 h-0.5 bg-white/60 rounded-full transition-all"></span>
     </button>
     <div class="flex items-center gap-3 flex-1">
-        <img decoding="async" src="images/logo/logo%20ws%20white%20250x55.png" alt="WearScrubs" class="h-6 w-auto object-contain">
+        <img decoding="async" src="images/logo/logo%20ws%20white%20250x55.png" alt="Wearscrubs" class="h-6 w-auto object-contain">
         <span class="text-xs font-bold tracking-widest text-white/30 uppercase ml-1 hidden sm:block">Admin Portal</span>
     </div>
     <div class="flex items-center gap-4">
@@ -332,7 +332,7 @@
             <i class="fa-solid fa-gear w-4 text-xs"></i> Pengaturan
         </button>
     </div>
-    <div class="px-4 pb-3"><p class="text-[9px] text-white/15 text-center">WearScrubs v3.0</p></div>
+    <div class="px-4 pb-3"><p class="text-[9px] text-white/15 text-center">Wearscrubs v3.0</p></div>
 </aside>
 
 <!-- MAIN -->
@@ -510,10 +510,29 @@
     <div id="module-orders" class="hidden p-6 space-y-4">
         <div class="flex justify-between items-center flex-wrap gap-3">
             <h2 class="text-xl font-bold">Manajemen Pesanan</h2>
-            <div class="relative">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
-                <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="renderOrders()"
-                    class="pl-8 pr-4 py-1.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 w-52">
+            <div class="flex items-center gap-2 flex-wrap">
+                <select id="order-date-filter" onchange="onOrderDateChange()"
+                    class="!py-1.5 !px-3 !text-xs !w-auto shrink-0 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="all">📅 Semua Tanggal</option>
+                    <option value="today">Hari Ini</option>
+                    <option value="yesterday">Kemarin</option>
+                    <option value="week">7 Hari Terakhir</option>
+                    <option value="month">Bulan Ini</option>
+                    <option value="last-month">Bulan Lalu</option>
+                    <option value="custom">Custom...</option>
+                </select>
+                <div id="order-date-range" class="hidden flex items-center gap-1.5">
+                    <input id="order-date-from" type="date" onchange="renderOrders();updateOrderTabCounts();"
+                        class="!py-1.5 !px-2 !text-xs bg-white/5 border border-white/10 rounded-lg text-white">
+                    <span class="text-white/30 text-xs">→</span>
+                    <input id="order-date-to" type="date" onchange="renderOrders();updateOrderTabCounts();"
+                        class="!py-1.5 !px-2 !text-xs bg-white/5 border border-white/10 rounded-lg text-white">
+                </div>
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
+                    <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="renderOrders()"
+                        class="pl-8 pr-4 py-1.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 w-52">
+                </div>
             </div>
         </div>
         <div class="flex gap-2 overflow-x-auto pb-1 -mb-1" style="-webkit-overflow-scrolling:touch; scrollbar-width:none;">
@@ -2983,21 +3002,90 @@ async function savePopular() {
 
 // ─── ORDERS ───────────────────────────────────────────────────────────────────
 let cachedOrders = [];
+let currentDateFilter = 'all';   // all | today | yesterday | week | month | last-month | custom
 async function loadOrders() {
     try { cachedOrders = await apiFetch('/api/orders'); updateOrderTabCounts(); renderOrders(); }
     catch(e) { toast('Gagal: '+e.message, true); }
 }
 
+// ─── Date filter helpers ──────────────────────────────────────────────────────
+function onOrderDateChange() {
+    const sel = document.getElementById('order-date-filter');
+    currentDateFilter = sel.value;
+    const rangeEl = document.getElementById('order-date-range');
+    if (currentDateFilter === 'custom') {
+        rangeEl.classList.remove('hidden'); rangeEl.classList.add('flex');
+        // Default custom range = last 30 days
+        const today = new Date();
+        const monthAgo = new Date(today); monthAgo.setDate(today.getDate() - 30);
+        const fromEl = document.getElementById('order-date-from');
+        const toEl = document.getElementById('order-date-to');
+        if (!fromEl.value) fromEl.value = monthAgo.toISOString().slice(0, 10);
+        if (!toEl.value)   toEl.value   = today.toISOString().slice(0, 10);
+    } else {
+        rangeEl.classList.add('hidden'); rangeEl.classList.remove('flex');
+    }
+    renderOrders();
+    updateOrderTabCounts();
+}
+
+// Returns [from, to] as Date objects (inclusive). null = unbounded.
+function getDateRange() {
+    const now = new Date();
+    const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+    const endOfDay   = (d) => { const x = new Date(d); x.setHours(23,59,59,999); return x; };
+    switch (currentDateFilter) {
+        case 'today':      return [startOfDay(now), endOfDay(now)];
+        case 'yesterday': {
+            const y = new Date(now); y.setDate(now.getDate() - 1);
+            return [startOfDay(y), endOfDay(y)];
+        }
+        case 'week': {
+            const start = new Date(now); start.setDate(now.getDate() - 6);
+            return [startOfDay(start), endOfDay(now)];
+        }
+        case 'month': {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1);
+            return [startOfDay(start), endOfDay(now)];
+        }
+        case 'last-month': {
+            const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const end   = new Date(now.getFullYear(), now.getMonth(), 0);
+            return [startOfDay(start), endOfDay(end)];
+        }
+        case 'custom': {
+            const fromStr = document.getElementById('order-date-from')?.value;
+            const toStr   = document.getElementById('order-date-to')?.value;
+            const from = fromStr ? startOfDay(new Date(fromStr)) : null;
+            const to   = toStr   ? endOfDay(new Date(toStr))     : null;
+            return [from, to];
+        }
+        default: return [null, null];
+    }
+}
+
+function applyDateFilter(orders) {
+    const [from, to] = getDateRange();
+    if (!from && !to) return orders;
+    return orders.filter(o => {
+        const d = new Date(o.created_at);
+        if (from && d < from) return false;
+        if (to   && d > to)   return false;
+        return true;
+    });
+}
+
 function updateOrderTabCounts() {
+    const dateScoped = applyDateFilter(cachedOrders);
     const counts = {
-        all:       cachedOrders.length,
-        pending:   cachedOrders.filter(o => o.payment_status === 'pending' && o.order_status !== 'cancelled').length,
-        paid:      cachedOrders.filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled').length,
-        bordir:    cachedOrders.filter(o => o.order_status === 'bordir').length,
-        packed:    cachedOrders.filter(o => o.order_status === 'packed').length,
-        shipped:   cachedOrders.filter(o => o.order_status === 'shipped').length,
-        done:      cachedOrders.filter(o => o.order_status === 'done').length,
-        cancelled: cachedOrders.filter(o => o.order_status === 'cancelled').length,
+        all:       dateScoped.length,
+        pending:   dateScoped.filter(o => o.payment_status === 'pending' && o.order_status !== 'cancelled').length,
+        paid:      dateScoped.filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled').length,
+        bordir:    dateScoped.filter(o => o.order_status === 'bordir').length,
+        packed:    dateScoped.filter(o => o.order_status === 'packed').length,
+        shipped:   dateScoped.filter(o => o.order_status === 'shipped').length,
+        done:      dateScoped.filter(o => o.order_status === 'done').length,
+        cancelled: dateScoped.filter(o => o.order_status === 'cancelled').length,
     };
     Object.entries(counts).forEach(([tab, count]) => {
         const badge = document.getElementById('order-count-' + tab);
@@ -3019,12 +3107,14 @@ function filterOrders(filter) {
 
 function renderOrders() {
     const searchQ = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
-    let filtered = currentOrderFilter === 'all'      ? cachedOrders
-        : currentOrderFilter === 'pending'   ? cachedOrders.filter(o => o.payment_status==='pending' && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'paid'      ? cachedOrders.filter(o => o.payment_status==='paid'    && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'bordir'    ? cachedOrders.filter(o => o.order_status==='bordir')
-        : currentOrderFilter === 'cancelled' ? cachedOrders.filter(o => o.order_status==='cancelled')
-        : cachedOrders.filter(o => o.order_status===currentOrderFilter);
+    // Apply date filter FIRST, then status tab filter
+    const dateScoped = applyDateFilter(cachedOrders);
+    let filtered = currentOrderFilter === 'all'      ? dateScoped
+        : currentOrderFilter === 'pending'   ? dateScoped.filter(o => o.payment_status==='pending' && o.order_status !== 'cancelled')
+        : currentOrderFilter === 'paid'      ? dateScoped.filter(o => o.payment_status==='paid'    && o.order_status !== 'cancelled')
+        : currentOrderFilter === 'bordir'    ? dateScoped.filter(o => o.order_status==='bordir')
+        : currentOrderFilter === 'cancelled' ? dateScoped.filter(o => o.order_status==='cancelled')
+        : dateScoped.filter(o => o.order_status===currentOrderFilter);
     // Apply search filter
     if (searchQ) {
         filtered = filtered.filter(o =>
@@ -3150,6 +3240,24 @@ async function viewOrder(id) {
             done:            { icon: '🎉', label: 'Selesai' },
         };
 
+        // Map step → timestamp (best-effort from order data + photos)
+        const fmtDate = (d) => d ? new Date(d).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'2-digit' }) : '';
+        const photoBy = {};   // step → most recent created_at
+        photos.forEach(p => {
+            if (!photoBy[p.step] || new Date(p.created_at) > new Date(photoBy[p.step])) {
+                photoBy[p.step] = p.created_at;
+            }
+        });
+        const stepTimestamp = {
+            waiting_payment: o.created_at,
+            confirmed_pay:   photoBy.payment || (isPaid ? o.updated_at : null),
+            bordir:          photoBy.bordir  || (o.order_status === 'bordir' ? o.updated_at : null),
+            confirmed:       photoBy.bordir,   // 'confirmed' after bordir = use bordir photo timestamp
+            packed:          photoBy.pack    || (['packed','shipped','done'].includes(o.order_status) ? o.updated_at : null),
+            shipped:         photoBy.ship    || (['shipped','done'].includes(o.order_status) ? o.updated_at : null),
+            done:            o.order_status === 'done' ? o.updated_at : null,
+        };
+
         // Map current status to step index
         const statusToStep = {
             waiting_payment: 0,
@@ -3174,6 +3282,7 @@ async function viewOrder(id) {
                 const done = isPaid && (idx === 1) ? true : (idx <= currentStepIdx && currentStepIdx >= 0);
                 const active = (idx === currentStepIdx && currentStepIdx >= 0);
                 const cancelled = o.order_status === 'cancelled';
+                const ts = !cancelled && (done || active) ? stepTimestamp[s] : null;
                 return `
                 <div class="flex items-center">
                     <div class="flex flex-col items-center w-20">
@@ -3188,6 +3297,7 @@ async function viewOrder(id) {
                             ${active ? 'text-white' : done ? 'text-green-400' : 'text-white/30'}">
                             ${meta.label}
                         </p>
+                        ${ts ? `<p class="text-[9px] text-white/40 text-center mt-0.5 font-mono">${fmtDate(ts)}</p>` : ''}
                         ${meta.sub && active ? `<p class="text-[9px] text-purple-300 text-center">${meta.sub}</p>` : ''}
                     </div>
                     ${idx < steps.length - 1 ? `<div class="w-6 h-0.5 mx-0.5 ${done ? 'bg-green-500/60' : 'bg-white/10'} flex-shrink-0"></div>` : ''}
@@ -4417,7 +4527,7 @@ async function waSubmitOrder() {
             discountLine +
             `💰 *TOTAL: Rp ${Number(data.total_amount).toLocaleString('id-ID')}*` +
             (paymentMethod ? `\n💳 Metode: ${paymentMethod}` : '') +
-            `\n\nSilakan lakukan pembayaran dan kirim bukti transfer ke WA ini ya Dok 🙏\n\nTerima kasih sudah berbelanja di WearScrubs! 🏥`;
+            `\n\nSilakan lakukan pembayaran dan kirim bukti transfer ke WA ini ya Dok 🙏\n\nTerima kasih sudah berbelanja di Wearscrubs! 🏥`;
 
         document.getElementById('wa-result-code').textContent = data.order_code;
         document.getElementById('wa-result-message').textContent = waMsg;
@@ -4664,7 +4774,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         <div class="invoice-header">
             <div class="logo-side">
                 <span class="invoice-label">Invoice</span>
-                <img decoding="async" src="images/logo/logo ws putih invoice.png" alt="WearScrubs" class="logo-img" onerror="this.style.display='none'" />
+                <img decoding="async" src="images/logo/logo ws putih invoice.png" alt="Wearscrubs" class="logo-img" onerror="this.style.display='none'" />
             </div>
             <div class="company-info">
                 RUKO ALLOGIO BARAT NO.25,<br>MEDANG, KEC. PAGEDANGAN,<br>KABUPATEN TANGERANG, BANTEN 15334<br><br>
@@ -4784,7 +4894,7 @@ async function downloadInvoicePDF(orderCode) {
         if (btn) { btn.innerHTML = '<span>⬇️</span><span class="invoice-btn-label">Download PDF</span>'; btn.disabled = false; }
     };
     if (btn) { btn.innerHTML = '<span>⏳</span><span class="invoice-btn-label">Generating...</span>'; btn.disabled = true; }
-    const filename = `Invoice-WearScrubs-${orderCode}.pdf`;
+    const filename = `Invoice-Wearscrubs-${orderCode}.pdf`;
     try {
         // Generate PDF as Blob (not auto-saved) so we can use Web Share API on mobile
         // windowWidth/width forces desktop layout (794px) even when generated on mobile,
