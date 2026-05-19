@@ -1927,13 +1927,11 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         if (order.order_status === 'done') return res.status(400).json({ error: 'Pesanan sudah selesai, tidak bisa dibatalkan' });
 
         const { cancel_reason } = req.body;
-        // Refund proof wajib kalau payment sudah confirmed — cek dulu sebelum upload
-        if (order.payment_status === 'paid' && !req.file) {
-            return res.status(400).json({ error: 'Foto bukti refund wajib diupload karena pembayaran sudah dikonfirmasi' });
-        }
-
-        // Upload before TX (slow external call). Orphan photo on rollback is harmless.
-        const refundProofUrl = req.file
+        // Optional context attachment (mis. screenshot percakapan dengan customer).
+        // NOT a "refund proof" — refund flow is separate via the Refund module.
+        // For paid orders, a refund record is auto-created with status='pending' so
+        // admin follows up the actual money transfer through that flow.
+        const cancelContextUrl = req.file
             ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
             : null;
 
@@ -1963,10 +1961,13 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                 }
             }
 
-            if (refundProofUrl) {
+            if (cancelContextUrl) {
+                // Stored as 'refund' step for backward-compat with existing photo timeline UI.
+                // Semantic-wise this is "cancellation context", not the actual transfer proof
+                // (that one lives on refunds.proof_url after mark-transferred).
                 await client.query(
                     `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                    [order.id, 'refund', refundProofUrl, cancel_reason || '']
+                    [order.id, 'refund', cancelContextUrl, cancel_reason || '']
                 );
             }
 
@@ -1995,17 +1996,16 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                         .map(i => `${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) ×${i.quantity}`)
                         .join('; ');
 
-                    // If admin uploaded a refund proof during cancel, refund jumps straight
-                    // to 'transferred'. Otherwise stays 'pending' for admin to follow up.
-                    const initialStatus = refundProofUrl ? 'transferred' : 'pending';
+                    // Refund record ALWAYS starts at 'pending'. Admin transfers via the
+                    // Refund module → uploads transfer proof at mark-transferred → confirmed.
+                    // The cancelContextUrl (if any) is just for the order photo timeline,
+                    // NOT the refund's transfer proof.
                     await client.query(
                         `INSERT INTO refunds (order_id, refund_type, amount, reason, items_summary,
-                                              customer_name, customer_phone, status, proof_url,
-                                              transferred_at, admin_user)
-                         VALUES ($1, 'cancellation', $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                                              customer_name, customer_phone, status, admin_user)
+                         VALUES ($1, 'cancellation', $2, $3, $4, $5, $6, 'pending', $7)`,
                         [order.id, parseInt(order.total_amount) || 0, cancel_reason || '', itemsSummary,
-                         order.customer_name, order.customer_phone, initialStatus, refundProofUrl,
-                         refundProofUrl ? new Date() : null, user.username]
+                         order.customer_name, order.customer_phone, user.username]
                     );
                 }
             }
@@ -2015,11 +2015,17 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             `❌ *PESANAN DIBATALKAN - #${order.order_code}*\n\n` +
             `Pesanan ${order.customer_name} dibatalkan oleh admin ${user.username}.\n` +
             `📝 Alasan: ${cancel_reason || '-'}\n` +
-            (order.payment_status === 'paid' ? `💰 Refund akan diproses ke ${order.customer_phone}` : ''),
+            (order.payment_status === 'paid' ? `💰 Refund record pending — proses transfer via menu Refund.` : ''),
             'cancel'
         );
 
-        res.json({ message: 'Pesanan dibatalkan', refund_proof: refundProofUrl });
+        res.json({
+            message: order.payment_status === 'paid'
+                ? 'Pesanan dibatalkan. Refund pending di menu Refund — segera follow-up transfer.'
+                : 'Pesanan dibatalkan.',
+            cancel_context_url: cancelContextUrl,
+            refund_created: order.payment_status === 'paid'
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2038,11 +2044,14 @@ app.get('/api/orders/:id/photos', async (req, res) => {
 // require proof (confirm-payment, bordir-done, pack, ship, cancel). This generic
 // endpoint is for `shipped → done` (delivery confirmation) and similar low-risk
 // progressions. Backward transitions / step-skipping are rejected.
+// Cancellation goes through the dedicated /cancel endpoint so stock restore +
+// refund record creation are guaranteed. The generic /status endpoint is NOT
+// allowed to transition orders into 'cancelled' — would silently bypass those.
 const STATUS_FORWARD = {
-    waiting_payment: ['confirmed', 'bordir', 'cancelled'],
-    confirmed:       ['packed', 'cancelled'],
-    bordir:          ['confirmed', 'cancelled'],
-    packed:          ['shipped', 'cancelled'],
+    waiting_payment: ['confirmed', 'bordir'],
+    confirmed:       ['packed'],
+    bordir:          ['confirmed'],
+    packed:          ['shipped'],
     shipped:         ['done'],
     done:            [],
     cancelled:       [],

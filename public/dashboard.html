@@ -4556,25 +4556,42 @@ function confirmMarkDone(orderId) {
 }
 
 function openCancelOrder(orderId) {
-    // Check if order is already paid — if so, refund proof required
     const order = cachedOrders.find(o => o.id === orderId);
     const isPaid = order && order.payment_status === 'paid';
 
-    openPhotoModal(
-        '❌ Batalkan Pesanan',
-        { endpoint: `/api/orders/${orderId}/cancel`, method: 'PUT', fieldName: 'refund_proof' },
-        `<div class="space-y-3">
-            <div class="bg-red-900/20 border border-red-500/20 rounded-xl p-3 text-xs text-red-300">
-                ${isPaid
-                    ? '⚠️ Pembayaran sudah dikonfirmasi. Upload foto bukti refund wajib dilampirkan.'
-                    : 'Pesanan belum dibayar. Foto bukti refund opsional.'}
-            </div>
+    // Photo (cancel context) is OPTIONAL — refund proof lives in the Refund module,
+    // uploaded later at mark-transferred. This modal just records the cancellation.
+    _photoModalAction = {
+        endpoint: `/api/orders/${orderId}/cancel`,
+        method: 'PUT',
+        fieldName: 'refund_proof',   // legacy param name; server stores as cancellation context
+        optionalFile: true
+    };
+    document.getElementById('photo-modal-title').textContent = '❌ Batalkan Pesanan';
+    document.getElementById('photo-modal-extra').innerHTML = `
+        <div class="space-y-3">
+            ${isPaid ? `
+            <div class="bg-orange-500/10 border border-orange-400/25 rounded-xl p-3 text-xs text-orange-200">
+                <p class="font-bold mb-1">💰 Order ini sudah dibayar</p>
+                <p>Refund <strong>Rp ${fmt(order.total_amount)}</strong> akan otomatis tercatat di menu <strong>Refund</strong> dengan status <em>Pending</em>.</p>
+                <p class="mt-1 text-orange-200/80">Transfer dana ke customer dilakukan dari menu Refund (upload bukti di sana, bukan di modal ini).</p>
+            </div>` : `
+            <div class="bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white/60">
+                Pesanan belum dibayar — tidak perlu refund. Stok TIDAK perlu dikembalikan karena belum dipotong.
+            </div>`}
             <div>
                 <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Alasan Pembatalan *</label>
                 <textarea name="cancel_reason" rows="2" required placeholder="Masukkan alasan pembatalan..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none resize-none"></textarea>
             </div>
-        </div>`
-    );
+            <p class="text-[10px] text-white/30"><i class="fa-solid fa-circle-info mr-1"></i> Upload foto di bawah opsional — buat catat screenshot percakapan/dokumentasi pembatalan, BUKAN bukti transfer refund.</p>
+        </div>
+    `;
+    document.getElementById('photo-file-input').value = '';
+    document.getElementById('photo-preview-wrap').classList.add('hidden');
+    document.getElementById('photo-upload-zone').classList.remove('hidden');
+    document.getElementById('photo-change-btn').classList.add('hidden');
+    document.getElementById('photo-modal').classList.remove('hidden');
+    document.getElementById('photo-modal').classList.add('flex');
 }
 
 async function updateOrderStatus(id, status) {
