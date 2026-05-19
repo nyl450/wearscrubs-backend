@@ -3896,7 +3896,7 @@ async function viewOrder(id) {
 
         // ── Items with product image ──────────────────────────────────────────
         const itemsHTML = (o.items||[]).map(i => {
-            const imgSrc = i.photo ? (i.photo.startsWith('/uploads/') ? API + i.photo : i.photo) : '';
+            const imgSrc = resolvePhoto(i.photo);
             return `
             <div class="flex items-start gap-3 py-3 border-b border-darkborder last:border-0">
                 ${imgSrc
@@ -4021,7 +4021,7 @@ async function viewOrder(id) {
         // Stash photo URLs for lightbox access (avoids escape issues in inline onclick)
         window._orderPhotos = window._orderPhotos || {};
         window._orderPhotos[o.id] = photos.map(p => ({
-            src: API + p.photo_url,
+            src: resolvePhoto(p.photo_url),
             caption: `${stepLabels[p.step]||p.step} · ${o.order_code}`,
             filename: `${o.order_code}-${p.step}-${new Date(p.created_at).toISOString().slice(0,10)}`,
         }));
@@ -4032,7 +4032,7 @@ async function viewOrder(id) {
                 ${photos.map((p, pIdx) => `
                 <div class="bg-white/5 rounded-xl overflow-hidden">
                     <div class="relative group">
-                        <img loading="lazy" decoding="async" src="${API}${p.photo_url}"
+                        <img loading="lazy" decoding="async" src="${resolvePhoto(p.photo_url)}"
                              onclick="openOrderPhotoLightbox(${o.id}, ${pIdx})"
                              class="w-full h-32 object-cover hover:scale-105 transition-transform cursor-zoom-in"
                              onerror="this.parentElement.innerHTML='<div class=\\'p-4 text-center text-white/20 text-xs\\'>Foto tidak tersedia</div>'">
@@ -4717,7 +4717,7 @@ function openRefundOrder(orderId) {
 function openRefundProofLightbox(refundId) {
     const r = cachedRefunds.find(x => x.id === refundId);
     if (!r || !r.proof_url) return toast('Bukti transfer tidak ditemukan', true);
-    const src = r.proof_url.startsWith('http') ? r.proof_url : API + r.proof_url;
+    const src = resolvePhoto(r.proof_url);
     openImageLightbox(src, `Bukti Transfer Refund · ${r.order_code || r.id}`, `refund-${r.order_code || r.id}-bukti`);
 }
 
