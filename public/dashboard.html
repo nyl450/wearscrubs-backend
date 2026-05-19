@@ -2992,7 +2992,7 @@ function updateOrderTabCounts() {
     const counts = {
         all:       cachedOrders.length,
         pending:   cachedOrders.filter(o => o.payment_status === 'pending' && o.order_status !== 'cancelled').length,
-        paid:      cachedOrders.filter(o => o.payment_status === 'paid').length,
+        paid:      cachedOrders.filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled').length,
         bordir:    cachedOrders.filter(o => o.order_status === 'bordir').length,
         packed:    cachedOrders.filter(o => o.order_status === 'packed').length,
         shipped:   cachedOrders.filter(o => o.order_status === 'shipped').length,
@@ -3021,7 +3021,7 @@ function renderOrders() {
     const searchQ = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
     let filtered = currentOrderFilter === 'all'      ? cachedOrders
         : currentOrderFilter === 'pending'   ? cachedOrders.filter(o => o.payment_status==='pending' && o.order_status !== 'cancelled')
-        : currentOrderFilter === 'paid'      ? cachedOrders.filter(o => o.payment_status==='paid')
+        : currentOrderFilter === 'paid'      ? cachedOrders.filter(o => o.payment_status==='paid'    && o.order_status !== 'cancelled')
         : currentOrderFilter === 'bordir'    ? cachedOrders.filter(o => o.order_status==='bordir')
         : currentOrderFilter === 'cancelled' ? cachedOrders.filter(o => o.order_status==='cancelled')
         : cachedOrders.filter(o => o.order_status===currentOrderFilter);
@@ -3078,6 +3078,19 @@ function renderOrders() {
             </div>
         </div>`;
     }).join('');
+}
+
+// Normalize Indonesian phone for wa.me link.
+// Input variations: "0878...", "62878...", "+62 878-8717-2220", "8788717..."
+// Output: digits-only with leading 62, no plus.
+function normalizeWAPhone(phone) {
+    if (!phone) return '';
+    const digits = String(phone).replace(/[^0-9]/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('62')) return digits;
+    if (digits.startsWith('0'))  return '62' + digits.slice(1);
+    if (digits.startsWith('8'))  return '62' + digits;  // missing leading 0 like "8788..."
+    return digits;
 }
 
 // ── Status badge helper ────────────────────────────────────────────────────────
@@ -3209,7 +3222,7 @@ async function viewOrder(id) {
         }).join('');
 
         // ── Bordir details ────────────────────────────────────────────────────
-        const waLink = `https://wa.me/${o.customer_phone?.replace(/^0/,'62')}`;
+        const waLink = `https://wa.me/${normalizeWAPhone(o.customer_phone)}`;
         // Check if logo was already uploaded via checkout (stored as base64 in emb.value)
         const logoAlreadyUploaded = bordirDetails.some(e => e.type === 'logo' && e.value && e.value.startsWith('data:image/'));
         const bordirHTML = bordirDetails.length ? `
@@ -3403,10 +3416,7 @@ async function reviewBordir(orderId, action) {
     try {
         let reason = '';
         if (action === 'reject') {
-            reason = prompt(
-                'Alasan tolak bordir (akan dikirim ke customer via WA):',
-                'Bordir terlalu rumit untuk diproses dengan kualitas terbaik'
-            );
+            reason = await promptBordirReject();
             if (reason === null) return; // user cancel
         }
         const fd = new FormData();
@@ -3429,6 +3439,52 @@ async function reviewBordir(orderId, action) {
         closeOrderModal();
         viewOrder(orderId);
     } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+// Modal-based replacement for prompt() — consistent UX, better mobile support
+function promptBordirReject() {
+    return new Promise((resolve) => {
+        let modal = document.getElementById('bordir-reject-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'bordir-reject-modal';
+            modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[1003] hidden items-center justify-center p-4';
+            modal.innerHTML = `
+                <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md p-5 space-y-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-base">Tolak Bordir</h3>
+                            <p class="text-[11px] text-white/40 mt-0.5">Alasan akan dikirim ke customer via WA</p>
+                        </div>
+                        <button onclick="_brmDone(null)" class="text-white/40 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button onclick="_brmPick('Bordir terlalu rumit (logo detail kecil) untuk diproses dengan kualitas terbaik')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Logo terlalu rumit</button>
+                        <button onclick="_brmPick('Nama bordir melebihi 15 karakter — terlalu panjang')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Nama terlalu panjang</button>
+                        <button onclick="_brmPick('Warna benang yang diminta tidak tersedia')" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">Benang tidak ada</button>
+                    </div>
+                    <textarea id="brm-reason" rows="4" placeholder="Tulis alasan penolakan..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30 resize-none"></textarea>
+                    <div class="flex gap-2">
+                        <button onclick="_brmDone(null)" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+                        <button onclick="_brmDone(document.getElementById('brm-reason').value.trim())" class="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm font-bold hover:bg-red-500/30">Tolak Bordir</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+        document.getElementById('brm-reason').value = '';
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+        setTimeout(() => document.getElementById('brm-reason').focus(), 50);
+        window._brmResolve = resolve;
+    });
+}
+function _brmPick(text) {
+    const ta = document.getElementById('brm-reason');
+    if (ta) { ta.value = text; ta.focus(); }
+}
+function _brmDone(value) {
+    const modal = document.getElementById('bordir-reject-modal');
+    if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    if (window._brmResolve) { window._brmResolve(value === '' ? null : value); window._brmResolve = null; }
 }
 
 function closeOrderModal() {
