@@ -2182,21 +2182,39 @@ app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), uploa
             : phoneDigits.startsWith('8') ? '62' + phoneDigits : phoneDigits;
         const typeLabel = parsedTypes.length === 2 ? 'nama & logo'
             : parsedTypes[0] === 'nama' ? 'nama' : 'logo';
-        const totalRefund = createdRefunds.reduce((s, r) => s + r.amount, 0);
+
+        // FULL refund amount for the rejected types (NOT just newly-created records).
+        // If admin re-rejects, createdRefunds is empty but the customer still needs to
+        // see the correct refund amount in the WA template — it equals what was already
+        // recorded earlier. Compute from refundsByType which reflects the per-type cost
+        // calculation regardless of duplicate-skip status.
+        const fullRefundAmount = Object.values(refundsByType).reduce((s, n) => s + n, 0);
+        const newCount = createdRefunds.length;
+        const totalRequested = parsedTypes.filter(t => (refundsByType[t] || 0) > 0).length;
+        const allAlreadyExisted = newCount === 0 && totalRequested > 0;
+
         const msg = encodeURIComponent(
             `Halo ${order.customer_name},\n\n` +
             `Mohon maaf, untuk pesanan *${order.order_code}*, bordir *${typeLabel}* yang Anda minta tidak dapat kami proses karena:\n` +
             `${rejectReason}\n\n` +
             `Silakan pilih salah satu opsi:\n` +
             `1. Revisi bordir (kirim ulang detail/file)\n` +
-            `2. Lanjut tanpa bordir ${typeLabel} — kami refund biaya bordir sebesar *Rp ${totalRefund.toLocaleString('id-ID')}*\n` +
+            `2. Lanjut tanpa bordir ${typeLabel} — kami refund biaya bordir sebesar *Rp ${fullRefundAmount.toLocaleString('id-ID')}*\n` +
             `3. Batal pesanan (full refund)\n\n` +
             `Mohon konfirmasi via balasan WA. Terima kasih.`
         );
         const waUrl = phone ? `https://wa.me/${phone}?text=${msg}` : null;
 
+        // Admin-facing message clarifies whether new records were actually created
+        // (vs duplicate skip) so admin doesn't think a Rp 0 refund was generated.
+        const adminMessage = allAlreadyExisted
+            ? `Bordir ${typeLabel} sudah pernah ditolak sebelumnya — tidak ada refund record baru (record yang ada tetap pending, Rp ${fullRefundAmount.toLocaleString('id-ID')}).`
+            : newCount > 0 && newCount < totalRequested
+                ? `Bordir ${typeLabel} ditolak. ${newCount} refund record baru dibuat (sisanya sudah ada sebelumnya). Total nilai refund: Rp ${fullRefundAmount.toLocaleString('id-ID')}.`
+                : `Bordir ${typeLabel} ditolak. Refund Rp ${fullRefundAmount.toLocaleString('id-ID')} dibuat (status pending).`;
+
         res.json({
-            message: `Bordir ${typeLabel} ditolak. Refund Rp ${totalRefund.toLocaleString('id-ID')} dibuat (status pending).`,
+            message: adminMessage,
             wa_url: waUrl,
             reason: rejectReason,
             rejected_types: parsedTypes,

@@ -3990,11 +3990,12 @@ async function viewOrder(id) {
                     <p class="text-[11px] font-bold text-purple-300/80 uppercase tracking-wider">Review Bordir</p>
                     ${o.bordir_status === 'approved' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-green-500/15 text-green-300 border border-green-500/25">✓ Disetujui</span>'
                       : o.bordir_status === 'rejected' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-red-500/15 text-red-300 border border-red-500/25">✕ Ditolak</span>'
+                      : o.bordir_status === 'partial_rejected' ? '<span class="text-[10px] px-2 py-1 rounded-md bg-orange-500/15 text-orange-300 border border-orange-500/25">◐ Sebagian Ditolak</span>'
                       : '<span class="text-[10px] px-2 py-1 rounded-md bg-yellow-500/15 text-yellow-300 border border-yellow-500/25">⏳ Pending Review</span>'}
                 </div>
-                ${o.bordir_status === 'rejected' && o.bordir_reject_reason ? `
+                ${(o.bordir_status === 'rejected' || o.bordir_status === 'partial_rejected') && o.bordir_reject_reason ? `
                     <p class="text-[11px] text-red-300/80 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2 mb-2">
-                        <strong>Alasan tolak:</strong> ${o.bordir_reject_reason}
+                        <strong>${o.bordir_status === 'partial_rejected' ? 'Sebagian ditolak' : 'Alasan tolak'}:</strong> ${o.bordir_reject_reason}
                     </p>` : ''}
                 ${o.bordir_status !== 'approved' ? `
                     <div class="flex gap-2">
@@ -4175,10 +4176,8 @@ async function reviewBordir(orderId, action) {
         }
         if (action === 'reject' && res.wa_url) {
             window.open(res.wa_url, '_blank');
-            const refundInfo = res.refunds_created?.length
-                ? ` · ${res.refunds_created.length} refund record dibuat`
-                : '';
-            toast(`✕ Bordir ditolak${refundInfo}. WA template terbuka — kirim ke customer.`);
+            // Use the server's message (already differentiates new-create vs duplicate-skip)
+            toast(res.message || '✕ Bordir ditolak. WA template terbuka — kirim ke customer.');
         } else {
             toast('✓ Bordir disetujui — order siap diproses.');
         }
