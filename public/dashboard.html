@@ -3704,6 +3704,9 @@ async function viewOrder(id) {
             done:            { icon: '🎉', label: 'Selesai' },
         };
 
+        // Payment state (declared first — referenced by stepTimestamp + currentStepIdx below)
+        const isPaid = o.payment_status === 'paid';
+
         // Map step → timestamp (best-effort from order data + photos)
         const fmtDate = (d) => d ? new Date(d).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'2-digit' }) : '';
         const photoBy = {};   // step → most recent created_at
@@ -3732,8 +3735,6 @@ async function viewOrder(id) {
             done: hasBordir ? 6 : 5,
             cancelled: -2,
         };
-        // After payment confirmed → confirmed_pay step
-        const isPaid = o.payment_status === 'paid';
         const currentStepIdx = o.order_status === 'cancelled' ? -2
             : !isPaid ? 0
             : statusToStep[o.order_status] ?? 1;
