@@ -329,6 +329,10 @@
             <button onclick="showModule('manual-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="manual-order">
                 <i class="fa-brands fa-whatsapp w-4 text-xs"></i> Input Order WA
             </button>
+            <button onclick="showModule('refund')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="refund">
+                <i class="fa-solid fa-rotate-left w-4 text-xs"></i> Refund
+                <span id="refund-sidebar-badge" class="hidden ml-auto bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
+            </button>
         </div>
     </nav>
     <!-- Settings (Admin only) -->
@@ -744,6 +748,49 @@
       </div>
     </section>
 
+    <!-- ═══ REFUND ═════════════════════════════════════════════════════════ -->
+    <div id="module-refund" class="hidden p-4 md:p-6 space-y-4">
+        <div class="flex justify-between items-center flex-wrap gap-3">
+            <div>
+                <h2 class="text-xl font-bold">Refund</h2>
+                <p class="text-xs text-white/40 mt-0.5">Order yang dibatalkan setelah dibayar + biaya bordir yang ditolak</p>
+            </div>
+            <button onclick="loadRefunds()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+        </div>
+        <!-- Summary cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="bg-darkcard border border-orange-400/20 rounded-2xl p-3">
+                <div id="refund-stat-pending-count" class="text-xl font-bold text-orange-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Pending</div>
+                <div id="refund-stat-pending-amount" class="text-[10px] text-white/50 mt-1 font-mono">Rp 0</div>
+            </div>
+            <div class="bg-darkcard border border-blue-400/20 rounded-2xl p-3">
+                <div id="refund-stat-transferred-count" class="text-xl font-bold text-blue-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Sudah Transfer</div>
+                <div id="refund-stat-transferred-amount" class="text-[10px] text-white/50 mt-1 font-mono">Rp 0</div>
+            </div>
+            <div class="bg-darkcard border border-green-400/20 rounded-2xl p-3">
+                <div id="refund-stat-completed-count" class="text-xl font-bold text-green-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Selesai</div>
+            </div>
+            <div class="bg-darkcard border border-white/10 rounded-2xl p-3">
+                <div id="refund-stat-total-count" class="text-xl font-bold text-white">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Total</div>
+            </div>
+        </div>
+        <!-- Status tabs -->
+        <div class="flex gap-2 overflow-x-auto pb-1 -mb-1" style="-webkit-overflow-scrolling:touch; scrollbar-width:none;">
+            <button onclick="filterRefunds('all')"         data-refund-tab="all"         class="refund-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">Semua</button>
+            <button onclick="filterRefunds('pending')"     data-refund-tab="pending"     class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">⏳ Pending</button>
+            <button onclick="filterRefunds('transferred')" data-refund-tab="transferred" class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">💸 Sudah Transfer</button>
+            <button onclick="filterRefunds('completed')"   data-refund-tab="completed"   class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✅ Selesai</button>
+            <button onclick="filterRefunds('cancelled')"   data-refund-tab="cancelled"   class="refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">❌ Dibatalkan</button>
+        </div>
+        <div id="refunds-list" class="space-y-3"></div>
+    </div>
+
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
     <div id="module-settings" class="hidden p-6 space-y-8 max-w-4xl">
         <h2 class="text-xl font-bold">Pengaturan</h2>
@@ -1129,6 +1176,54 @@
     </div>
 </div>
 
+<!-- REFUND EDIT MODAL -->
+<div id="refund-edit-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+    <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
+            <div>
+                <h3 class="font-bold text-sm">Detail Refund</h3>
+                <p id="refund-edit-subtitle" class="text-[11px] text-white/40 mt-0.5"></p>
+            </div>
+            <button onclick="closeRefundEdit()" class="text-white/40 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 space-y-3 text-sm">
+            <div>
+                <label class="block text-[10px] text-white/50 uppercase tracking-wider font-bold mb-1.5">Nominal Refund (Rp)</label>
+                <input id="refund-edit-amount" type="number" min="0" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-white/30">
+            </div>
+            <div>
+                <label class="block text-[10px] text-white/50 uppercase tracking-wider font-bold mb-1.5">Alasan</label>
+                <textarea id="refund-edit-reason" rows="2" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-white/30 resize-none"></textarea>
+            </div>
+            <div class="border-t border-white/5 pt-3">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider font-bold mb-2">Info Rekening Customer</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="col-span-2">
+                        <label class="block text-[10px] text-white/50 mb-1">Bank</label>
+                        <input id="refund-edit-bank-name" type="text" placeholder="BCA / Mandiri / BNI..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-white/30">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-[10px] text-white/50 mb-1">No. Rekening</label>
+                        <input id="refund-edit-bank-account" type="text" placeholder="1234567890" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-white/30">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-[10px] text-white/50 mb-1">Atas Nama</label>
+                        <input id="refund-edit-bank-holder" type="text" placeholder="Nama pemilik rekening" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-white/30">
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan</label>
+                <textarea id="refund-edit-note" rows="2" placeholder="Catatan internal..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-white/30 resize-none"></textarea>
+            </div>
+        </div>
+        <div class="px-5 py-3 border-t border-darkborder flex gap-2 justify-end sticky bottom-0 bg-darkcard">
+            <button onclick="closeRefundEdit()" class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-medium hover:bg-white/10">Batal</button>
+            <button id="refund-edit-save-btn" onclick="saveRefundEdit()" class="px-5 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-white/90">Simpan</button>
+        </div>
+    </div>
+</div>
+
 <!-- PHOTO UPLOAD MODAL -->
 <div id="photo-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
 <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md">
@@ -1469,6 +1564,7 @@ function showModule(name) {
     if (name === 'orders')        loadOrders();
     if (name === 'settings')      loadSettings();
     if (name === 'manual-order')  waInitModule();
+    if (name === 'refund')        loadRefunds();
 }
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
@@ -4450,6 +4546,238 @@ async function updateOrderStatus(id, status) {
     } catch(e) { toast('Gagal: '+e.message, true); }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  REFUND MODULE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let cachedRefunds = [];
+let currentRefundFilter = 'all';
+
+const REFUND_TYPE_LABEL = {
+    cancellation:  { label: 'Order Dibatalkan',  icon: '❌', color: 'red' },
+    bordir_nama:   { label: 'Bordir Nama Ditolak', icon: '✏️', color: 'purple' },
+    bordir_logo:   { label: 'Bordir Logo Ditolak', icon: '🎨', color: 'blue' },
+    partial_item:  { label: 'Item Parsial Dibatalkan', icon: '➖', color: 'orange' },
+    manual:        { label: 'Refund Manual', icon: '📝', color: 'white' },
+};
+const REFUND_STATUS_LABEL = {
+    pending:     { label: '⏳ Pending',      color: 'orange' },
+    transferred: { label: '💸 Sudah Transfer', color: 'blue' },
+    completed:   { label: '✅ Selesai',       color: 'green' },
+    cancelled:   { label: '❌ Dibatalkan',    color: 'red' },
+};
+
+async function loadRefunds() {
+    try {
+        const [list, stats] = await Promise.all([
+            apiFetch('/api/refunds'),
+            apiFetch('/api/refunds/stats').catch(() => ({ pending: 0, transferred: 0, pending_total: 0, transferred_total: 0 }))
+        ]);
+        cachedRefunds = list;
+        // Stats card
+        document.getElementById('refund-stat-pending-count').textContent     = stats.pending || 0;
+        document.getElementById('refund-stat-pending-amount').textContent    = 'Rp ' + (stats.pending_total || 0).toLocaleString('id-ID');
+        document.getElementById('refund-stat-transferred-count').textContent  = stats.transferred || 0;
+        document.getElementById('refund-stat-transferred-amount').textContent = 'Rp ' + (stats.transferred_total || 0).toLocaleString('id-ID');
+        document.getElementById('refund-stat-completed-count').textContent   = list.filter(r => r.status === 'completed').length;
+        document.getElementById('refund-stat-total-count').textContent       = list.length;
+        // Sidebar badge — pending+transferred (perlu perhatian)
+        const sidebarBadge = document.getElementById('refund-sidebar-badge');
+        const needAttn = (stats.pending || 0) + (stats.transferred || 0);
+        if (sidebarBadge) {
+            sidebarBadge.textContent = needAttn;
+            sidebarBadge.classList.toggle('hidden', needAttn === 0);
+        }
+        renderRefunds();
+    } catch(e) { toast('Gagal load refund: ' + e.message, true); }
+}
+
+function filterRefunds(status) {
+    currentRefundFilter = status;
+    document.querySelectorAll('.refund-tab-btn').forEach(b => {
+        const a = b.dataset.refundTab === status;
+        b.className = `refund-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shrink-0 ${a ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10'}`;
+    });
+    renderRefunds();
+}
+
+function renderRefunds() {
+    const list = currentRefundFilter === 'all' ? cachedRefunds : cachedRefunds.filter(r => r.status === currentRefundFilter);
+    const el = document.getElementById('refunds-list');
+    if (!list.length) {
+        el.innerHTML = `<div class="text-center py-16 text-white/30 text-sm">
+            <i class="fa-solid fa-coins text-3xl mb-3 block"></i>
+            Tidak ada refund ${currentRefundFilter === 'all' ? '' : currentRefundFilter}.</div>`;
+        return;
+    }
+    const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    const isAdmin = user.role === 'admin';
+
+    el.innerHTML = list.map(r => {
+        const typeMeta   = REFUND_TYPE_LABEL[r.refund_type]   || { label: r.refund_type, icon: '📝', color: 'white' };
+        const statusMeta = REFUND_STATUS_LABEL[r.status]      || { label: r.status, color: 'white' };
+        const phoneWA = normalizeWAPhone(r.customer_phone);
+        const waLink = phoneWA ? `https://wa.me/${phoneWA}` : '#';
+
+        const bankBlock = (r.customer_bank_account || r.customer_bank_name) ? `
+            <div class="bg-white/5 rounded-xl p-3 text-xs space-y-1">
+                <p class="text-[10px] text-white/40 uppercase tracking-wider font-bold mb-1">🏦 Rekening Refund</p>
+                ${r.customer_bank_name ? `<p><span class="text-white/40">Bank:</span> <strong>${r.customer_bank_name}</strong></p>` : ''}
+                ${r.customer_bank_account ? `<p><span class="text-white/40">No. Rek:</span> <strong class="font-mono select-all">${r.customer_bank_account}</strong></p>` : ''}
+                ${r.customer_bank_holder ? `<p><span class="text-white/40">a/n:</span> ${r.customer_bank_holder}</p>` : ''}
+            </div>` : `
+            <div class="bg-yellow-500/5 border border-yellow-400/20 rounded-xl p-3 text-xs text-yellow-300/80">
+                <i class="fa-solid fa-circle-info mr-1"></i> Info rekening belum diisi — klik "Edit" untuk input setelah hubungi customer.
+            </div>`;
+
+        return `
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-3 ${r.status === 'cancelled' ? 'opacity-60' : ''}">
+            <div class="flex justify-between items-start flex-wrap gap-3">
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-${typeMeta.color}-500/15 text-${typeMeta.color}-300 border border-${typeMeta.color}-400/25">${typeMeta.icon} ${typeMeta.label}</span>
+                        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-${statusMeta.color}-500/15 text-${statusMeta.color}-300 border border-${statusMeta.color}-400/25">${statusMeta.label}</span>
+                    </div>
+                    <h4 class="font-bold">${r.customer_name || '-'}</h4>
+                    ${r.order_code ? `<button onclick="openRefundOrder(${r.order_id})" class="text-[11px] font-mono text-blue-400 hover:text-blue-300 mt-0.5 underline-offset-2 hover:underline"><i class="fa-solid fa-link text-[9px] mr-1"></i>${r.order_code}</button>` : ''}
+                    <p class="text-[11px] text-white/40 mt-0.5">${new Date(r.created_at).toLocaleString('id-ID')}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-orange-300 font-bold text-xl">Rp ${(r.amount || 0).toLocaleString('id-ID')}</p>
+                </div>
+            </div>
+
+            ${r.items_summary ? `<div class="text-xs text-white/60 bg-white/5 rounded-lg px-3 py-2"><i class="fa-solid fa-shirt text-white/30 mr-1.5"></i>${r.items_summary}</div>` : ''}
+
+            ${r.reason ? `<div class="text-xs text-white/60"><span class="text-white/40">Alasan:</span> ${r.reason}</div>` : ''}
+
+            ${bankBlock}
+
+            <div class="flex flex-wrap items-center gap-2">
+                ${phoneWA ? `<a href="${waLink}" target="_blank" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/15 text-green-300 border border-green-500/25 hover:bg-green-500/25 flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> ${r.customer_phone}</a>` : ''}
+                ${r.proof_url ? `<button onclick="openRefundProofLightbox(${r.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-1.5"><i class="fa-solid fa-image"></i> Lihat Bukti</button>` : ''}
+            </div>
+
+            <div class="flex flex-wrap gap-2 pt-3 border-t border-darkborder">
+                ${r.status !== 'completed' && r.status !== 'cancelled' ? `<button onclick="openRefundEdit(${r.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10"><i class="fa-solid fa-pen mr-1"></i>Edit</button>` : ''}
+                ${r.status === 'pending'     ? `<button onclick="openRefundTransferModal(${r.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold"><i class="fa-solid fa-paper-plane mr-1"></i>Tandai Sudah Transfer</button>` : ''}
+                ${r.status === 'transferred' ? `<button onclick="markRefundCompleted(${r.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold"><i class="fa-solid fa-check-double mr-1"></i>Tandai Selesai</button>` : ''}
+                ${isAdmin && r.status !== 'completed' && r.status !== 'cancelled' ? `<button onclick="cancelRefundRecord(${r.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/20 ml-auto"><i class="fa-solid fa-ban mr-1"></i>Batalkan Refund</button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// Open the underlying order in the existing order detail modal
+function openRefundOrder(orderId) {
+    if (!orderId) return;
+    viewOrder(orderId);
+}
+
+// Lightbox for refund proof (URL-based — same pattern as order photos)
+function openRefundProofLightbox(refundId) {
+    const r = cachedRefunds.find(x => x.id === refundId);
+    if (!r || !r.proof_url) return toast('Bukti transfer tidak ditemukan', true);
+    const src = r.proof_url.startsWith('http') ? r.proof_url : API + r.proof_url;
+    openImageLightbox(src, `Bukti Transfer Refund · ${r.order_code || r.id}`, `refund-${r.order_code || r.id}-bukti`);
+}
+
+// ── Edit refund (bank info, amount, reason, note) ─────────────────────────────
+let _refundEditId = null;
+function openRefundEdit(id) {
+    const r = cachedRefunds.find(x => x.id === id);
+    if (!r) return;
+    _refundEditId = id;
+    document.getElementById('refund-edit-subtitle').textContent = `${r.customer_name} · ${r.order_code || '-'}`;
+    document.getElementById('refund-edit-amount').value       = r.amount || 0;
+    document.getElementById('refund-edit-reason').value       = r.reason || '';
+    document.getElementById('refund-edit-bank-name').value    = r.customer_bank_name || '';
+    document.getElementById('refund-edit-bank-account').value = r.customer_bank_account || '';
+    document.getElementById('refund-edit-bank-holder').value  = r.customer_bank_holder || '';
+    document.getElementById('refund-edit-note').value         = r.note || '';
+    const modal = document.getElementById('refund-edit-modal');
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+
+function closeRefundEdit() {
+    const modal = document.getElementById('refund-edit-modal');
+    if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    _refundEditId = null;
+}
+
+async function saveRefundEdit() {
+    if (!_refundEditId) return;
+    const payload = {
+        amount: parseInt(document.getElementById('refund-edit-amount').value) || 0,
+        reason: document.getElementById('refund-edit-reason').value.trim(),
+        customer_bank_name:    document.getElementById('refund-edit-bank-name').value.trim(),
+        customer_bank_account: document.getElementById('refund-edit-bank-account').value.trim(),
+        customer_bank_holder:  document.getElementById('refund-edit-bank-holder').value.trim(),
+        note: document.getElementById('refund-edit-note').value.trim(),
+    };
+    const btn = document.getElementById('refund-edit-save-btn');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+    try {
+        await apiFetch(`/api/refunds/${_refundEditId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        toast('✅ Refund diperbarui');
+        closeRefundEdit();
+        await loadRefunds();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+    finally { btn.disabled = false; btn.textContent = 'Simpan'; }
+}
+
+// ── Mark transferred (uses photo modal pattern) ───────────────────────────────
+function openRefundTransferModal(refundId) {
+    const r = cachedRefunds.find(x => x.id === refundId);
+    if (!r) return;
+    // Pre-check: bank info should be filled
+    if (!r.customer_bank_account) {
+        if (!confirm('Info rekening customer belum diisi. Lanjut tandai sudah transfer?\n(Disarankan: Edit dulu untuk catat no rekening.)')) return;
+    }
+    openPhotoModal(
+        '💸 Tandai Refund Sudah Ditransfer',
+        { endpoint: `/api/refunds/${refundId}/mark-transferred`, method: 'PUT', fieldName: 'proof' },
+        `<div class="space-y-3">
+            <div class="bg-blue-500/10 border border-blue-400/20 rounded-xl p-3 text-xs">
+                <p class="font-bold text-blue-300 mb-1">${r.customer_name} · Rp ${(r.amount||0).toLocaleString('id-ID')}</p>
+                ${r.customer_bank_name ? `<p class="text-white/60">Ke: ${r.customer_bank_name} ${r.customer_bank_account || ''}${r.customer_bank_holder ? ' · ' + r.customer_bank_holder : ''}</p>` : '<p class="text-yellow-300">⚠️ Rekening belum diisi</p>'}
+                <p class="text-white/40 mt-1">Customer akan otomatis dapat WA notifikasi.</p>
+            </div>
+        </div>`
+    );
+}
+
+async function markRefundCompleted(refundId) {
+    const r = cachedRefunds.find(x => x.id === refundId);
+    if (!r) return;
+    if (!confirm(`Tandai refund untuk ${r.customer_name} sebagai SELESAI?\n\nPastikan customer sudah konfirmasi terima transfer.`)) return;
+    try {
+        await apiFetch(`/api/refunds/${refundId}/mark-completed`, { method: 'PUT' });
+        toast('✅ Refund selesai');
+        await loadRefunds();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+async function cancelRefundRecord(refundId) {
+    const r = cachedRefunds.find(x => x.id === refundId);
+    if (!r) return;
+    const reason = prompt(`Batalkan refund record untuk ${r.customer_name}?\n\nAlasan (akan ditambahkan ke catatan):`, 'Customer pilih opsi revisi, tidak jadi refund');
+    if (reason === null) return;
+    try {
+        await apiFetch(`/api/refunds/${refundId}/cancel`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        toast('Refund record dibatalkan');
+        await loadRefunds();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 loadOverview();
 
@@ -4467,6 +4795,7 @@ const MODAL_CLOSE_FNS = {
     'batch-ship-modal':      () => typeof closeBatchShipModal   === 'function' && closeBatchShipModal(),
     'bordir-reject-modal':   () => typeof _brmDone              === 'function' && _brmDone(null),
     'image-lightbox':        () => typeof closeImageLightbox    === 'function' && closeImageLightbox(),
+    'refund-edit-modal':     () => typeof closeRefundEdit       === 'function' && closeRefundEdit(),
 };
 
 document.addEventListener('keydown', (e) => {
@@ -4509,6 +4838,7 @@ const MENU_DEFS = [
     { key: 'inventory',  label: 'Inventori',  icon: 'fa-warehouse' },
     { key: 'popular',    label: 'Popular',    icon: 'fa-star' },
     { key: 'orders',     label: 'Pesanan',    icon: 'fa-bag-shopping' },
+    { key: 'refund',     label: 'Refund',     icon: 'fa-rotate-left' },
 ];
 
 // ── Initialize sidebar visibility based on current user's allowed_menus ────────
@@ -4662,7 +4992,7 @@ function updateMenuAccessByRole() {
 }
 
 function getDefaultMenusByRole(role) {
-    if (role === 'manager') return ['overview', 'products', 'inventory', 'popular', 'orders'];
+    if (role === 'manager') return ['overview', 'products', 'inventory', 'popular', 'orders', 'refund'];
     if (role === 'viewer')  return ['overview', 'products', 'orders'];
     return null;
 }
