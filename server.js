@@ -15,7 +15,12 @@ const { CITIES } = require('./cities');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_change_in_production';
+// JWT secret is mandatory in production — never ship a hardcoded fallback.
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'dev_only_insecure_secret');
+if (!JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET environment variable is required in production. Set it before starting.');
+    process.exit(1);
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 
 dns.setDefaultResultOrder('ipv4first');
@@ -1686,15 +1691,38 @@ app.post('/api/orders', async (req, res) => {
             productTotal += unitPrice * item.quantity;
         }
 
-        const shippingCost = parseInt(shipping_cost || 0);
-
-        // Kalkulasi diskon (hanya product total, ongkir tidak kena diskon).
-        // SECURITY: discount hanya boleh dari admin/manager (order WA manual).
-        // Order publik (checkout website) dipaksa 0 — cegah self-applied discount via API.
+        // SECURITY: distinguish admin (authenticated WA orders) from public website orders.
         const authUser = getOptionalUser(req);
-        const canDiscount = authUser && ['admin','manager'].includes(authUser.role);
+        const isAdmin = authUser && ['admin','manager'].includes(authUser.role);
+
+        // order_source: only admin may mark 'whatsapp'. Public is always 'website' —
+        // prevents a public caller from suppressing the admin "new order" WA notification.
+        const safeOrderSource = (isAdmin && order_source === 'whatsapp') ? 'whatsapp' : 'website';
+
+        // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
+        const ALLOWED_PAYMENT = ['BCA','BRI','Mandiri','BNI','QRIS'];
+        const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
+
+        // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED
+        // server-side from city + qty (same rule as /api/shipping-cost) so the client
+        // can't tamper the amount (e.g. send 0).
+        let shippingCost;
+        if (isAdmin) {
+            shippingCost = parseInt(shipping_cost || 0);
+        } else {
+            const ci = CITIES.find(c => c.name === shipping_city);
+            const totalQty = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
+            const wKg = Math.ceil(totalQty / 3);
+            if (!ci) shippingCost = 0;
+            else if (!ci.is_dki && wKg > 10) shippingCost = 0;   // Lion Cargo — admin konfirmasi nanti
+            else if (ci.is_dki) shippingCost = wKg * 10000;
+            else shippingCost = wKg * 20000;
+        }
+
+        // Diskon (hanya product total, ongkir tidak kena diskon).
+        // SECURITY: hanya admin/manager. Order publik dipaksa 0.
         const validDiscounts = [0, 5, 30];
-        const requestedPct = canDiscount ? parseInt(discount_percent) : 0;
+        const requestedPct = isAdmin ? parseInt(discount_percent) : 0;
         const safeDiscountPct = validDiscounts.includes(requestedPct) ? requestedPct : 0;
         const discountAmount = Math.round(productTotal * safeDiscountPct / 100);
         const discountLabel = safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null;
@@ -1725,7 +1753,7 @@ app.post('/api/orders', async (req, res) => {
             embDetailsStored.some(e => e.type === 'logo' && typeof e.value === 'string' &&
                 (e.value.startsWith('http') || e.value.startsWith('data:image/')));
 
-        const orderCode = generateOrderCode(order_source || 'website');
+        const orderCode = generateOrderCode(safeOrderSource);
 
         // Atomic: insert order + all items in one transaction. Either all rows land
         // or none — no orphan orders with missing items.
@@ -1742,8 +1770,8 @@ app.post('/api/orders', async (req, res) => {
                  hasBordirLogo, hasBordirNama,
                  (hasBordirLogo || hasBordirNama) ? 'pending' : null,
                  notes || '',
-                 order_source || 'website',
-                 payment_method || '',
+                 safeOrderSource,
+                 safePaymentMethod,
                  safeDiscountPct,
                  discountAmount,
                  discountLabel,
@@ -1809,7 +1837,7 @@ app.post('/api/orders', async (req, res) => {
         // Skip WA notification to admin for manually-input WA orders (admin already knows)
         // Wrap in try/catch — Fonnte API failure must NOT fail the order response,
         // since the order is already committed at this point.
-        if ((order_source || 'website') !== 'whatsapp') {
+        if (safeOrderSource !== 'whatsapp') {
             try { await sendWANotification(waMsg); }
             catch (waErr) { console.error('WA notify (new order) failed:', waErr?.message || waErr); }
         }
@@ -1861,6 +1889,14 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
         // Atomic: photo record + inventory deduct (with FOR UPDATE lock) + movement log
         // + order status update. Either all land or all roll back.
         const { nextStatus, sendBordirWA } = await withTransaction(async (client) => {
+            // Lock the order row + recheck inside the TX. Two admins / double-clicks
+            // could both pass the pre-TX check above; the row lock serializes them so
+            // the second one sees 'paid' and aborts (no double stock deduction).
+            const lockRes = await client.query('SELECT payment_status FROM orders WHERE id = $1 FOR UPDATE', [order.id]);
+            if (!lockRes.rows[0]) { const e = new Error('Pesanan tidak ditemukan'); e.statusCode = 404; throw e; }
+            if (lockRes.rows[0].payment_status === 'paid') {
+                const e = new Error('Pembayaran sudah dikonfirmasi (oleh proses lain)'); e.statusCode = 409; throw e;
+            }
             // Save photo proof
             await client.query(
                 `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
@@ -2217,11 +2253,19 @@ app.get('/api/orders/:id/photos', async (req, res) => {
 // Cancellation goes through the dedicated /cancel endpoint so stock restore +
 // refund record creation are guaranteed. The generic /status endpoint is NOT
 // allowed to transition orders into 'cancelled' — would silently bypass those.
+// Generic /status endpoint is ONLY for shipped → done (the one transition without a
+// dedicated proof endpoint). All other transitions MUST go through their endpoints
+// which enforce proof/side-effects:
+//   waiting_payment → confirmed/bordir : PUT /confirm-payment (payment proof + stock deduct)
+//   bordir          → confirmed        : PUT /bordir-done    (bordir proof)
+//   confirmed       → packed           : PUT /pack           (pack proof)
+//   packed          → shipped          : PUT /ship           (tracking number)
+//   any             → cancelled        : PUT /cancel         (stock restore + refund)
 const STATUS_FORWARD = {
-    waiting_payment: ['confirmed', 'bordir'],
-    confirmed:       ['packed'],
-    bordir:          ['confirmed'],
-    packed:          ['shipped'],
+    waiting_payment: [],
+    confirmed:       [],
+    bordir:          [],
+    packed:          [],
     shipped:         ['done'],
     done:            [],
     cancelled:       [],

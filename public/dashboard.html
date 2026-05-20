@@ -1699,6 +1699,10 @@ function toast(msg, isErr = false) {
     setTimeout(() => el.classList.add('hidden'), 3500);
 }
 function fmt(n) { return Number(n||0).toLocaleString('id-ID'); }
+// Escape customer-controlled text before injecting into innerHTML templates (anti stored-XSS).
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 // statusBadge() — definisi lengkap ada di bawah (line ~1464), ini dihapus untuk hindari duplicate
 function resolvePhoto(url) {
     if (!url) return '';
@@ -1814,8 +1818,8 @@ async function loadRecentOrders() {
             <th class="px-5 py-3 text-right">Total</th><th class="px-5 py-3 text-center">Status</th>
         </tr></thead><tbody class="divide-y divide-darkborder">
             ${recent.map(o => `<tr class="hover:bg-white/2 cursor-pointer" onclick="viewOrder(${o.id})">
-                <td class="px-5 py-3 font-mono text-white/50">${o.order_code}</td>
-                <td class="px-5 py-3 font-medium">${o.customer_name}</td>
+                <td class="px-5 py-3 font-mono text-white/50">${esc(o.order_code)}</td>
+                <td class="px-5 py-3 font-medium">${esc(o.customer_name)}</td>
                 <td class="px-5 py-3 text-right text-green-400 font-bold">Rp ${fmt(o.total_amount)}</td>
                 <td class="px-5 py-3 text-center">${statusBadge(o.order_status)}</td>
             </tr>`).join('')}
@@ -3220,12 +3224,12 @@ async function openVariantHistory(product_id, size, color, variant_type, product
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between gap-2">
-                            <span class="text-xs font-bold text-white/80 truncate">${b.customer_name || 'Pembeli'}</span>
+                            <span class="text-xs font-bold text-white/80 truncate">${esc(b.customer_name || 'Pembeli')}</span>
                             <span class="text-xs text-white/40 shrink-0">×${b.quantity}</span>
                         </div>
                         <div class="flex items-center gap-1.5 mt-0.5">
                             ${channelBadge(b.order_source)}
-                            <span class="text-[9px] text-white/30">${b.order_code || ''} · ${ts}</span>
+                            <span class="text-[9px] text-white/30">${esc(b.order_code || '')} · ${ts}</span>
                         </div>
                     </div>
                 </div>`;
@@ -3542,10 +3546,10 @@ function renderOrders() {
                         ${isBulkSelected ? '<i class="fa-solid fa-check text-white text-[10px]"></i>' : ''}
                     </span>
                     <div>
-                        <p class="font-mono text-xs text-white/40 mb-1">${o.order_code}</p>
-                        <h4 class="font-bold">${o.customer_name}</h4>
-                        <p class="text-sm text-white/50">${o.customer_phone}</p>
-                        ${o.shipping_city ? `<p class="text-xs text-white/30 mt-0.5">📍 ${o.shipping_city} · ${o.shipping_courier||''}</p>` : ''}
+                        <p class="font-mono text-xs text-white/40 mb-1">${esc(o.order_code)}</p>
+                        <h4 class="font-bold">${esc(o.customer_name)}</h4>
+                        <p class="text-sm text-white/50">${esc(o.customer_phone)}</p>
+                        ${o.shipping_city ? `<p class="text-xs text-white/30 mt-0.5">📍 ${esc(o.shipping_city)} · ${esc(o.shipping_courier||'')}</p>` : ''}
                     </div>
                 </div>
                 <div class="text-right">
@@ -3713,10 +3717,10 @@ function batchShipModal() {
     }
     const rows = selected.map(o => `
         <tr data-order-id="${o.id}">
-            <td class="px-2 py-2 text-[11px] font-mono text-white/40">${o.order_code}</td>
+            <td class="px-2 py-2 text-[11px] font-mono text-white/40">${esc(o.order_code)}</td>
             <td class="px-2 py-2 text-xs">
-                <div class="font-semibold">${o.customer_name}</div>
-                <div class="text-[10px] text-white/40">${o.shipping_city || ''} · ${o.shipping_courier || ''}</div>
+                <div class="font-semibold">${esc(o.customer_name)}</div>
+                <div class="text-[10px] text-white/40">${esc(o.shipping_city || '')} · ${esc(o.shipping_courier || '')}</div>
             </td>
             <td class="px-2 py-2"><input type="text" name="tracking-${o.id}" placeholder="Resi..." class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs"></td>
         </tr>
@@ -4081,7 +4085,7 @@ async function viewOrder(id) {
                     ? `<img loading="lazy" decoding="async" src="${imgSrc}" class="w-14 h-16 rounded-lg object-cover object-top flex-shrink-0" onerror="this.style.display='none'">`
                     : `<div class="w-14 h-16 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-shirt text-white/20"></i></div>`}
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm">${i.product_name}
+                    <p class="font-semibold text-sm">${esc(i.product_name)}
                         ${i.is_bonus ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/25">🎁 BONUS</span>' : ''}
                     </p>
                     <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}
@@ -4134,7 +4138,7 @@ async function viewOrder(id) {
                     ${e.type==='logo' ? '🎨 Logo' : '✏️ Nama'}
                 </span>
                 <div class="min-w-0 flex-1">
-                    <p class="text-[10px] text-white/40">${e.item_label||''}</p>
+                    <p class="text-[10px] text-white/40">${esc(e.item_label||'')}</p>
                     ${isLogoUploaded
                         ? `<div class="flex items-end gap-2 mt-1 mb-1">
                                <img loading="lazy" decoding="async" src="${e.value}" alt="Logo Bordir"
@@ -4153,10 +4157,10 @@ async function viewOrder(id) {
                                    </button>
                                </div>
                            </div>`
-                        : `<p class="text-sm font-semibold">${e.value||''}</p>`
+                        : `<p class="text-sm font-semibold">${esc(e.value||'')}</p>`
                     }
                     <div class="flex flex-wrap gap-x-3 mt-1">
-                        ${e.color ? `<p class="text-[11px] text-white/40">🎨 Benang: <span class="text-white/60">${e.color}</span></p>` : ''}
+                        ${e.color ? `<p class="text-[11px] text-white/40">🎨 Benang: <span class="text-white/60">${esc(e.color)}</span></p>` : ''}
                         ${posLbl  ? `<p class="text-[11px] text-white/40">📍 Posisi: <span class="text-white/60">${posLbl}</span></p>` : ''}
                     </div>
                 </div>
@@ -4259,22 +4263,22 @@ async function viewOrder(id) {
         <div class="grid grid-cols-2 gap-3 text-sm">
             <div class="bg-white/5 rounded-xl p-3">
                 <p class="text-white/40 text-xs mb-1">Nama</p>
-                <p class="font-bold">${o.customer_name}</p>
+                <p class="font-bold">${esc(o.customer_name)}</p>
             </div>
             <div class="bg-white/5 rounded-xl p-3">
                 <p class="text-white/40 text-xs mb-1">WhatsApp</p>
                 <a href="${waLink}" target="_blank" class="font-bold text-green-400 hover:text-green-300 flex items-center gap-1.5">
-                    <i class="fa-brands fa-whatsapp"></i> ${o.customer_phone}
+                    <i class="fa-brands fa-whatsapp"></i> ${esc(o.customer_phone)}
                 </a>
             </div>
             <div class="col-span-2 bg-white/5 rounded-xl p-3">
                 <p class="text-white/40 text-xs mb-1">Alamat</p>
-                <p>${o.customer_address}</p>
+                <p>${esc(o.customer_address)}</p>
             </div>
-            ${o.shipping_city ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kota</p><p class="font-bold">${o.shipping_city}</p></div>` : ''}
-            ${o.shipping_courier ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kurir</p><p class="font-bold">${o.shipping_courier}</p></div>` : ''}
-            ${o.tracking_number ? `<div class="col-span-2 bg-indigo-500/10 border border-indigo-400/20 rounded-xl p-3"><p class="text-indigo-300/70 text-xs mb-1 uppercase tracking-wider font-bold">📦 Nomor Resi</p><p class="font-mono font-bold text-indigo-200 text-base select-all">${o.tracking_number}</p></div>` : ''}
-            ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${o.notes}</p></div>` : ''}
+            ${o.shipping_city ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kota</p><p class="font-bold">${esc(o.shipping_city)}</p></div>` : ''}
+            ${o.shipping_courier ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kurir</p><p class="font-bold">${esc(o.shipping_courier)}</p></div>` : ''}
+            ${o.tracking_number ? `<div class="col-span-2 bg-indigo-500/10 border border-indigo-400/20 rounded-xl p-3"><p class="text-indigo-300/70 text-xs mb-1 uppercase tracking-wider font-bold">📦 Nomor Resi</p><p class="font-mono font-bold text-indigo-200 text-base select-all">${esc(o.tracking_number)}</p></div>` : ''}
+            ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${esc(o.notes)}</p></div>` : ''}
         </div>
 
         <!-- Status Flow Timeline -->
@@ -4860,9 +4864,9 @@ function renderRefunds() {
         const bankBlock = (r.customer_bank_account || r.customer_bank_name) ? `
             <div class="bg-white/5 rounded-xl p-3 text-xs space-y-1">
                 <p class="text-[10px] text-white/40 uppercase tracking-wider font-bold mb-1">🏦 Rekening Refund</p>
-                ${r.customer_bank_name ? `<p><span class="text-white/40">Bank:</span> <strong>${r.customer_bank_name}</strong></p>` : ''}
-                ${r.customer_bank_account ? `<p><span class="text-white/40">No. Rek:</span> <strong class="font-mono select-all">${r.customer_bank_account}</strong></p>` : ''}
-                ${r.customer_bank_holder ? `<p><span class="text-white/40">a/n:</span> ${r.customer_bank_holder}</p>` : ''}
+                ${r.customer_bank_name ? `<p><span class="text-white/40">Bank:</span> <strong>${esc(r.customer_bank_name)}</strong></p>` : ''}
+                ${r.customer_bank_account ? `<p><span class="text-white/40">No. Rek:</span> <strong class="font-mono select-all">${esc(r.customer_bank_account)}</strong></p>` : ''}
+                ${r.customer_bank_holder ? `<p><span class="text-white/40">a/n:</span> ${esc(r.customer_bank_holder)}</p>` : ''}
             </div>` : `
             <div class="bg-yellow-500/5 border border-yellow-400/20 rounded-xl p-3 text-xs text-yellow-300/80">
                 <i class="fa-solid fa-circle-info mr-1"></i> Info rekening belum diisi — klik "Edit" untuk input setelah hubungi customer.
@@ -4876,8 +4880,8 @@ function renderRefunds() {
                         <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-${typeMeta.color}-500/15 text-${typeMeta.color}-300 border border-${typeMeta.color}-400/25">${typeMeta.icon} ${typeMeta.label}</span>
                         <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-${statusMeta.color}-500/15 text-${statusMeta.color}-300 border border-${statusMeta.color}-400/25">${statusMeta.label}</span>
                     </div>
-                    <h4 class="font-bold">${r.customer_name || '-'}</h4>
-                    ${r.order_code ? `<button onclick="openRefundOrder(${r.order_id})" class="text-[11px] font-mono text-blue-400 hover:text-blue-300 mt-0.5 underline-offset-2 hover:underline"><i class="fa-solid fa-link text-[9px] mr-1"></i>${r.order_code}</button>` : ''}
+                    <h4 class="font-bold">${esc(r.customer_name || '-')}</h4>
+                    ${r.order_code ? `<button onclick="openRefundOrder(${r.order_id})" class="text-[11px] font-mono text-blue-400 hover:text-blue-300 mt-0.5 underline-offset-2 hover:underline"><i class="fa-solid fa-link text-[9px] mr-1"></i>${esc(r.order_code)}</button>` : ''}
                     <p class="text-[11px] text-white/40 mt-0.5">${new Date(r.created_at).toLocaleString('id-ID')}</p>
                 </div>
                 <div class="text-right">
@@ -4885,14 +4889,14 @@ function renderRefunds() {
                 </div>
             </div>
 
-            ${r.items_summary ? `<div class="text-xs text-white/60 bg-white/5 rounded-lg px-3 py-2"><i class="fa-solid fa-shirt text-white/30 mr-1.5"></i>${r.items_summary}</div>` : ''}
+            ${r.items_summary ? `<div class="text-xs text-white/60 bg-white/5 rounded-lg px-3 py-2"><i class="fa-solid fa-shirt text-white/30 mr-1.5"></i>${esc(r.items_summary)}</div>` : ''}
 
-            ${r.reason ? `<div class="text-xs text-white/60"><span class="text-white/40">Alasan:</span> ${r.reason}</div>` : ''}
+            ${r.reason ? `<div class="text-xs text-white/60"><span class="text-white/40">Alasan:</span> ${esc(r.reason)}</div>` : ''}
 
             ${bankBlock}
 
             <div class="flex flex-wrap items-center gap-2">
-                ${phoneWA ? `<a href="${waLink}" target="_blank" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/15 text-green-300 border border-green-500/25 hover:bg-green-500/25 flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> ${r.customer_phone}</a>` : ''}
+                ${phoneWA ? `<a href="${waLink}" target="_blank" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/15 text-green-300 border border-green-500/25 hover:bg-green-500/25 flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> ${esc(r.customer_phone)}</a>` : ''}
                 ${r.proof_url ? `<button onclick="openRefundProofLightbox(${r.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-1.5"><i class="fa-solid fa-image"></i> Lihat Bukti</button>` : ''}
             </div>
 
@@ -6199,7 +6203,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
         const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
         itemRowsHTML += `<tr>
-            <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}${bonusTag}</td>
+            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${bonusTag}</td>
             <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
             <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>
@@ -6242,7 +6246,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const col = emb.color && emb.color.toLowerCase() !== 'putih' ? emb.color : '#1a1a1a';
                 const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
                 return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;">
-                    <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${emb.value||''}</p>
+                    <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
                     <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Tinggi ~1,2 cm · ${posLbl}</p>
                 </div>`;
             } else {
@@ -6324,7 +6328,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const det = emb.type === 'nama'
                     ? `<p style="margin:0 0 4px;font-weight:700;">✏️ Bordir Nama</p>
                        <p style="margin:2px 0;font-size:11px;">Produk: ${emb.item_label||'-'}</p>
-                       <p style="margin:2px 0;font-size:11px;">Nama: <strong style="font-size:13px;">${emb.value||'-'}</strong></p>
+                       <p style="margin:2px 0;font-size:11px;">Nama: <strong style="font-size:13px;">${esc(emb.value||'-')}</strong></p>
                        <p style="margin:2px 0;font-size:11px;">Benang: ${emb.color||'-'}</p>
                        <p style="margin:2px 0;font-size:11px;">Posisi: ${posLbl}</p>
                        <p style="color:#999;font-size:10px;margin:4px 0 0;">Tinggi ~1,2 cm · panjang menyesuaikan</p>`
@@ -6363,14 +6367,14 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         <div class="invoice-billed">
             <div class="section-label">Billed To</div>
             <div class="customer-info">
-                <p><strong>Customer's Name:</strong> ${order.customer_name||'-'}</p>
-                <p><strong>Address:</strong> ${order.customer_address||'-'}</p>
-                <p><strong>Phone:</strong> ${order.customer_phone||'-'}</p>
+                <p><strong>Customer's Name:</strong> ${esc(order.customer_name||'-')}</p>
+                <p><strong>Address:</strong> ${esc(order.customer_address||'-')}</p>
+                <p><strong>Phone:</strong> ${esc(order.customer_phone||'-')}</p>
             </div>
             <div class="invoice-meta">
-                <p><strong>Invoice Number:</strong> ${order.order_code||'-'}</p>
+                <p><strong>Invoice Number:</strong> ${esc(order.order_code||'-')}</p>
                 <p><strong>Invoice Date:</strong> ${fmtDate(order.created_at)}</p>
-                ${order.payment_method ? `<p><strong>Metode Bayar:</strong> ${order.payment_method}</p>` : ''}
+                ${order.payment_method ? `<p><strong>Metode Bayar:</strong> ${esc(order.payment_method)}</p>` : ''}
             </div>
         </div>
         <div class="invoice-table-wrap">
