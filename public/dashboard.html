@@ -5621,12 +5621,11 @@ let waProducts = [];
 let waItemCount = 0;
 
 async function waInitModule() {
-    if (waProducts.length === 0) {
-        try {
-            const res = await fetch(API + '/api/products');
-            waProducts = await res.json();
-        } catch (e) { console.error('Gagal load produk:', e); }
-    }
+    // Always refresh products so new items / price changes show without a page reload.
+    try {
+        const res = await fetch(API + '/api/products');
+        waProducts = await res.json();
+    } catch (e) { console.error('Gagal load produk:', e); }
     const citySelect = document.getElementById('wa-shipping-city');
     if (citySelect.options.length <= 1) {
         try {
@@ -5680,7 +5679,7 @@ function waAddItem() {
                 </div>
                 <div>
                     <label class="wa-field-label">Ukuran</label>
-                    <select id="wa-size-${idx}" onchange="waUpdateTotal()" class="input-sm">
+                    <select id="wa-size-${idx}" onchange="waOnSizeChange(${idx})" class="input-sm">
                         <option value="">--</option>
                     </select>
                 </div>
@@ -5797,8 +5796,7 @@ function waHandleLogoFile(input, idx) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        waBordirLogoFiles[idx] = e.target.result;
-        waBordirRefBase64 = e.target.result; // also keep global for invoice
+        waBordirLogoFiles[idx] = e.target.result; // per-item only — do NOT pollute the global ref
         const prev = document.getElementById(`wa-bordir-logo-preview-${idx}`);
         if (prev) {
             prev.classList.remove('hidden');
@@ -5859,6 +5857,22 @@ function waOnVariantChange(idx) {
     const inv = waInventoryCache[idx] || [];
     const sizes = [...new Set(inv.filter(i => i.color === color && i.variant_type === variant).map(i => i.size))];
     sizes.forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
+    waUpdateTotal();
+}
+
+// Cap qty to the selected combo's available stock (client-side hint; server enforces).
+function waOnSizeChange(idx) {
+    const color   = document.getElementById(`wa-color-${idx}`).value;
+    const variant = document.getElementById(`wa-variant-${idx}`).value;
+    const size    = document.getElementById(`wa-size-${idx}`).value;
+    const qtyEl   = document.getElementById(`wa-qty-${idx}`);
+    const row = (waInventoryCache[idx] || []).find(i => i.color === color && i.variant_type === variant && i.size === size);
+    if (qtyEl && row) {
+        const maxStock = Number(row.stock);
+        qtyEl.max = maxStock;
+        if (parseInt(qtyEl.value || 1) > maxStock) qtyEl.value = maxStock;
+        qtyEl.title = `Stok tersedia: ${maxStock}`;
+    }
     waUpdateTotal();
 }
 
@@ -5994,8 +6008,8 @@ async function waSubmitOrder() {
             if (bordirLogo) {
                 const logoColor = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
                 logoPos = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
-                // Store base64 if admin uploaded logo per-item; otherwise use global ref or placeholder
-                const logoVal = waBordirLogoFiles[idx] || waBordirRefBase64 || 'Logo dikirim via WA';
+                // Use THIS item's uploaded logo only; never inherit another item's file.
+                const logoVal = waBordirLogoFiles[idx] || 'Logo dikirim via WA';
                 embroideryDetails.push({ type: 'logo', item_label: itemLabel, value: logoVal, color: logoColor, position: logoPos });
             }
             // Validate: both bordir → positions must differ
