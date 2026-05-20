@@ -408,6 +408,39 @@ async function initDB() {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_refunds_order    ON refunds(order_id)`).catch(() => {});
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_refunds_created  ON refunds(created_at DESC)`).catch(() => {});
 
+    // ── Exchanges (size exchange — barang TIDAK direfund, hanya tukar size) ────
+    // State machine: pending → approved (reserve stok pengganti) → completed.
+    // Reason-driven return: size_mismatch → balik ke stok jual; defect → ke stock_reject.
+    // Reserve-at-approve: stok size pengganti dikurangi saat approve (cegah kebeli orang lain).
+    await dbRun(`CREATE TABLE IF NOT EXISTS exchanges (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        order_item_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        color TEXT NOT NULL,
+        variant_type TEXT NOT NULL DEFAULT 'null',
+        from_size TEXT NOT NULL,
+        to_size TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        reason TEXT NOT NULL DEFAULT 'size_mismatch' CHECK(reason IN ('size_mismatch','defect')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','completed','cancelled')),
+        return_received BOOLEAN DEFAULT FALSE,
+        return_received_at TIMESTAMP,
+        replacement_shipped_at TIMESTAMP,
+        shipping_fee INTEGER DEFAULT 0,
+        note TEXT DEFAULT '',
+        customer_name TEXT,
+        customer_phone TEXT,
+        admin_user TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_exchanges_status  ON exchanges(status)`).catch(() => {});
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_exchanges_order   ON exchanges(order_id)`).catch(() => {});
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_exchanges_item    ON exchanges(order_item_id)`).catch(() => {});
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_exchanges_created ON exchanges(created_at DESC)`).catch(() => {});
+
     // ── Stock Movements (log semua perubahan stok) ────────────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS stock_movements (
         id SERIAL PRIMARY KEY,
@@ -447,10 +480,10 @@ async function initDB() {
     // ── Migrate: reject stock support ─────────────────────────────────────────
     await dbRun(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS stock_reject INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS is_reject BOOLEAN DEFAULT FALSE`);
-    // Extend movement_type CHECK to allow reject movement types
+    // Extend movement_type CHECK to allow reject + exchange movement types
     await dbRun(`ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check`);
     await dbRun(`ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_movement_type_check
-        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal'))`);
+        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal','exchange_replacement_out','exchange_return_in'))`);
 
     // ── Seed default admin ────────────────────────────────────────────────────
     // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
@@ -2505,6 +2538,273 @@ app.get('/api/refunds/stats', requireAuth(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXCHANGE (TUKAR SIZE) — barang TIDAK direfund, hanya tukar ukuran.
+// State: pending → approved (reserve stok pengganti) → completed. Atau cancelled.
+// Reason-driven return: size_mismatch → stok jual; defect → stock_reject.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/exchanges — list (optional ?status=)
+app.get('/api/exchanges', requireAuth(), async (req, res) => {
+    try {
+        const { status } = req.query;
+        const where = status ? `WHERE e.status = $1` : '';
+        const params = status ? [status] : [];
+        const rows = await dbAll(
+            `SELECT e.*, o.order_code, p.name AS product_name
+             FROM exchanges e
+             LEFT JOIN orders o ON o.id = e.order_id
+             LEFT JOIN products p ON p.id = e.product_id
+             ${where}
+             ORDER BY e.created_at DESC`,
+            params
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/exchanges/stats — sidebar badge counters
+app.get('/api/exchanges/stats', requireAuth(), async (req, res) => {
+    try {
+        const row = await dbGet(
+            `SELECT
+                COUNT(*) FILTER (WHERE status = 'pending')::int  AS pending,
+                COUNT(*) FILTER (WHERE status = 'approved')::int AS approved
+             FROM exchanges`, []
+        );
+        res.json(row);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/orders/:id/exchanges — list for one order
+app.get('/api/orders/:id/exchanges', requireAuth(), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT * FROM exchanges WHERE order_id = $1 ORDER BY created_at DESC`,
+            [req.params.id]
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/orders/:id/exchanges — create exchange request (status=pending, no stock move yet)
+// Body: { order_item_id, to_size, quantity, reason ('size_mismatch'|'defect'), note?, shipping_fee? }
+app.post('/api/orders/:id/exchanges', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.payment_status !== 'paid')
+            return res.status(400).json({ error: 'Tukar size hanya untuk pesanan yang sudah dibayar' });
+        if (order.order_status === 'cancelled')
+            return res.status(400).json({ error: 'Pesanan sudah dibatalkan, tidak bisa tukar size' });
+
+        const { order_item_id, to_size, reason = 'size_mismatch', note, shipping_fee } = req.body;
+        const qty = parseInt(req.body.quantity, 10) || 1;
+        if (!order_item_id || !to_size) return res.status(400).json({ error: 'order_item_id & to_size wajib diisi' });
+        if (!['size_mismatch','defect'].includes(reason)) return res.status(400).json({ error: 'reason tidak valid' });
+        if (qty < 1) return res.status(400).json({ error: 'Quantity minimal 1' });
+
+        const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [order_item_id, order.id]);
+        if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
+        if (String(to_size).trim() === String(item.size).trim())
+            return res.status(400).json({ error: 'Size pengganti harus berbeda dari size asli' });
+
+        // Double-exchange guard: total qty exchanged (non-cancelled) + new qty ≤ purchased qty
+        const agg = await dbGet(
+            `SELECT COALESCE(SUM(quantity),0)::int AS used FROM exchanges
+             WHERE order_item_id = $1 AND status != 'cancelled'`,
+            [order_item_id]
+        );
+        if (agg.used + qty > item.quantity)
+            return res.status(400).json({ error: `Melebihi qty pembelian. Sudah ditukar ${agg.used} dari ${item.quantity}, diminta ${qty}.` });
+
+        const created = await dbGet(
+            `INSERT INTO exchanges (order_id, order_item_id, product_id, color, variant_type,
+                                    from_size, to_size, quantity, reason, note, shipping_fee,
+                                    customer_name, customer_phone, admin_user)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+            [order.id, order_item_id, item.product_id, item.color, item.variant_type,
+             item.size, to_size, qty, reason, note || '', parseInt(shipping_fee, 10) || 0,
+             order.customer_name, order.customer_phone, req.user.username]
+        );
+        res.json({ message: 'Permintaan tukar size dibuat', exchange: created });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/exchanges/:id/approve — reserve replacement stock (to_size -1). status=approved.
+app.put('/api/exchanges/:id/approve', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
+        if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
+        if (ex.status !== 'pending') return res.status(400).json({ error: `Hanya exchange 'pending' yang bisa di-approve (sekarang: ${ex.status})` });
+
+        const result = await withTransaction(async (client) => {
+            const invRes = await client.query(
+                'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                [ex.product_id, ex.to_size, ex.color, ex.variant_type]
+            );
+            const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+            if (stockBefore < ex.quantity) {
+                const err = new Error(`Stok size ${ex.to_size} tidak cukup (tersedia ${stockBefore}, butuh ${ex.quantity})`);
+                err.statusCode = 400;
+                throw err;
+            }
+            const stockAfter = stockBefore - ex.quantity;
+            await client.query(
+                `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                [ex.quantity, ex.product_id, ex.to_size, ex.color, ex.variant_type]
+            );
+            await client.query(
+                `INSERT INTO stock_movements
+                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                 VALUES ($1,$2,$3,$4,'exchange_replacement_out',$5,$6,$7,$8,$9,$10)`,
+                [ex.product_id, ex.to_size, ex.color, ex.variant_type,
+                 -ex.quantity, stockBefore, stockAfter,
+                 `Reservasi tukar size #${ex.id}`, ex.order_id, req.user.username]
+            );
+            await client.query(
+                `UPDATE exchanges SET status='approved', updated_at=NOW() WHERE id=$1`, [ex.id]
+            );
+            return await client.query('SELECT * FROM exchanges WHERE id=$1', [ex.id]);
+        });
+        res.json({ message: `Tukar size disetujui — stok ${ex.to_size} direservasi`, exchange: result.rows[0] });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// PUT /api/exchanges/:id/receive-return — old item physically returned.
+// size_mismatch → stok jual +qty; defect → stock_reject +qty.
+app.put('/api/exchanges/:id/receive-return', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
+        if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
+        if (ex.status !== 'approved') return res.status(400).json({ error: `Barang retur hanya bisa diterima saat status 'approved' (sekarang: ${ex.status})` });
+        if (ex.return_received) return res.status(400).json({ error: 'Barang retur sudah pernah diterima' });
+
+        const isDefect = ex.reason === 'defect';
+        const result = await withTransaction(async (client) => {
+            const col = isDefect ? 'stock_reject' : 'stock';
+            const invRes = await client.query(
+                `SELECT ${col} AS val FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE`,
+                [ex.product_id, ex.from_size, ex.color, ex.variant_type]
+            );
+            const before = invRes.rows[0] ? parseInt(invRes.rows[0].val || 0) : 0;
+            const after = before + ex.quantity;
+            // Upsert: row may not exist for this size/color combo
+            await client.query(
+                `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject)
+                 VALUES ($1,$2,$3,$4,$5,$6)
+                 ON CONFLICT(product_id, size, color, variant_type)
+                 DO UPDATE SET ${col} = inventory.${col} + $7`,
+                [ex.product_id, ex.from_size, ex.color, ex.variant_type,
+                 isDefect ? 0 : ex.quantity, isDefect ? ex.quantity : 0, ex.quantity]
+            );
+            await client.query(
+                `INSERT INTO stock_movements
+                 (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user, is_reject)
+                 VALUES ($1,$2,$3,$4,'exchange_return_in',$5,$6,$7,$8,$9,$10,$11)`,
+                [ex.product_id, ex.from_size, ex.color, ex.variant_type,
+                 ex.quantity, before, after,
+                 `Retur tukar size #${ex.id}${isDefect ? ' (DEFECT → reject)' : ''}`, ex.order_id, req.user.username, isDefect]
+            );
+            await client.query(
+                `UPDATE exchanges SET return_received=TRUE, return_received_at=NOW(), updated_at=NOW() WHERE id=$1`, [ex.id]
+            );
+            return await client.query('SELECT * FROM exchanges WHERE id=$1', [ex.id]);
+        });
+        res.json({
+            message: isDefect
+                ? `Barang retur diterima → masuk stok reject (size ${ex.from_size})`
+                : `Barang retur diterima → stok jual ${ex.from_size} +${ex.quantity}`,
+            exchange: result.rows[0]
+        });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// PUT /api/exchanges/:id/complete — replacement shipped + cycle done. Requires return received.
+app.put('/api/exchanges/:id/complete', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
+        if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
+        if (ex.status !== 'approved') return res.status(400).json({ error: `Hanya exchange 'approved' yang bisa diselesaikan (sekarang: ${ex.status})` });
+        if (!ex.return_received) return res.status(400).json({ error: 'Barang retur belum diterima. Terima barang retur dulu sebelum menyelesaikan.' });
+
+        const updated = await dbGet(
+            `UPDATE exchanges SET status='completed', replacement_shipped_at=NOW(), completed_at=NOW(), updated_at=NOW()
+             WHERE id=$1 RETURNING *`, [ex.id]
+        );
+        await safeWA(
+            `🔄 *TUKAR SIZE SELESAI*\n\nPesanan ${ex.customer_name || '-'} — size ${ex.from_size} → ${ex.to_size} (×${ex.quantity}). Barang pengganti sudah dikirim.`,
+            'exchange-complete'
+        );
+        res.json({ message: 'Tukar size selesai', exchange: updated });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/exchanges/:id/cancel — cancel pending/approved. Reverses any stock effects.
+app.put('/api/exchanges/:id/cancel', requireAuth(['admin']), upload.none(), async (req, res) => {
+    try {
+        const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
+        if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
+        if (ex.status === 'completed') return res.status(400).json({ error: 'Tukar size sudah selesai, tidak bisa dibatalkan' });
+        if (ex.status === 'cancelled') return res.status(400).json({ error: 'Tukar size sudah dibatalkan' });
+        const { reason } = req.body;
+
+        await withTransaction(async (client) => {
+            if (ex.status === 'approved') {
+                // Reverse replacement reservation: to_size stock += qty
+                const r1 = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [ex.product_id, ex.to_size, ex.color, ex.variant_type]
+                );
+                const b1 = r1.rows[0] ? parseInt(r1.rows[0].stock) : 0;
+                await client.query(
+                    `UPDATE inventory SET stock = stock + $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                    [ex.quantity, ex.product_id, ex.to_size, ex.color, ex.variant_type]
+                );
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'exchange_replacement_out',$5,$6,$7,$8,$9,$10)`,
+                    [ex.product_id, ex.to_size, ex.color, ex.variant_type,
+                     ex.quantity, b1, b1 + ex.quantity,
+                     `[BATAL] reservasi tukar size #${ex.id} dikembalikan`, ex.order_id, req.user.username]
+                );
+
+                // If return was already received, reverse that too
+                if (ex.return_received) {
+                    const isDefect = ex.reason === 'defect';
+                    const col = isDefect ? 'stock_reject' : 'stock';
+                    const r2 = await client.query(
+                        `SELECT ${col} AS val FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE`,
+                        [ex.product_id, ex.from_size, ex.color, ex.variant_type]
+                    );
+                    const b2 = r2.rows[0] ? parseInt(r2.rows[0].val || 0) : 0;
+                    await client.query(
+                        `UPDATE inventory SET ${col} = ${col} - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                        [ex.quantity, ex.product_id, ex.from_size, ex.color, ex.variant_type]
+                    );
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user, is_reject)
+                         VALUES ($1,$2,$3,$4,'exchange_return_in',$5,$6,$7,$8,$9,$10,$11)`,
+                        [ex.product_id, ex.from_size, ex.color, ex.variant_type,
+                         -ex.quantity, b2, b2 - ex.quantity,
+                         `[BATAL] retur tukar size #${ex.id} ditarik kembali`, ex.order_id, req.user.username, isDefect]
+                    );
+                }
+            }
+            await client.query(
+                `UPDATE exchanges SET status='cancelled',
+                                      note = COALESCE(NULLIF(note,''),'') || E'\n[Cancelled] ' || $1,
+                                      updated_at=NOW() WHERE id=$2`,
+                [reason || '(tanpa alasan)', ex.id]
+            );
+        });
+        res.json({ message: 'Tukar size dibatalkan' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
