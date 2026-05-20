@@ -408,6 +408,8 @@ async function initDB() {
     // Migrate: per-item bordir flags on order_items (so invoice can derive base price per item)
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_nama BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_logo BOOLEAN DEFAULT FALSE`);
+    // Bonus item — gift, charged Rp 0 (product + bordir all free). Stock still deducted.
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_bonus BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_by TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT DEFAULT NULL`);
     // Migrate: order channel & payment method
@@ -1673,10 +1675,14 @@ app.post('/api/orders', async (req, res) => {
         const itemDetails = [];
         for (const item of items) {
             const product = await dbGet('SELECT * FROM products WHERE id = $1', [item.product_id]);
-            // Per-item price includes base product price + per-item embroidery cost
-            const itemEmbroidery = (item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0);
-            const unitPrice = product.price + itemEmbroidery;
-            itemDetails.push({ ...item, price: unitPrice, product_name: product.name, base_price: product.price, embroidery_cost: itemEmbroidery });
+            // Per-item price = base product price + per-item embroidery cost.
+            // Bonus item (gift): entire line is free (product + bordir = Rp 0). Stock
+            // is still deducted later — only the price is zeroed.
+            const isBonus = item.is_bonus === true;
+            const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0));
+            const basePrice = isBonus ? 0 : product.price;
+            const unitPrice = basePrice + itemEmbroidery;
+            itemDetails.push({ ...item, is_bonus: isBonus, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery });
             productTotal += unitPrice * item.quantity;
         }
 
@@ -1747,11 +1753,11 @@ app.post('/api/orders', async (req, res) => {
 
             for (const item of itemDetails) {
                 await client.query(
-                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
                     [newOrderId, item.product_id, item.size, item.color,
                         item.variant_type || 'null', item.quantity, item.price,
-                        item.bordir_nama || false, item.bordir_logo || false]
+                        item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false]
                 );
             }
             return newOrderId;
@@ -1763,7 +1769,8 @@ app.post('/api/orders', async (req, res) => {
             let line = `• ${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) x${i.quantity}`;
             if (i.bordir_nama) line += ` [Bordir Nama]`;
             if (i.bordir_logo) line += ` [Bordir Logo]`;
-            line += ` = Rp ${(i.price * i.quantity).toLocaleString('id-ID')}`;
+            if (i.is_bonus) line += ` [BONUS]`;
+            line += ` = ${i.is_bonus ? 'GRATIS' : 'Rp ' + (i.price * i.quantity).toLocaleString('id-ID')}`;
             return line;
         }).join('\n');
 

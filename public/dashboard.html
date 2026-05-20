@@ -251,6 +251,11 @@
     .wa-bordir-price { font-size: 10px; color: rgba(255,255,255,0.25); margin-left: auto; }
     .wa-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 6px; display: block; }
     .wa-optional { font-weight: 400; color: rgba(255,255,255,0.25); }
+    .wa-bonus-pill { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px; border-radius: 8px; border: 1px solid rgba(251,191,36,0.18); background: rgba(251,191,36,0.04); cursor: pointer; transition: border-color 0.15s ease-out, background-color 0.15s ease-out; user-select: none; }
+    .wa-bonus-pill:hover { border-color: rgba(251,191,36,0.35); }
+    .wa-bonus-pill.active { border-color: rgba(251,191,36,0.55); background: rgba(251,191,36,0.1); }
+    .wa-bonus-pill.active .wa-bordir-box { border-color: #fbbf24; background: #fbbf24; }
+    .wa-bonus-pill.active .wa-bordir-text { color: rgba(253,230,138,0.95); }
 
     /* ── Inventory Grid View (spreadsheet style) ─────────────────────────── */
     .inv-view-toggle { display: inline-flex; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 2px; gap: 2px; }
@@ -4076,13 +4081,15 @@ async function viewOrder(id) {
                     ? `<img loading="lazy" decoding="async" src="${imgSrc}" class="w-14 h-16 rounded-lg object-cover object-top flex-shrink-0" onerror="this.style.display='none'">`
                     : `<div class="w-14 h-16 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-shirt text-white/20"></i></div>`}
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm">${i.product_name}</p>
+                    <p class="font-semibold text-sm">${i.product_name}
+                        ${i.is_bonus ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/25">🎁 BONUS</span>' : ''}
+                    </p>
                     <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}
                         ${canEditSize ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
                     </p>
-                    <p class="text-xs text-white/30 mt-0.5">@Rp ${fmt(i.price)}/pcs</p>
+                    <p class="text-xs text-white/30 mt-0.5">${i.is_bonus ? 'Gratis (bonus)' : '@Rp ' + fmt(i.price) + '/pcs'}</p>
                 </div>
-                <p class="text-green-400 font-bold text-sm shrink-0">Rp ${fmt(i.price*i.quantity)}</p>
+                <p class="${i.is_bonus ? 'text-amber-300' : 'text-green-400'} font-bold text-sm shrink-0">${i.is_bonus ? 'GRATIS' : 'Rp ' + fmt(i.price*i.quantity)}</p>
             </div>`;
         }).join('');
 
@@ -5707,6 +5714,13 @@ function waAddItem() {
                     <input type="hidden" id="wa-bordir-logo-${idx}" value="false" />
                 </div>
             </div>
+            <!-- Bonus toggle: item gratis (produk + bordir Rp 0), stok tetap dikurangi -->
+            <div class="wa-bonus-pill" id="wa-bonus-pill-${idx}" onclick="waToggleBonus(${idx})">
+                <span class="wa-bordir-box" id="wa-bonus-box-${idx}"></span>
+                <span class="wa-bordir-text">🎁 Jadikan Bonus (Gratis)</span>
+                <span class="wa-bordir-price" id="wa-bonus-hint-${idx}">tidak ditagih</span>
+            </div>
+            <input type="hidden" id="wa-bonus-${idx}" value="false" />
             <!-- Sub-form Bordir Nama -->
             <div id="wa-bordir-nama-fields-${idx}" class="hidden mt-2 p-3 rounded-xl space-y-2" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
                 <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(196,181,253,0.8);">✏️ Detail Bordir Nama</p>
@@ -5760,6 +5774,16 @@ function waAddItem() {
 function waRemoveItem(idx) {
     const el = document.getElementById(`wa-item-${idx}`);
     if (el) el.remove();
+    waUpdateTotal();
+}
+
+function waToggleBonus(idx) {
+    const pill   = document.getElementById(`wa-bonus-pill-${idx}`);
+    const hidden = document.getElementById(`wa-bonus-${idx}`);
+    if (!pill || !hidden) return;
+    const nowActive = !pill.classList.contains('active');
+    pill.classList.toggle('active', nowActive);
+    hidden.value = nowActive ? 'true' : 'false';
     waUpdateTotal();
 }
 
@@ -5911,6 +5935,8 @@ function waUpdateTotal() {
         const idx = item.id.replace('wa-item-', '');
         const prodEl = document.getElementById(`wa-prod-${idx}`);
         if (!prodEl || !prodEl.value) return;
+        const isBonus = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
+        if (isBonus) return; // bonus item: free, excluded from total
         const price = parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? 20000 : 0;
@@ -5978,6 +6004,7 @@ async function waSubmitOrder() {
 
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
+        const isBonus    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
 
         items.push({
             product_id:   parseInt(productId),
@@ -5987,6 +6014,7 @@ async function waSubmitOrder() {
             quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
             bordir_nama:  bordirNama,
             bordir_logo:  bordirLogo,
+            is_bonus:     isBonus,
         });
 
         if (bordirNama || bordirLogo) {
@@ -6039,9 +6067,11 @@ async function waSubmitOrder() {
             const prod = waProducts.find(p => p.id === it.product_id);
             const price = prod ? prod.price : 0;
             const embCost = (it.bordir_nama ? 20000 : 0) + (it.bordir_logo ? 30000 : 0);
-            let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = Rp ${((price + embCost) * it.quantity).toLocaleString('id-ID')}`;
+            const lineTotal = it.is_bonus ? 0 : (price + embCost) * it.quantity;
+            let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : 'Rp ' + lineTotal.toLocaleString('id-ID')}`;
             if (it.bordir_nama) line += ' [Bordir Nama]';
             if (it.bordir_logo) line += ' [Bordir Logo]';
+            if (it.is_bonus) line += ' [BONUS]';
             return line;
         }).join('\n');
 
@@ -6155,19 +6185,24 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     let totalBordirNamaQty = 0;
     let totalBordirLogoQty = 0;
     items.forEach(item => {
-        // Derive base garment price (stored price includes embroidery cost)
-        const embCost = (item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0);
-        const basePrice = (item.price || 0) - embCost;
+        const isBonus = item.is_bonus === true;
+        // Derive base garment price (stored price includes embroidery cost).
+        // Bonus item: entirely free — price 0, and its bordir is NOT charged.
+        const embCost = isBonus ? 0 : ((item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0));
+        const basePrice = isBonus ? 0 : ((item.price || 0) - embCost);
         const qty = item.quantity || 1;
-        productSubtotal += basePrice * qty;
-        if (item.bordir_nama) totalBordirNamaQty += qty;
-        if (item.bordir_logo) totalBordirLogoQty += qty;
+        if (!isBonus) {
+            productSubtotal += basePrice * qty;
+            if (item.bordir_nama) totalBordirNamaQty += qty;
+            if (item.bordir_logo) totalBordirLogoQty += qty;
+        }
 
+        const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
         itemRowsHTML += `<tr>
-            <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}</td>
-            <td>${fmtRp(basePrice)}</td>
+            <td>${item.product_name || 'Produk'} <strong>${item.color || ''}</strong> Size: ${item.size || ''}${bonusTag}</td>
+            <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
-            <td>${fmtRp(basePrice * qty)}</td>
+            <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>
         </tr>`;
     });
     // Consolidated bordir rows — max 2 lines regardless of how many items have bordir
