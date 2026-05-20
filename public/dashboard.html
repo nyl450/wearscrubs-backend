@@ -4066,6 +4066,8 @@ async function viewOrder(id) {
         </div>`;
 
         // ── Items with product image ──────────────────────────────────────────
+        // Size editable only before shipment (not shipped/done/cancelled).
+        const canEditSize = !['shipped','done','cancelled'].includes(o.order_status);
         const itemsHTML = (o.items||[]).map(i => {
             const imgSrc = resolvePhoto(i.photo);
             return `
@@ -4075,7 +4077,9 @@ async function viewOrder(id) {
                     : `<div class="w-14 h-16 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-shirt text-white/20"></i></div>`}
                 <div class="flex-1 min-w-0">
                     <p class="font-semibold text-sm">${i.product_name}</p>
-                    <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}</p>
+                    <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}
+                        ${canEditSize ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
+                    </p>
                     <p class="text-xs text-white/30 mt-0.5">@Rp ${fmt(i.price)}/pcs</p>
                 </div>
                 <p class="text-green-400 font-bold text-sm shrink-0">Rp ${fmt(i.price*i.quantity)}</p>
@@ -5162,6 +5166,23 @@ async function cancelExchangeRecord(id) {
         await apiFetch(`/api/exchanges/${id}/cancel`, { method: 'PUT', body: fd });
         toast('Tukar size dibatalkan');
         await loadExchanges();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+// ── Edit item size (pre-shipment, direct on order) ─────────────────────────
+async function editItemSize(orderId, itemId, currentSize) {
+    const toSize = prompt(`Ubah size dari "${currentSize}" ke:\n\n(stok akan otomatis disesuaikan jika order sudah dibayar)`, '');
+    if (toSize === null) return;
+    const v = toSize.trim();
+    if (!v) { toast('Size baru kosong', true); return; }
+    if (v === currentSize) { toast('Size sama, tidak ada perubahan', true); return; }
+    try {
+        const fd = new FormData();
+        fd.append('to_size', v);
+        const res = await apiFetch(`/api/orders/${orderId}/items/${itemId}/size`, { method: 'PUT', body: fd });
+        toast('✅ ' + (res.message || 'Size diubah'));
+        if (typeof closeOrderModal === 'function') closeOrderModal();
+        viewOrder(orderId);
     } catch(e) { toast('Gagal: ' + e.message, true); }
 }
 

@@ -483,7 +483,7 @@ async function initDB() {
     // Extend movement_type CHECK to allow reject + exchange movement types
     await dbRun(`ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check`);
     await dbRun(`ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_movement_type_check
-        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal','exchange_replacement_out','exchange_return_in'))`);
+        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal','exchange_replacement_out','exchange_return_in','order_edit_adjust'))`);
 
     // ── Seed default admin ────────────────────────────────────────────────────
     // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
@@ -2816,6 +2816,80 @@ app.put('/api/exchanges/:id/cancel', requireAuth(['admin']), upload.none(), asyn
         });
         res.json({ message: 'Tukar size dibatalkan' });
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/orders/:id/items/:itemId/size — edit item size BEFORE shipment.
+// Body: { to_size }. Stock-aware: if order already paid, stock was deducted at
+// confirm-payment, so we restore old size (+qty) and deduct new size (-qty).
+// If still pending, no stock movement (deduction happens later at confirm-payment).
+app.put('/api/orders/:id/items/:itemId/size', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (['shipped','done','cancelled'].includes(order.order_status))
+            return res.status(400).json({ error: 'Barang sudah dikirim/selesai — gunakan fitur Tukar Size, bukan edit langsung' });
+
+        const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [req.params.itemId, order.id]);
+        if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
+
+        const toSize = String(req.body.to_size || '').trim();
+        if (!toSize) return res.status(400).json({ error: 'Size baru wajib diisi' });
+        if (toSize === String(item.size).trim()) return res.status(400).json({ error: 'Size baru sama dengan size sekarang' });
+
+        const isPaid = order.payment_status === 'paid';
+        await withTransaction(async (client) => {
+            if (isPaid) {
+                // Deduct new size first (with availability check), then restore old size.
+                const newRes = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [item.product_id, toSize, item.color, item.variant_type]
+                );
+                const newBefore = newRes.rows[0] ? parseInt(newRes.rows[0].stock) : 0;
+                if (newBefore < item.quantity) {
+                    const e = new Error(`Stok size ${toSize} tidak cukup (tersedia ${newBefore}, butuh ${item.quantity})`);
+                    e.statusCode = 400; throw e;
+                }
+                await client.query(
+                    `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                    [item.quantity, item.product_id, toSize, item.color, item.variant_type]
+                );
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'order_edit_adjust',$5,$6,$7,$8,$9,$10)`,
+                    [item.product_id, toSize, item.color, item.variant_type,
+                     -item.quantity, newBefore, newBefore - item.quantity,
+                     `Edit size ${item.size}→${toSize} (${order.order_code})`, order.id, req.user.username]
+                );
+
+                // Restore old size
+                const oldRes = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [item.product_id, item.size, item.color, item.variant_type]
+                );
+                const oldBefore = oldRes.rows[0] ? parseInt(oldRes.rows[0].stock) : 0;
+                await client.query(
+                    `INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject)
+                     VALUES ($1,$2,$3,$4,$5,0)
+                     ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = inventory.stock + $5`,
+                    [item.product_id, item.size, item.color, item.variant_type, item.quantity]
+                );
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'order_edit_adjust',$5,$6,$7,$8,$9,$10)`,
+                    [item.product_id, item.size, item.color, item.variant_type,
+                     item.quantity, oldBefore, oldBefore + item.quantity,
+                     `Edit size ${item.size}→${toSize} — dikembalikan (${order.order_code})`, order.id, req.user.username]
+                );
+            }
+            await client.query(
+                `UPDATE order_items SET size = $1 WHERE id = $2`, [toSize, item.id]
+            );
+            await client.query(`UPDATE orders SET updated_at = NOW() WHERE id = $1`, [order.id]);
+        });
+        res.json({ message: `Size diubah ${item.size} → ${toSize}${isPaid ? ' (stok disesuaikan)' : ''}` });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
 
