@@ -4088,8 +4088,8 @@ async function viewOrder(id) {
 
         // ── Bordir details ────────────────────────────────────────────────────
         const waLink = `https://wa.me/${normalizeWAPhone(o.customer_phone)}`;
-        // Check if logo was already uploaded via checkout (stored as base64 in emb.value)
-        const logoAlreadyUploaded = bordirDetails.some(e => e.type === 'logo' && e.value && e.value.startsWith('data:image/'));
+        // Logo provided if value is an actual image — base64 (legacy) or Storage URL (new).
+        const logoAlreadyUploaded = bordirDetails.some(e => e.type === 'logo' && e.value && (e.value.startsWith('data:image/') || e.value.startsWith('http')));
         const bordirHTML = bordirDetails.length ? `
         <div class="bg-purple-900/20 border border-purple-500/20 rounded-xl p-4">
             <div class="flex items-center justify-between mb-3">
@@ -4110,7 +4110,7 @@ async function viewOrder(id) {
             </div>
             ${bordirDetails.map((e, idx) => {
                 const posLbl = e.position === 'kanan' ? 'Kanan Dada' : e.position === 'kiri' ? 'Kiri Dada' : '';
-                const isLogoUploaded = e.type === 'logo' && e.value && e.value.startsWith('data:image/');
+                const isLogoUploaded = e.type === 'logo' && e.value && (e.value.startsWith('data:image/') || e.value.startsWith('http'));
                 // Stable filename for download — order_code + item label + index
                 const cleanLabel = (e.item_label || '').replace(/[^a-zA-Z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
                 const dlFilename = `bordir-logo-${o.order_code}-${cleanLabel}-${idx+1}`;
@@ -6212,8 +6212,8 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 </div>`;
             } else {
                 const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
-                // Use base64 from emb.value (checkout upload), or bordirRefPhoto (WA form upload), or placeholder
-                const imgSrc = (emb.value && emb.value.startsWith('data:image/')) ? emb.value : (bordirRefPhoto || null);
+                // Use logo from emb.value — base64 (legacy) or Storage URL (new) — else WA form upload, else placeholder
+                const imgSrc = (emb.value && (emb.value.startsWith('data:image/') || emb.value.startsWith('http'))) ? emb.value : (bordirRefPhoto || null);
                 const imgTag = imgSrc
                     ? `<img loading="lazy" decoding="async" src="${imgSrc}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
                     : `<div class="bordir-placeholder">Logo dikirim<br>via WA</div>`;

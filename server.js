@@ -178,6 +178,41 @@ async function uploadToSupabase(buffer, originalname, folder = 'products') {
     }
 }
 
+// Parse a base64 data URL (data:image/png;base64,XXXX) into { buffer, ext }.
+// Returns null if the string is not a base64 image data URL.
+function dataUrlToBuffer(dataUrl) {
+    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl || '');
+    if (!m) return null;
+    const mime = m[1];
+    const ext = mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp' : '.jpg';
+    try { return { buffer: Buffer.from(m[2], 'base64'), ext }; }
+    catch { return null; }
+}
+
+// Upload any base64 logo values inside embroidery_details to Storage, replacing
+// them with permanent URLs. Keeps base64 as fallback if upload fails (never blocks
+// the order). Prevents multi-MB base64 from bloating the orders table.
+async function externalizeEmbroideryLogos(embDetails) {
+    if (!Array.isArray(embDetails)) return embDetails;
+    const out = [];
+    for (const e of embDetails) {
+        if (e && e.type === 'logo' && typeof e.value === 'string' && e.value.startsWith('data:image/')) {
+            const parsed = dataUrlToBuffer(e.value);
+            if (parsed) {
+                try {
+                    const url = await uploadToSupabase(parsed.buffer, `logo${parsed.ext}`, 'orders');
+                    out.push({ ...e, value: url });
+                    continue;
+                } catch (err) {
+                    console.error('Logo externalize failed, keeping base64:', err?.message || err);
+                }
+            }
+        }
+        out.push(e);
+    }
+    return out;
+}
+
 // Multer: memoryStorage (buffer di RAM, lalu kita upload ke Supabase)
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -1674,9 +1709,15 @@ app.post('/api/orders', async (req, res) => {
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
         const hasBordirNama = itemDetails.some(i => i.bordir_nama);
 
-        // Auto-mark logo as provided if customer already uploaded via checkout (stored as base64 in emb.value)
-        const logoAlreadyProvided = hasBordirLogo && Array.isArray(embroidery_details) &&
-            embroidery_details.some(e => e.type === 'logo' && typeof e.value === 'string' && e.value.startsWith('data:image/'));
+        // Externalize base64 logos → Storage URLs (fallback to base64 if upload fails)
+        // so the orders table doesn't store multi-MB images inline.
+        const embDetailsStored = await externalizeEmbroideryLogos(embroidery_details);
+
+        // Logo is "provided" when an actual image exists (URL or remaining base64),
+        // as opposed to the "kirim via WA" placeholder text.
+        const logoAlreadyProvided = hasBordirLogo && Array.isArray(embDetailsStored) &&
+            embDetailsStored.some(e => e.type === 'logo' && typeof e.value === 'string' &&
+                (e.value.startsWith('http') || e.value.startsWith('data:image/')));
 
         const orderCode = generateOrderCode(order_source || 'website');
 
@@ -1691,7 +1732,7 @@ app.post('/api/orders', async (req, res) => {
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
-                 embroidery_details ? JSON.stringify(embroidery_details) : null,
+                 embDetailsStored ? JSON.stringify(embDetailsStored) : null,
                  hasBordirLogo, hasBordirNama,
                  (hasBordirLogo || hasBordirNama) ? 'pending' : null,
                  notes || '',
@@ -1726,16 +1767,19 @@ app.post('/api/orders', async (req, res) => {
             return line;
         }).join('\n');
 
-        // Helper: strip base64 image values before including in WA messages (prevents multi-MB payloads)
+        // Helper: keep WA messages light. base64 → label; Storage URL → show the link
+        // (admin can open it); otherwise the placeholder text.
         const safeEmbVal = (e) => {
             if (e.type === 'logo') {
-                const isBase64 = typeof e.value === 'string' && e.value.startsWith('data:image/');
-                return isBase64 ? '(Logo sudah diupload via website)' : (e.value || 'kirim via WA');
+                const v = typeof e.value === 'string' ? e.value : '';
+                if (v.startsWith('data:image/')) return '(Logo sudah diupload)';
+                if (v.startsWith('http')) return v;
+                return v || 'kirim via WA';
             }
             return e.value || '';
         };
-        const embroiderySection = embroidery_details && embroidery_details.length > 0
-            ? `\n\n🧵 *Detail Bordir:*\n` + embroidery_details.map(e =>
+        const embroiderySection = embDetailsStored && embDetailsStored.length > 0
+            ? `\n\n🧵 *Detail Bordir:*\n` + embDetailsStored.map(e =>
                 `• ${e.item_label}: ${e.type === 'nama' ? 'Nama: ' + safeEmbVal(e) : 'Logo: ' + safeEmbVal(e)}`
               ).join('\n')
             : '';
@@ -1765,8 +1809,8 @@ app.post('/api/orders', async (req, res) => {
 
         // ⚠️ Immediate reminder if bordir logo ordered
         if (hasBordirLogo) {
-            const logoItems = embroidery_details
-                ? embroidery_details.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${safeEmbVal(e)}`).join('\n')
+            const logoItems = embDetailsStored
+                ? embDetailsStored.filter(e => e.type === 'logo').map(e => `• ${e.item_label}: ${safeEmbVal(e)}`).join('\n')
                 : '(lihat detail pesanan)';
             try { await sendWANotification(
                 `🔔 *REMINDER: BORDIR LOGO - #${orderCode}*\n\n` +
