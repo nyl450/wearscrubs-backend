@@ -6439,10 +6439,25 @@ async function downloadInvoicePDF(orderCode) {
     };
     if (btn) { btn.innerHTML = '<span>⏳</span><span class="invoice-btn-label">Generating...</span>'; btn.disabled = true; }
     const filename = `Invoice-Wearscrubs-${orderCode}.pdf`;
+    // Render from an isolated clone pinned to top-left (margin:0, width:794) instead of
+    // the live element. The live one sits centered (margin:0 auto) inside a wide scroll
+    // container on desktop, which gave html2canvas a large left offset → content clipped.
+    // The clone removes all centering/padding so capture starts at x=0 on every screen.
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:1;';
+    const clone = el.cloneNode(true);
+    clone.style.margin = '0';
+    clone.style.width = '794px';
+    clone.style.maxWidth = '794px';
+    clone.style.boxShadow = 'none';
+    clone.style.borderRadius = '0';
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
+    const cleanupHolder = () => { if (holder.parentNode) holder.parentNode.removeChild(holder); };
     try {
-        // Generate PDF as Blob (not auto-saved) so we can use Web Share API on mobile
-        // windowWidth/width forces desktop layout (794px) even when generated on mobile,
-        // so mobile-stacking media queries (<600px) don't apply → PDF identical across devices
+        // Generate PDF as Blob (not auto-saved) so we can use Web Share API on mobile.
+        // windowWidth/width + x/scrollX:0 force a consistent 794px desktop layout and
+        // a zero-offset capture origin on every device.
         const pdfBlob = await html2pdf().set({
             margin: 0,
             filename,
@@ -6453,17 +6468,14 @@ async function downloadInvoicePDF(orderCode) {
                 logging: false,
                 width: 794,
                 windowWidth: 794,
-                onclone: (doc) => {
-                    // Belt-and-suspenders: directly override mobile media query rules
-                    const target = doc.getElementById('invoice-print-area');
-                    if (target) {
-                        target.style.width = '794px';
-                        target.style.maxWidth = '794px';
-                    }
-                }
+                x: 0,
+                y: 0,
+                scrollX: 0,
+                scrollY: 0
             },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        }).from(el).outputPdf('blob');
+        }).from(clone).outputPdf('blob');
+        cleanupHolder();
 
         // Mobile: use Web Share API with File (clean — no blob: URL leaks into share text)
         const file = new File([pdfBlob], filename, { type: 'application/pdf' });
@@ -6490,6 +6502,7 @@ async function downloadInvoicePDF(orderCode) {
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
+        cleanupHolder();
         alert('Gagal download PDF. Gunakan tombol Print sebagai alternatif.');
     }
     restoreBtn();
