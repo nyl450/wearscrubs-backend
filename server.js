@@ -2453,6 +2453,8 @@ app.put('/api/refunds/:id/cancel', requireAuth(['admin']), async (req, res) => {
         const refund = await dbGet('SELECT status FROM refunds WHERE id = $1', [req.params.id]);
         if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
         if (refund.status === 'completed') return res.status(400).json({ error: 'Refund sudah selesai, tidak bisa dibatalkan' });
+        if (refund.status === 'transferred') return res.status(400).json({ error: 'Refund sudah ditransfer, tidak bisa dibatalkan. Buat refund koreksi/manual adjustment jika ada kesalahan.' });
+        if (refund.status === 'cancelled') return res.status(400).json({ error: 'Refund sudah dibatalkan' });
         const { reason } = req.body;
         await dbRun(
             `UPDATE refunds SET status = 'cancelled', note = COALESCE(NULLIF(note, ''), '') || E'\n[Cancelled] ' || $1 WHERE id = $2`,
