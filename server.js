@@ -1565,9 +1565,19 @@ app.get('/api/orders/:id', requireAuth(), async (req, res) => {
         // Join product name + fetch first photo for each item
         order.items = await dbAll(
             `SELECT oi.*, p.name as product_name,
-                    (SELECT pv.photo_url FROM product_variants pv
-                     WHERE pv.product_id = oi.product_id AND pv.color = oi.color
-                     LIMIT 1) as photo
+                    COALESCE(
+                        -- Exact match on variant_type (e.g. lengan pendek vs panjang), prefer slot 1.
+                        -- NULLIF maps the string 'null' (no-variant sentinel) to real NULL;
+                        -- IS NOT DISTINCT FROM treats NULL=NULL as a match.
+                        (SELECT pv.photo_url FROM product_variants pv
+                         WHERE pv.product_id = oi.product_id AND pv.color = oi.color
+                           AND pv.variant_type IS NOT DISTINCT FROM NULLIF(oi.variant_type, 'null')
+                         ORDER BY pv.slot ASC NULLS LAST LIMIT 1),
+                        -- Fallback: color-only (so photo is never null if a variant row exists)
+                        (SELECT pv.photo_url FROM product_variants pv
+                         WHERE pv.product_id = oi.product_id AND pv.color = oi.color
+                         ORDER BY pv.slot ASC NULLS LAST LIMIT 1)
+                    ) as photo
              FROM order_items oi
              JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
             [order.id]
@@ -2597,8 +2607,10 @@ app.post('/api/orders/:id/exchanges', requireAuth(['admin','manager']), upload.n
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.payment_status !== 'paid')
             return res.status(400).json({ error: 'Tukar size hanya untuk pesanan yang sudah dibayar' });
-        if (order.order_status === 'cancelled')
-            return res.status(400).json({ error: 'Pesanan sudah dibatalkan, tidak bisa tukar size' });
+        // Tukar size hanya setelah barang diterima customer (status 'done').
+        // Sebelum dikirim, admin cukup ubah size langsung di pesanan.
+        if (order.order_status !== 'done')
+            return res.status(400).json({ error: 'Tukar size hanya bisa setelah barang diterima customer. Sebelum dikirim, ubah size langsung di pesanan.' });
 
         const { order_item_id, to_size, reason = 'size_mismatch', note, shipping_fee } = req.body;
         const qty = parseInt(req.body.quantity, 10) || 1;
