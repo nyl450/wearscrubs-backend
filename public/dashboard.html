@@ -257,6 +257,48 @@
     .wa-bonus-pill.active .wa-bordir-box { border-color: #fbbf24; background: #fbbf24; }
     .wa-bonus-pill.active .wa-bordir-text { color: rgba(253,230,138,0.95); }
 
+    /* ── WA Order Form — motion polish (Emil) ───────────────────────────────
+       Admin-facing, used many times/day → subtle + fast. Transform/opacity only. */
+
+    /* New product item — soft rise on insert (no hard pop) */
+    @keyframes waItemIn { from { opacity: 0; transform: translateY(10px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes waItemOut { to { opacity: 0; transform: translateY(-6px) scale(0.98); } }
+    #wa-items-container > [id^="wa-item-"] { animation: waItemIn 260ms var(--ease-out-strong); }
+    #wa-items-container > [id^="wa-item-"].wa-item-leaving { animation: waItemOut 180ms var(--ease-in-out-strong) forwards; pointer-events: none; }
+
+    /* Collapsible bordir sub-forms — smooth height reveal via grid-rows trick.
+       Replaces the instant display toggle that caused a reflow jump. */
+    .wa-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 240ms var(--ease-drawer); margin-top: 0 !important; }
+    .wa-collapse.wa-open { grid-template-rows: 1fr; }
+    .wa-collapse-inner { overflow: hidden; min-height: 0; }
+
+    /* Discount radio dot — scale-in instead of hard appear */
+    [id^="dot-disc-"]:not(.hidden) { animation: waPop 180ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes waPop { from { transform: scale(0); } to { transform: scale(1); } }
+    /* Discount card — narrow transition + press feedback */
+    [id^="label-disc-"] { transition: border-color 180ms ease-out, background-color 180ms ease-out, transform 140ms var(--ease-out-strong) !important; }
+    [id^="label-disc-"]:active { transform: scale(0.985); }
+
+    /* Checkmark tick — pop in (and extend to bonus pill for consistency) */
+    .wa-bordir-pill.active .wa-bordir-box::after,
+    .wa-bonus-pill.active  .wa-bordir-box::after { display: block; animation: waTick 170ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes waTick { from { transform: rotate(45deg) translate(-1px,-1px) scale(0); } to { transform: rotate(45deg) translate(-1px,-1px) scale(1); } }
+
+    /* Result panel — slide up + fade when revealed */
+    #wa-result-panel:not(.hidden) { animation: waResultIn 300ms var(--ease-out-strong); }
+    @keyframes waResultIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Photo / logo previews + bordir-ref attachment — gentle entrance */
+    #wa-photo-previews > *, [id^="wa-bordir-logo-preview-"] > * { animation: waItemIn 240ms var(--ease-out-strong); }
+    #wa-bordir-ref-section:not(.hidden) { animation: waItemIn 260ms var(--ease-out-strong); }
+
+    /* Narrow `transition: all` on WA module controls to cheap properties only */
+    #module-manual-order button,
+    #module-manual-order label[class*="cursor-pointer"] {
+        transition-property: background-color, border-color, color, transform !important;
+        transition-timing-function: var(--ease-out-strong) !important;
+    }
+
     /* ── Inventory Grid View (spreadsheet style) ─────────────────────────── */
     .inv-view-toggle { display: inline-flex; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 2px; gap: 2px; }
     .inv-view-toggle button { padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 8px; color: rgba(255,255,255,0.5); transition: all 0.15s; }
@@ -5726,7 +5768,9 @@ function waAddItem() {
             </div>
             <input type="hidden" id="wa-bonus-${idx}" value="false" />
             <!-- Sub-form Bordir Nama -->
-            <div id="wa-bordir-nama-fields-${idx}" class="hidden mt-2 p-3 rounded-xl space-y-2" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
+            <div id="wa-bordir-nama-fields-${idx}" class="wa-collapse">
+              <div class="wa-collapse-inner">
+                <div class="mt-2 p-3 rounded-xl space-y-2" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
                 <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(196,181,253,0.8);">✏️ Detail Bordir Nama</p>
                 <div>
                     <label class="wa-field-label">Nama yang dibordir <span style="color:#f87171">*</span></label>
@@ -5745,9 +5789,13 @@ function waAddItem() {
                         </select>
                     </div>
                 </div>
+                </div>
+              </div>
             </div>
             <!-- Sub-form Bordir Logo -->
-            <div id="wa-bordir-logo-fields-${idx}" class="hidden mt-2 p-3 rounded-xl space-y-2" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);">
+            <div id="wa-bordir-logo-fields-${idx}" class="wa-collapse">
+              <div class="wa-collapse-inner">
+                <div class="mt-2 p-3 rounded-xl space-y-2" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);">
                 <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(147,197,253,0.8);">🎨 Detail Bordir Logo</p>
                 <div>
                     <label class="wa-field-label">Upload Logo <span class="wa-optional">(PNG/JPG)</span></label>
@@ -5770,6 +5818,8 @@ function waAddItem() {
                         </select>
                     </div>
                 </div>
+                </div>
+              </div>
             </div>
         </div>`;
     container.appendChild(div);
@@ -5777,8 +5827,9 @@ function waAddItem() {
 
 function waRemoveItem(idx) {
     const el = document.getElementById(`wa-item-${idx}`);
-    if (el) el.remove();
-    waUpdateTotal();
+    if (!el) { waUpdateTotal(); return; }
+    el.classList.add('wa-item-leaving');
+    el.addEventListener('animationend', () => { el.remove(); waUpdateTotal(); }, { once: true });
 }
 
 function waToggleBonus(idx) {
@@ -5799,7 +5850,7 @@ function waToggleBordir(idx, type) {
     const nowActive = !pill.classList.contains('active');
     pill.classList.toggle('active', nowActive);
     hidden.value = nowActive ? 'true' : 'false';
-    if (fields) fields.classList.toggle('hidden', !nowActive);
+    if (fields) fields.classList.toggle('wa-open', nowActive);
 
     // Auto-set default positions to avoid conflict when both are active
     const namaActive = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
@@ -6159,7 +6210,7 @@ function waResetForm() {
     if (brInput) brInput.value = '';
     // Reset per-item logo previews and sub-forms
     document.querySelectorAll('[id^="wa-bordir-logo-preview-"]').forEach(el => { el.innerHTML = ''; el.classList.add('hidden'); });
-    document.querySelectorAll('[id^="wa-bordir-nama-fields-"],[id^="wa-bordir-logo-fields-"]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[id^="wa-bordir-nama-fields-"],[id^="wa-bordir-logo-fields-"]').forEach(el => el.classList.remove('wa-open'));
     window.waLastOrderId = null;
     // Reset diskon
     waSelectedDiscount = 0;
