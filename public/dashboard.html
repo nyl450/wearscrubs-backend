@@ -238,7 +238,7 @@
     /* WA Order Form — UI Enhancements */
     .wa-section-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); margin-right: 7px; vertical-align: middle; }
     .wa-item-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.06); padding: 3px 8px; border-radius: 6px; }
-    .wa-trash-btn { font-size: 11px; color: rgba(248,113,113,0.5); cursor: pointer; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(248,113,113,0.15); background: rgba(248,113,113,0.05); transition: all 0.15s; }
+    .wa-trash-btn { font-size: 11px; color: rgba(248,113,113,0.5); cursor: pointer; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(248,113,113,0.15); background: rgba(248,113,113,0.05); transition: color 0.15s ease-out, border-color 0.15s ease-out, background-color 0.15s ease-out; }
     .wa-trash-btn:hover { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.1); }
     .wa-bordir-pill { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.03); cursor: pointer; transition: border-color 0.15s, background 0.15s; user-select: none; }
     .wa-bordir-pill:hover { border-color: rgba(255,255,255,0.18); }
@@ -5668,13 +5668,13 @@ function waAddItem() {
             <div class="grid grid-cols-3 gap-2">
                 <div>
                     <label class="wa-field-label">Warna</label>
-                    <select id="wa-color-${idx}" onchange="waUpdateTotal()" class="input-sm">
+                    <select id="wa-color-${idx}" onchange="waOnColorChange(${idx})" class="input-sm">
                         <option value="">--</option>
                     </select>
                 </div>
                 <div>
                     <label class="wa-field-label">Variant</label>
-                    <select id="wa-variant-${idx}" onchange="waUpdateTotal()" class="input-sm">
+                    <select id="wa-variant-${idx}" onchange="waOnVariantChange(${idx})" class="input-sm">
                         <option value="">--</option>
                     </select>
                 </div>
@@ -5808,6 +5808,10 @@ function waHandleLogoFile(input, idx) {
     reader.readAsDataURL(file);
 }
 
+let waInventoryCache = {}; // idx → in-stock inventory rows for the selected product
+
+// Cascade: product → color → variant → size. Each level only shows options that
+// actually have stock for the upstream selection, so admin can't pick an invalid combo.
 async function waOnProductChange(idx) {
     const productId = document.getElementById(`wa-prod-${idx}`).value;
     const colorSel = document.getElementById(`wa-color-${idx}`);
@@ -5816,17 +5820,45 @@ async function waOnProductChange(idx) {
     colorSel.innerHTML = '<option value="">--</option>';
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
-    if (!productId) return;
+    delete waInventoryCache[idx];
+    if (!productId) { waUpdateTotal(); return; }
     try {
         const res = await fetch(API + `/api/inventory/${productId}`);
         const inv = await res.json();
-        const colors   = [...new Set(inv.filter(i => i.stock > 0).map(i => i.color))];
-        const variants = [...new Set(inv.filter(i => i.stock > 0).map(i => i.variant_type))];
-        const sizes    = [...new Set(inv.filter(i => i.stock > 0).map(i => i.size))];
-        colors.forEach(c   => colorSel.innerHTML   += `<option value="${c}">${c}</option>`);
-        variants.forEach(v => variantSel.innerHTML += `<option value="${v}">${v}</option>`);
-        sizes.forEach(s    => sizeSel.innerHTML    += `<option value="${s}">${s}</option>`);
+        waInventoryCache[idx] = (Array.isArray(inv) ? inv : []).filter(i => Number(i.stock) > 0);
+        const colors = [...new Set(waInventoryCache[idx].map(i => i.color))];
+        colors.forEach(c => colorSel.innerHTML += `<option value="${c}">${c}</option>`);
+        if (colors.length === 1) { colorSel.value = colors[0]; waOnColorChange(idx); return; }
     } catch(e) {}
+    waUpdateTotal();
+}
+
+function waOnColorChange(idx) {
+    const color = document.getElementById(`wa-color-${idx}`).value;
+    const variantSel = document.getElementById(`wa-variant-${idx}`);
+    const sizeSel = document.getElementById(`wa-size-${idx}`);
+    variantSel.innerHTML = '<option value="">--</option>';
+    sizeSel.innerHTML = '<option value="">--</option>';
+    const inv = waInventoryCache[idx] || [];
+    if (color) {
+        const variants = [...new Set(inv.filter(i => i.color === color).map(i => i.variant_type))];
+        variants.forEach(v => {
+            const label = (!v || v === 'null') ? 'Standar' : v;
+            variantSel.innerHTML += `<option value="${v}">${label}</option>`;
+        });
+        if (variants.length === 1) { variantSel.value = variants[0]; waOnVariantChange(idx); return; }
+    }
+    waUpdateTotal();
+}
+
+function waOnVariantChange(idx) {
+    const color = document.getElementById(`wa-color-${idx}`).value;
+    const variant = document.getElementById(`wa-variant-${idx}`).value;
+    const sizeSel = document.getElementById(`wa-size-${idx}`);
+    sizeSel.innerHTML = '<option value="">--</option>';
+    const inv = waInventoryCache[idx] || [];
+    const sizes = [...new Set(inv.filter(i => i.color === color && i.variant_type === variant).map(i => i.size))];
+    sizes.forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
     waUpdateTotal();
 }
 
@@ -5917,8 +5949,19 @@ async function waSubmitOrder() {
 
     for (const item of container.querySelectorAll('[id^="wa-item-"]')) {
         const idx       = item.id.replace('wa-item-', '');
-        const productId = document.getElementById(`wa-prod-${idx}`)?.value;
+        const prodEl    = document.getElementById(`wa-prod-${idx}`);
+        const productId = prodEl?.value;
         if (!productId) continue;
+
+        // Validate selection: color & size required; variant required if it has real options.
+        const colorEl   = document.getElementById(`wa-color-${idx}`);
+        const variantEl = document.getElementById(`wa-variant-${idx}`);
+        const sizeEl    = document.getElementById(`wa-size-${idx}`);
+        const pName     = prodEl.options[prodEl.selectedIndex]?.dataset?.name || prodEl.options[prodEl.selectedIndex]?.text || `Item #${idx}`;
+        if (!colorEl?.value) { posErrors.push(`${pName}: pilih warna dulu.`); continue; }
+        if (variantEl && variantEl.options.length > 1 && !variantEl.value) { posErrors.push(`${pName}: pilih variant dulu.`); continue; }
+        if (!sizeEl?.value) { posErrors.push(`${pName}: pilih ukuran dulu.`); continue; }
+
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
 
@@ -5961,7 +6004,7 @@ async function waSubmitOrder() {
             }
         }
     }
-    if (posErrors.length > 0) { alert('⚠️ Cek detail bordir:\n\n' + posErrors.join('\n')); return; }
+    if (posErrors.length > 0) { alert('⚠️ Lengkapi pesanan dulu:\n\n' + posErrors.join('\n')); return; }
     if (items.length === 0) { alert('Tambahkan minimal satu produk.'); return; }
 
     btn.disabled = true;
@@ -6057,6 +6100,7 @@ function waResetForm() {
     waProductPhotoBase64s = [];
     waBordirRefBase64 = null;
     waBordirLogoFiles = {};
+    waInventoryCache = {};
     const prev = document.getElementById('wa-photo-previews');
     if (prev) prev.innerHTML = '';
     const bprev = document.getElementById('wa-bordir-ref-preview');

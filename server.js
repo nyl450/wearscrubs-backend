@@ -104,6 +104,15 @@ function requireAuth(roles = []) {
     };
 }
 
+// Optional auth — decode user if a valid token is present, else null.
+// Used by public endpoints that grant extra capability to logged-in admins.
+function getOptionalUser(req) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return null;
+    try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
+}
+
 // ─── Static: serve website dari folder public/ ────────────────────────────────
 const websiteDir = path.join(__dirname, 'public');
 app.use(express.static(websiteDir));
@@ -325,6 +334,8 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_courier TEXT DEFAULT ''`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_cost INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_weight_kg INTEGER DEFAULT 0`);
+    // Migrate weight to NUMERIC so decimal kg (e.g. 1.5) isn't truncated to int.
+    await dbRun(`ALTER TABLE orders ALTER COLUMN shipping_weight_kg TYPE NUMERIC USING shipping_weight_kg::numeric`).catch(() => {});
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS embroidery_details TEXT DEFAULT NULL`);
 
     // ── Order Items ───────────────────────────────────────────────────────────
@@ -1636,16 +1647,21 @@ app.post('/api/orders', async (req, res) => {
 
         const shippingCost = parseInt(shipping_cost || 0);
 
-        // Kalkulasi diskon (hanya product total, ongkir tidak kena diskon)
+        // Kalkulasi diskon (hanya product total, ongkir tidak kena diskon).
+        // SECURITY: discount hanya boleh dari admin/manager (order WA manual).
+        // Order publik (checkout website) dipaksa 0 — cegah self-applied discount via API.
+        const authUser = getOptionalUser(req);
+        const canDiscount = authUser && ['admin','manager'].includes(authUser.role);
         const validDiscounts = [0, 5, 30];
-        const safeDiscountPct = validDiscounts.includes(parseInt(discount_percent)) ? parseInt(discount_percent) : 0;
+        const requestedPct = canDiscount ? parseInt(discount_percent) : 0;
+        const safeDiscountPct = validDiscounts.includes(requestedPct) ? requestedPct : 0;
         const discountAmount = Math.round(productTotal * safeDiscountPct / 100);
         const discountLabel = safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null;
         const total = productTotal - discountAmount + shippingCost;
 
         // Courier dipilih manual dari form, fallback ke logika kota jika tidak diisi
         const cityInfo = CITIES.find(c => c.name === shipping_city);
-        const weightKg = parseInt(shipping_weight_kg || 0);
+        const weightKg = parseFloat(shipping_weight_kg || 0);
         let autoCourier = 'JNE / J&T Reguler';
         if (cityInfo) {
             if (!cityInfo.is_dki && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
@@ -1800,26 +1816,40 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
                 [order.id, 'payment', photoUrl, req.body.note || '']
             );
 
-            // Deduct inventory + log order_out. FOR UPDATE locks the inventory row
-            // until COMMIT — prevents concurrent admins from race-confirming the same
-            // variant and over-deducting.
-            for (const item of items) {
+            // Aggregate per physical variant first — bordir splits (plain + nama + logo)
+            // share one inventory row, so summing avoids missing the true total demand.
+            const variantTotals = new Map();
+            for (const it of items) {
+                const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
+                if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
+                variantTotals.get(k).quantity += it.quantity;
+            }
+
+            // Deduct inventory + log order_out. FOR UPDATE locks the row until COMMIT.
+            // HARD check: reject confirmation if stock insufficient (prevents silent
+            // overselling — stock isn't held at order creation, only deducted here).
+            for (const v of variantTotals.values()) {
                 const invRes = await client.query(
                     'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
-                    [item.product_id, item.size, item.color, item.variant_type]
+                    [v.product_id, v.size, v.color, v.variant_type]
                 );
                 const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+                if (stockBefore < v.quantity) {
+                    const e = new Error(`Stok tidak cukup untuk konfirmasi: ${v.color}/${v.variant_type}/${v.size} tersisa ${stockBefore}, dibutuhkan ${v.quantity}. Sesuaikan stok atau batalkan pesanan.`);
+                    e.statusCode = 409;
+                    throw e;
+                }
+                const stockAfter = stockBefore - v.quantity;
                 await client.query(
-                    `UPDATE inventory SET stock = GREATEST(0, stock - $1) WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
-                    [item.quantity, item.product_id, item.size, item.color, item.variant_type]
+                    `UPDATE inventory SET stock = stock - $1 WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
+                    [v.quantity, v.product_id, v.size, v.color, v.variant_type]
                 );
-                const stockAfter = Math.max(0, stockBefore - item.quantity);
                 await client.query(
                     `INSERT INTO stock_movements
                      (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
                      VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
-                    [item.product_id, item.size, item.color, item.variant_type,
-                     -item.quantity, stockBefore, stockAfter,
+                    [v.product_id, v.size, v.color, v.variant_type,
+                     -v.quantity, stockBefore, stockAfter,
                      `Order ${order.order_code}`, order.id, req.user.username]
                 );
             }
@@ -1859,7 +1889,7 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
         }
 
         res.json({ message: 'Pembayaran dikonfirmasi', next_status: nextStatus, photo_url: photoUrl });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
 // PUT /api/orders/:id/bordir-done  (multipart: bordir_proof photo)
