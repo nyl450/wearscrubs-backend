@@ -23,7 +23,7 @@
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } }
+            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a', softwhite: '#FAF9F5', softpanel: '#F0EFEB' } } }
         }
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -76,7 +76,7 @@
     }
     </script></head>
 
-<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white">
+<body class="bg-softwhite dark:bg-darkbg text-gray-900 dark:text-white">
 
     <!-- Header -->
     <header
@@ -155,7 +155,7 @@
 
     <!-- Mobile Drawer (slide-in from right) -->
     <div id="mobile-drawer"
-        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
+        class="fixed top-0 right-0 h-full w-full bg-softwhite dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
 
         <!-- Drawer Header -->
         <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
@@ -228,7 +228,7 @@
                 </div>
                 <div class="hero-content">
                     <span class="text-[10px] tracking-[0.3em] uppercase mb-4 text-white font-bold">New Collection</span>
-                    <h2 class="text-2xl lg:text-3xl font-light leading-snug mb-6 text-white">Discover our newest color : Light Grey</h2>
+                    <h2 class="text-2xl lg:text-3xl font-light leading-snug mb-6 text-white">Discover our newest color: Light Grey</h2>
                     <a href="scrub-top-en.html" class="custom-button">Shop Tops</a>
                 </div>
             </div>
@@ -260,7 +260,7 @@
 
         <!-- Jeda: Bar Fitur di Bawah Hero -->
         <section
-            class="bg-gray-50 dark:bg-darkbg py-12 border-b border-gray-200 dark:border-white/5 transition-colors duration-300">
+            class="bg-softwhite dark:bg-darkbg py-12 border-b border-gray-200 dark:border-white/5 transition-colors duration-300">
             <div class="container mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                 <!-- Fitur 1 -->
                 <div class="flex items-start space-x-4">
@@ -286,23 +286,23 @@
                 <div class="flex items-start space-x-4">
                     <div class="text-2xl text-gray-500 dark:text-gray-400"><i class="fa-solid fa-rotate-left"></i></div>
                     <div>
-                        <h4 class="text-sm font-bold uppercase tracking-wider mb-1 text-gray-900 dark:text-white">3-Day Returns</h4>
-                        <p class="text-xs text-gray-600 dark:text-white/60 leading-relaxed">Easy size exchanges or returns for scrubs.</p>
+                        <h4 class="text-sm font-bold uppercase tracking-wider mb-1 text-gray-900 dark:text-white">3-Day Size Exchange</h4>
+                        <p class="text-xs text-gray-600 dark:text-white/60 leading-relaxed">Easy size exchanges within 3 days.</p>
                     </div>
                 </div>
                 <!-- Fitur 4 -->
                 <div class="flex items-start space-x-4">
-                    <div class="text-2xl text-gray-500 dark:text-gray-400"><i class="fa-solid fa-leaf"></i></div>
+                    <div class="text-2xl text-gray-500 dark:text-gray-400"><i class="fa-solid fa-wind"></i></div>
                     <div>
-                        <h4 class="text-sm font-bold uppercase tracking-wider mb-1 text-gray-900 dark:text-white">Eco-Friendly Materials</h4>
-                        <p class="text-xs text-gray-600 dark:text-white/60 leading-relaxed">Using high-tech materials to help preserve the environment.</p>
+                        <h4 class="text-sm font-bold uppercase tracking-wider mb-1 text-gray-900 dark:text-white">Breathable &amp; Cool</h4>
+                        <p class="text-xs text-gray-600 dark:text-white/60 leading-relaxed">Breathable fabric that stays cool and comfortable through long shifts.</p>
                     </div>
                 </div>
             </div>
         </section>
 
          <!-- Bagian Popular Picks -->
-        <section class="relative py-24 bg-white dark:bg-darkbg transition-colors duration-300">
+        <section class="relative py-24 bg-softwhite dark:bg-darkbg transition-colors duration-300">
             <!-- Gambar Latar Belakang -->
             <div
                 class="absolute inset-0 z-0 opacity-15 dark:opacity-20 pointer-events-none transition-opacity">
@@ -395,7 +395,7 @@
 
         <!-- Bagian Scrub Catalog (Our Scrubs Catalog) -->
         <section
-            class="py-24 bg-gray-50 dark:bg-darkbg text-gray-900 dark:text-white border-t border-gray-200 dark:border-white/5 transition-colors duration-300"
+            class="py-24 bg-softwhite dark:bg-darkbg text-gray-900 dark:text-white border-t border-gray-200 dark:border-white/5 transition-colors duration-300"
             id="katalog-scrub">
             <div class="container mx-auto px-6">
                 <!-- Header Katalog -->
@@ -792,7 +792,7 @@
                         class="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700">
                     <div class="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-center p-6">
                         <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-white/80 mb-3">Exclusive</p>
-                        <h2 class="text-3xl md:text-4xl font-extrabold text-white mb-4 tracking-tight">What is ACTIVESCRUBS?</h2>
+                        <h2 class="text-3xl md:text-4xl font-extrabold text-white mb-4 tracking-tight">What is Wearscrubs?</h2>
                         <p class="text-sm text-white/90 mb-4 md:mb-8 max-w-3xl leading-relaxed">Our medical uniforms, specially designed for dynamic healthcare professionals, prioritize comfort and high flexibility, are made from lightweight, high-quality materials, and combine practical functionality with an aesthetic touch, setting a new standard for medical apparel.</p>
                         <a href="scrub-top-en.html"
                             class="border border-white hover:bg-white hover:text-black text-white px-6 py-3 text-sm font-bold rounded-xl transition-colors backdrop-blur-sm bg-white/10 whitespace-nowrap">Shop Now</a>
@@ -829,7 +829,7 @@
                             </div>
                             <div>
                                 <h4 class="text-sm md:text-base font-semibold text-gray-900 dark:text-white mb-1.5">
-                                    #ACTIVESCRUBS</h4>
+                                    #Wearscrubs</h4>
                                 <p class="text-xs md:text-sm text-gray-600 dark:text-white/60 leading-relaxed">Designed specifically for doctors and healthcare professionals to keep them look stylish and professional.</p>
                             </div>
                         </div>
@@ -909,9 +909,9 @@
                                     <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                                         <p class="font-semibold text-gray-800 dark:text-white/80">Estimated Delivery Time:</p>
                                         <ul class="list-disc list-inside space-y-1 pl-1">
-                                            <li><strong>Jabodetabek</strong> : 1 &ndash; 2 business days</li>
-                                            <li><strong>Java Island</strong> : 2 &ndash; 3 business days</li>
-                                            <li><strong>Outside Java</strong> : 3 &ndash; 5 business days</li>
+                                            <li><strong>Jabodetabek</strong>: 1 &ndash; 2 business days</li>
+                                            <li><strong>Java Island</strong>: 2 &ndash; 3 business days</li>
+                                            <li><strong>Outside Java</strong>: 3 &ndash; 5 business days</li>
                                         </ul>
                                     </div>
 
@@ -1019,26 +1019,26 @@
 
     <!-- Footer Super Lengkap (Partners & Subscribe) -->
     <footer
-        class="bg-gray-50 dark:bg-black/40 pt-16 pb-8 border-t border-gray-200 dark:border-white/5 relative z-10 transition-colors duration-300">
+        class="bg-[#1D1D1F] text-white pt-16 pb-8 rounded-t-[48px] relative z-10">
         <div class="container mx-auto px-6">
 
             <!-- Top Footer: Subscribe & Partners -->
             <div
-                class="flex flex-col lg:flex-row justify-between items-center border-b border-gray-200 dark:border-white/10 pb-12 mb-12 gap-10">
+                class="flex flex-col lg:flex-row justify-between items-center border-b border-white/10 pb-12 mb-12 gap-10">
                 <div class="w-full lg:w-1/2">
-                    <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Get the Latest Updates</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md">Subscribe to our newsletter for exclusive deals, new releases, and the latest medical industry news.</p>
+                    <h3 class="text-2xl font-bold text-white mb-2">Get the Latest Updates</h3>
+                    <p class="text-sm text-white/60 mb-6 max-w-md">Subscribe to our newsletter for exclusive deals, new releases, and the latest medical industry news.</p>
                     <form class="flex w-full max-w-md shadow-sm">
                         <input type="email" placeholder="Your email address"
-                            class="flex-1 bg-white dark:bg-darkcard border border-gray-300 dark:border-white/20 rounded-l-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
+                            class="flex-1 bg-white/10 border border-white/20 rounded-l-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/50 transition-colors"
                             required>
                         <button type="submit"
-                            class="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:bg-blue-600 dark:hover:bg-gray-200 transition-colors">Subscribe</button>
+                            class="bg-white text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:bg-white/90 transition-colors">Subscribe</button>
                     </form>
                 </div>
                 <div class="w-full lg:w-1/2 flex flex-col lg:items-end">
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">Official Partner</h3>
-                    <div class="flex flex-wrap gap-6 items-center text-gray-400 dark:text-white/40">
+                    <h3 class="text-sm font-bold text-white mb-4 uppercase tracking-wider">Official Partner</h3>
+                    <div class="flex flex-wrap gap-6 items-center text-white/40">
                         <img src="images/heiq dymatic.png" alt="HeiQ Dymatic" class="h-8 md:h-10 object-contain opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
                     </div>
                 </div>
@@ -1047,54 +1047,54 @@
             <!-- Middle Footer: Link Menu -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Scrub Catalog</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="scrub-top-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Tops</a></li>
-                        <li><a href="scrub-pants-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Pants</a></li>
-                        <li><a href="scrub-caps-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Caps</a></li>
-                        <li><a href="gown-en.html" class="hover:text-black dark:hover:text-white transition">Gowns</a></li>
-                        
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Scrub Catalog</h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+                        <li><a href="scrub-top-en.html" class="hover:text-white transition">Scrub Tops</a></li>
+                        <li><a href="scrub-pants-en.html" class="hover:text-white transition">Scrub Pants</a></li>
+                        <li><a href="scrub-caps-en.html" class="hover:text-white transition">Scrub Caps</a></li>
+                        <li><a href="gown-en.html" class="hover:text-white transition">Gowns</a></li>
+
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Services
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Services
                     </h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        
-                        <li><a href="shipping-en.html" class="hover:text-black dark:hover:text-white transition">Shipping & Returns</a>
+                    <ul class="space-y-3 text-sm text-white/60">
+
+                        <li><a href="shipping-en.html" class="hover:text-white transition">Shipping & Returns</a>
                         </li>
-                        <li><a href="payments-shipping-en.html">Payment &amp; Shipping</a></li>
-                        <li><a href="ukuran-en.html" class="hover:text-black dark:hover:text-white transition">Size Guide</a>
+                        <li><a href="payments-shipping-en.html" class="hover:text-white transition">Payment &amp; Shipping</a></li>
+                        <li><a href="ukuran-en.html" class="hover:text-white transition">Size Guide</a>
                         </li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Company
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Company
                     </h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="about-us-en.html" class="hover:text-black dark:hover:text-white transition">Our Story</a></li>
-                        <li><a href="karir-en.html" class="hover:text-black dark:hover:text-white transition">Careers</a></li>
-                        
-                        <li><a href="contact-en.html" class="hover:text-black dark:hover:text-white transition">Contact Us</a></li>
+                    <ul class="space-y-3 text-sm text-white/60">
+                        <li><a href="about-us-en.html" class="hover:text-white transition">Our Story</a></li>
+                        <li><a href="karir-en.html" class="hover:text-white transition">Careers</a></li>
+
+                        <li><a href="contact-en.html" class="hover:text-white transition">Contact Us</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Follow Us
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Follow Us
                     </h4>
                     <div class="flex space-x-4">
-                        <a href="https://www.instagram.com/wearscrubs.id/" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-gray-600 dark:text-white hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 transition-colors"><i class="fa-brands fa-instagram"></i></a>
+                        <a href="https://www.instagram.com/wearscrubs.id/" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-blue-600 hover:text-white transition-colors"><i class="fa-brands fa-instagram"></i></a>
                         </div>
                 </div>
             </div>
 
             <!-- Bottom Footer: Copyright -->
             <div
-                class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
-                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400">&copy;
+                class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-white/10">
+                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-white/50">&copy;
                     2026 Wearscrubs. All Rights Reserved.</p>
                 <div class="flex space-x-6 items-center flex-wrap justify-center gap-y-4">
-                    <a href="privasi-en.html" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Privacy Policy</a>
-                    <a href="syarat-en.html" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Terms of Service</a>
+                    <a href="privasi-en.html" class="text-[10px] uppercase tracking-widest text-white/50 hover:text-white transition">Privacy Policy</a>
+                    <a href="syarat-en.html" class="text-[10px] uppercase tracking-widest text-white/50 hover:text-white transition">Terms of Service</a>
                 </div>
             </div>
         </div>
