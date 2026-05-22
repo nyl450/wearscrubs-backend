@@ -1359,8 +1359,8 @@ app.put('/api/inventory/reject-to-normal', requireAuth(['admin','manager']), asy
                 `INSERT INTO stock_movements
                  (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user, is_reject)
                  VALUES ($1,$2,$3,$4,'reject_to_normal',$5,$6,$7,$8,$9,$10)`,
-                [product_id, size, color, variant_type, qty, rejectBefore, rejectAfter,
-                 `Diubah reject→normal: ${qty} unit`, req.user.username, false]
+                [product_id, size, color, variant_type, qty, normalBefore, normalAfter,
+                 `Diubah reject→normal: ${qty} unit (reject ${rejectBefore}→${rejectAfter})`, req.user.username, false]
             );
             return { normalAfter, rejectAfter };
         });
@@ -1652,6 +1652,21 @@ app.post('/api/orders', async (req, res) => {
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
+        // SECURITY: distinguish admin (authenticated WA orders) from public website orders.
+        // Computed up-front because it gates is_bonus (free items) and discount below —
+        // a public caller must never be able to zero out prices.
+        const authUser = getOptionalUser(req);
+        const isAdmin = authUser && ['admin','manager'].includes(authUser.role);
+
+        // Validate every line qty is a positive integer BEFORE any stock/price math.
+        // Without this, a negative/zero/non-integer qty would pass the stock check
+        // (available < negative === false), corrupt the total, and inflate stock at confirm.
+        for (const item of items) {
+            const q = Number(item.quantity);
+            if (!Number.isInteger(q) || q < 1)
+                return res.status(400).json({ error: 'Quantity setiap item harus bilangan bulat minimal 1' });
+        }
+
         // Aggregate qty per physical variant before stock check — bordir splits share
         // the same inventory row, so checking per-item allows over-allocation when
         // the same shirt appears as multiple lines (plain + with name + with logo).
@@ -1683,17 +1698,15 @@ app.post('/api/orders', async (req, res) => {
             // Per-item price = base product price + per-item embroidery cost.
             // Bonus item (gift): entire line is free (product + bordir = Rp 0). Stock
             // is still deducted later — only the price is zeroed.
-            const isBonus = item.is_bonus === true;
+            // SECURITY: bonus is ADMIN-ONLY. A public caller sending is_bonus:true must
+            // not get free products — gate it behind isAdmin.
+            const isBonus = isAdmin && item.is_bonus === true;
             const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0));
             const basePrice = isBonus ? 0 : product.price;
             const unitPrice = basePrice + itemEmbroidery;
             itemDetails.push({ ...item, is_bonus: isBonus, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery });
             productTotal += unitPrice * item.quantity;
         }
-
-        // SECURITY: distinguish admin (authenticated WA orders) from public website orders.
-        const authUser = getOptionalUser(req);
-        const isAdmin = authUser && ['admin','manager'].includes(authUser.role);
 
         // order_source: only admin may mark 'whatsapp'. Public is always 'website' —
         // prevents a public caller from suppressing the admin "new order" WA notification.
@@ -2131,6 +2144,10 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status === 'cancelled') return res.status(400).json({ error: 'Sudah dibatalkan' });
         if (order.order_status === 'done') return res.status(400).json({ error: 'Pesanan sudah selesai, tidak bisa dibatalkan' });
+        // Barang yang sudah dikirim tidak bisa dibatalkan: stok sudah keluar fisik ke
+        // kurir/customer, restore +qty akan menciptakan stok hantu. Cancel hanya sampai 'packed'.
+        if (order.order_status === 'shipped')
+            return res.status(400).json({ error: 'Pesanan sudah dikirim — tidak bisa dibatalkan. Jika barang kembali (retur), tangani via stok manual / Tukar Size.' });
 
         const { cancel_reason } = req.body;
         // Optional context attachment (mis. screenshot percakapan dengan customer).
