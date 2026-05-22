@@ -1667,6 +1667,16 @@ app.post('/api/orders', async (req, res) => {
                 return res.status(400).json({ error: 'Quantity setiap item harus bilangan bulat minimal 1' });
         }
 
+        // Validate customer identity — client enforces required, tapi panggilan API
+        // langsung bisa kirim kosong/sampah. HP harus nomor Indonesia yang masuk akal.
+        const custNameTrim = (customer_name || '').trim();
+        const custAddrTrim = (customer_address || '').trim();
+        const custPhoneDigits = (customer_phone || '').replace(/\D/g, '');
+        if (!custNameTrim) return res.status(400).json({ error: 'Nama pelanggan wajib diisi' });
+        if (!custAddrTrim) return res.status(400).json({ error: 'Alamat pelanggan wajib diisi' });
+        if (custPhoneDigits.length < 9 || custPhoneDigits.length > 15 || !/^(0|62|8)/.test(custPhoneDigits))
+            return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (gunakan format 08xxx / 62xxx)' });
+
         // Aggregate qty per physical variant before stock check — bordir splits share
         // the same inventory row, so checking per-item allows over-allocation when
         // the same shirt appears as multiple lines (plain + with name + with logo).

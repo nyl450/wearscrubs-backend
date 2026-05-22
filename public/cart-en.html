@@ -100,6 +100,9 @@ const COLOR_HEX = {
 
 function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
 
+// HTML-escape untuk nilai dari localStorage / nama produk sebelum masuk innerHTML.
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 // Stock cache: key `${product_id}_${size}_${color}_${type||'null'}` → available qty
 const stockCache = new Map();
 function stockKey(item) { return `${item.product_id}_${item.size}_${item.color}_${item.type || 'null'}`; }
@@ -159,7 +162,7 @@ function validateCartStock() {
     checkoutBtn.setAttribute('aria-disabled', 'true');
 
     const lines = issues.map(i =>
-        `<li><strong>${i.label}</strong>: cart ${i.qty} pcs, stock ${i.stock} pcs — reduce by <strong>${i.excess} pcs</strong></li>`
+        `<li><strong>${esc(i.label)}</strong>: cart ${i.qty} pcs, stock ${i.stock} pcs — reduce by <strong>${i.excess} pcs</strong></li>`
     ).join('');
     const html = `<div class="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
         <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i>
@@ -214,15 +217,15 @@ function renderCart() {
         return `
         <div class="flex gap-4 p-4 bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm">
             <div class="w-20 h-24 rounded-xl overflow-hidden bg-gray-100 dark:bg-darkbg shrink-0">
-                <img loading="lazy" decoding="async" src="${photoUrl}" alt="${item.name}" class="w-full h-full object-cover object-top" onerror="this.src='images/logo/logo%20ws%20black%20250x55.png'; this.classList.add('object-contain','p-2');">
+                <img loading="lazy" decoding="async" src="${esc(photoUrl)}" alt="${esc(item.name)}" class="w-full h-full object-cover object-top" onerror="this.src='images/logo/logo%20ws%20black%20250x55.png'; this.classList.add('object-contain','p-2');">
             </div>
             <div class="flex-1 min-w-0">
-                <h4 class="font-bold text-sm leading-snug mb-1">${item.name}</h4>
+                <h4 class="font-bold text-sm leading-snug mb-1">${esc(item.name)}</h4>
                 <div class="flex flex-wrap items-center gap-2 mb-2">
-                    <span class="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-white/10 rounded font-bold uppercase tracking-widest text-gray-500 dark:text-white/40">${item.size}</span>
-                    <span class="w-3.5 h-3.5 rounded-full border border-white/20" style="background:${hex}" title="${item.color}"></span>
-                    <span class="text-xs text-gray-500 dark:text-white/40 capitalize">${item.color.replace(/-/g,' ')}</span>
-                    ${item.type && item.type !== 'null' ? `<span class="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded font-bold uppercase tracking-widest ml-1">${item.type}</span>` : ''}
+                    <span class="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-white/10 rounded font-bold uppercase tracking-widest text-gray-500 dark:text-white/40">${esc(item.size)}</span>
+                    <span class="w-3.5 h-3.5 rounded-full border border-white/20" style="background:${hex}" title="${esc(item.color)}"></span>
+                    <span class="text-xs text-gray-500 dark:text-white/40 capitalize">${esc(item.color.replace(/-/g,' '))}</span>
+                    ${item.type && item.type !== 'null' ? `<span class="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded font-bold uppercase tracking-widest ml-1">${esc(item.type)}</span>` : ''}
                 </div>
                 ${(item.bordir_nama || item.bordir_logo) ? `
                 <div class="flex flex-wrap gap-1.5 mb-2">

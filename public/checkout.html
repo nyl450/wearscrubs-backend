@@ -244,6 +244,10 @@
 <script>
 const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://wearscrubs-backend-production.up.railway.app';
 function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+// HTML-escape nilai dari localStorage / input sebelum masuk innerHTML.
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Validasi nomor WhatsApp Indonesia (digit, awalan 0/62/8, panjang wajar).
+function isValidPhone(v) { const d = (v || '').replace(/\D/g, ''); return d.length >= 9 && d.length <= 15 && /^(0|62|8)/.test(d); }
 
 const BORDIR_NAMA_PRICE = 20000;
 const BORDIR_LOGO_PRICE = 30000;
@@ -312,17 +316,17 @@ function renderPreview() {
         return `
         <div class="flex items-center gap-3">
             <div class="w-12 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-darkbg shrink-0">
-                <img src="${item.photo ? (item.photo.startsWith('/uploads/') ? API + item.photo : item.photo) : ''}"
-                    alt="${item.name || 'Product image'}"
+                <img src="${esc(item.photo ? (item.photo.startsWith('/uploads/') ? API + item.photo : item.photo) : '')}"
+                    alt="${esc(item.name || 'Product image')}"
                     class="w-full h-full object-cover object-top"
                     onerror="this.src='images/logo/logo%20ws%20black%20250x55.png';this.classList.add('object-contain','p-1')">
             </div>
             <div class="flex-1 min-w-0">
-                <p class="text-xs font-bold truncate">${item.name}</p>
+                <p class="text-xs font-bold truncate">${esc(item.name)}</p>
                 <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span class="text-[9px] px-1 bg-gray-100 dark:bg-white/10 rounded font-bold">${item.size}</span>
-                    <span class="text-[9px] text-gray-400 capitalize">${item.color}</span>
-                    ${item.type && item.type !== 'null' ? `<span class="text-[9px] text-indigo-400 font-bold uppercase">${item.type}</span>` : ''}
+                    <span class="text-[9px] px-1 bg-gray-100 dark:bg-white/10 rounded font-bold">${esc(item.size)}</span>
+                    <span class="text-[9px] text-gray-400 capitalize">${esc(item.color)}</span>
+                    ${item.type && item.type !== 'null' ? `<span class="text-[9px] text-indigo-400 font-bold uppercase">${esc(item.type)}</span>` : ''}
                     <span class="text-[9px] text-gray-500 italic">x${item.quantity}</span>
                 </div>
                 ${bordirBadges ? `<div class="mt-1 flex gap-1 flex-wrap">${bordirBadges}</div>` : ''}
@@ -468,6 +472,16 @@ document.getElementById('checkout-form').addEventListener('submit', async (e) =>
     document.getElementById('f-city-error')?.classList.add('hidden');
     document.getElementById('f-city-search')?.classList.remove('ring-2','ring-red-500');
 
+    // Validasi nomor WhatsApp — wajib nomor Indonesia yang masuk akal (dipakai utk notif).
+    const phoneEl = document.getElementById('f-phone');
+    if (!isValidPhone(phoneEl.value)) {
+        phoneEl.classList.add('ring-2','ring-red-500');
+        phoneEl.focus();
+        alert('Nomor WhatsApp tidak valid. Contoh: 081234567890');
+        return;
+    }
+    phoneEl.classList.remove('ring-2','ring-red-500');
+
     // Check apakah ada item tops dengan bordir
     const hasBordir = cartItems.some(item => item.category === 'tops' && (item.bordir_nama || item.bordir_logo));
     if (hasBordir) {
@@ -503,7 +517,7 @@ function buildBordirForm() {
 
     container.innerHTML = inputs.map(({ item, itemIdx, q, label }) => `
         <div class="bg-white dark:bg-darkcard rounded-2xl border border-gray-100 dark:border-white/5 p-5 shadow-sm">
-            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-white/40 mb-4">${label}</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-white/40 mb-4">${esc(label)}</p>
             ${bothBordirNote(item)}
             ${item.bordir_nama ? `
             <div class="mb-4 p-4 rounded-xl" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
@@ -656,36 +670,62 @@ async function submitBordirStep() {
 async function submitOrder() {
     const submitBtns = document.querySelectorAll('button[type=submit], #bordir-submit-btn');
     submitBtns.forEach(b => { b.disabled = true; });
+    const reenable = () => submitBtns.forEach(b => { b.disabled = false; });
 
+    // Guard: gabungan ukuran logo base64 harus muat di limit body server (2MB).
+    const logoBytes = (embroideryData || []).reduce((sum, e) =>
+        sum + (e.type === 'logo' && typeof e.value === 'string' && e.value.startsWith('data:')
+            ? Math.ceil(e.value.length * 0.75) : 0), 0);
+    if (logoBytes > 1800000) {
+        alert('⚠️ Total ukuran logo terlalu besar untuk dikirim sekaligus. Kurangi jumlah item berlogo dalam 1 pesanan, atau kosongkan upload logo (admin akan minta file via WhatsApp).');
+        reenable();
+        return;
+    }
+
+    const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
+    const payload = {
+        customer_name: document.getElementById('f-name').value,
+        customer_phone: document.getElementById('f-phone').value,
+        customer_address: document.getElementById('f-address').value,
+        notes: document.getElementById('f-notes').value,
+        shipping_city: selectedCity?.name || '',
+        shipping_cost: selectedCity?.shipping_cost || 0,
+        embroidery_details: embroideryData.length ? embroideryData : null,
+        items: cartItems.map(item => ({
+            product_id: Number(item.product_id),
+            size: item.size,
+            color: item.color,
+            variant_type: item.type || 'null',
+            quantity: Number(item.quantity),
+            bordir_nama: item.bordir_nama || false,
+            bordir_logo: item.bordir_logo || false
+        }))
+    };
+
+    // Network error AFTER the request leaves the browser may still have created the
+    // order server-side. Jangan auto-enable tombol → cegah order duplikat.
+    let res;
     try {
-        const qty = cartItems.reduce((s, i) => s + i.quantity, 0);
-        const payload = {
-            customer_name: document.getElementById('f-name').value,
-            customer_phone: document.getElementById('f-phone').value,
-            customer_address: document.getElementById('f-address').value,
-            notes: document.getElementById('f-notes').value,
-            shipping_city: selectedCity?.name || '',
-            shipping_cost: selectedCity?.shipping_cost || 0,
-            embroidery_details: embroideryData.length ? embroideryData : null,
-            items: cartItems.map(item => ({
-                product_id: Number(item.product_id),
-                size: item.size,
-                color: item.color,
-                variant_type: item.type || 'null',
-                quantity: Number(item.quantity),
-                bordir_nama: item.bordir_nama || false,
-                bordir_logo: item.bordir_logo || false
-            }))
-        };
-
-        const res = await fetch(API + '/api/orders', {
+        res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Gagal membuat pesanan');
+    } catch (netErr) {
+        alert('⚠️ Koneksi terputus saat mengirim pesanan. Pesanan MUNGKIN sudah masuk — JANGAN submit ulang.\n\nSilakan refresh halaman atau hubungi admin via WhatsApp untuk memastikan. Kalau ternyata belum masuk, baru coba lagi.');
+        return; // tombol tetap disabled
+    }
 
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* non-JSON response */ }
+    if (!res.ok) {
+        // Server menolak (mis. stok habis / validasi) → order TIDAK dibuat → aman re-enable.
+        alert('❌ ' + (data.error || 'Gagal membuat pesanan'));
+        reenable();
+        return;
+    }
+
+    try {
         Cart.save([]);
 
         // Build WA message for user to send proof of payment
@@ -713,8 +753,11 @@ async function submitOrder() {
         goToStep('payment');
 
     } catch (err) {
-        alert('❌ ' + err.message);
-        submitBtns.forEach(b => { b.disabled = false; });
+        // Order SUDAH dibuat di server — meski render WA/preview gagal, JANGAN re-enable
+        // tombol (cegah duplikat). Tetap maju ke step payment dengan kode order seadanya.
+        console.error('Post-order render failed:', err);
+        try { document.getElementById('order-code-display').textContent = data.order_code || ''; } catch (e) {}
+        goToStep('payment');
     }
 }
 
