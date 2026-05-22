@@ -1464,21 +1464,9 @@ app.post('/api/inventory/bulk', requireAuth(['admin','manager']), async (req, re
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT /api/inventory (bulk)
-app.put('/api/inventory', requireAuth(['admin','manager']), async (req, res) => {
-    try {
-        const { updates } = req.body;
-        for (const u of updates) {
-            // GANTI: ? → $1-$6
-            await dbRun(
-                `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)
-                 ON CONFLICT(product_id, size, color, variant_type) DO UPDATE SET stock = $6`,
-                [u.product_id, u.size, u.color, u.variant_type || u.type, parseInt(u.stock), parseInt(u.stock)]
-            );
-        }
-        res.json({ message: 'Stok berhasil diperbarui' });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// NOTE: legacy `PUT /api/inventory` dihapus (22 Mei) — dead code, tidak dipakai
+// dashboard, dan berbahaya: tanpa transaksi/FOR UPDATE, tanpa log stock_movements,
+// tanpa validasi (stok negatif bisa masuk). Pakai /api/inventory/single atau /bulk.
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
 

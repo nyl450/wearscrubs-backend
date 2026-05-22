@@ -2981,7 +2981,7 @@ function showReservedPopover(evt, key) {
         ${data.buyers.map(b => `
             <div class="row">
                 <div style="flex:1;min-width:0">
-                    <div class="name">${b.customer_name}</div>
+                    <div class="name">${esc(b.customer_name || '')}</div>
                     <div class="meta">${b.order_code} · <span class="${STATUS_COLOR[b.order_status]||''}">${STATUS_LABEL[b.order_status]||b.order_status}</span></div>
                 </div>
                 <div class="qty">${b.qty}×</div>
@@ -4185,7 +4185,7 @@ async function viewOrder(id) {
                     <p class="text-[10px] text-white/40">${esc(e.item_label||'')}</p>
                     ${isLogoUploaded
                         ? `<div class="flex items-end gap-2 mt-1 mb-1">
-                               <img loading="lazy" decoding="async" src="${e.value}" alt="Logo Bordir"
+                               <img loading="lazy" decoding="async" src="${esc(e.value)}" alt="Logo Bordir"
                                     onclick="openBordirLogoLightbox(${o.id}, ${idx})"
                                     class="max-h-20 max-w-[120px] object-contain rounded border border-white/10 cursor-zoom-in hover:border-blue-400/40 transition" />
                                <div class="flex flex-col gap-1">
