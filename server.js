@@ -942,35 +942,18 @@ app.post('/api/products', requireAuth(['admin','manager']), upload.any(), async 
             : [];
         const basePrice = values.length > 0 ? Math.min(...values) : parseInt(price || 0);
 
-        const result = await dbRun(
-            `INSERT INTO products (sku, name, category, price, price_by_type,
-              short_description, long_description, short_description_en, long_description_en,
-              sizes, colors, types, is_popular, status)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-            [sku, name, category, basePrice,
-                priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
-                short_description || '', long_description || '',
-                short_description_en || '', long_description_en || '',
-                typeof sizes === 'string' ? sizes : JSON.stringify(sizes),
-                typeof colors === 'string' ? colors : JSON.stringify(colors),
-                typeof types === 'string' ? types : JSON.stringify(types),
-                is_popular === '1' || is_popular === true ? 1 : 0,
-                status || 'active']
-        );
-
-        // GANTI: result.lastID → result.rows[0].id
-        const productId = result.rows[0].id;
-
         const photoMap = safeJSON(req.body.photo_map, {});
         const selColors = safeJSON(colors, []);
         const selTypes = safeJSON(types, []);
         const selSizes = safeJSON(sizes, []);
+        const NUM_PHOTOS = 3;
 
+        // Phase 1 (DI LUAR transaksi): upload semua foto → map "color|type" → [{slot,url}].
+        // Upload eksternal bisa lambat; dilakukan dulu agar transaksi DB di Phase 2 singkat & atomik.
+        const photosByVariant = new Map();
         for (const color of selColors) {
             for (const type of selTypes) {
-                const NUM_PHOTOS = 3;
-                let mainPhotoUrl = null;
-
+                const slots = [];
                 for (let i = 1; i <= NUM_PHOTOS; i++) {
                     const mapKey = `${color}_${type}_${i}`;
                     let photoUrl = req.body[`photo_url_${mapKey}`] || null;
@@ -983,33 +966,61 @@ app.post('/api/products', requireAuth(['admin','manager']), upload.any(), async 
                         const oldKey = `${color}_${type}`;
                         photoUrl = req.body[`photo_url_${oldKey}`] || null;
                     }
-
-                    if (photoUrl) {
-                        if (i === 1) mainPhotoUrl = photoUrl;
-                        await dbRun(
-                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES ($1,$2,$3,$4,$5)`,
-                            [productId, color, type, photoUrl, i]
-                        );
-                    }
+                    if (photoUrl) slots.push({ slot: i, url: photoUrl });
                 }
-                if (!mainPhotoUrl) {
-                    await dbRun(
-                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES ($1,$2,$3,$4,1)
-                         ON CONFLICT (product_id, color, variant_type, slot) DO NOTHING`,
-                        [productId, color, type, null]
-                    );
-                }
-
-                for (const size of selSizes) {
-                    // GANTI: ? → $1,$2,$3,$4,$5
-                    await dbRun(
-                        `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)`,
-                        [productId, size, color, type, 0]
-                    );
-                }
+                photosByVariant.set(`${color}|${type}`, slots);
             }
         }
 
+        // Phase 2 (ATOMIK): product + variants + inventory dalam satu transaksi.
+        // Kalau ada yang gagal, semua di-rollback → tidak ada produk parsial.
+        const productId = await withTransaction(async (client) => {
+            const result = await client.query(
+                `INSERT INTO products (sku, name, category, price, price_by_type,
+                  short_description, long_description, short_description_en, long_description_en,
+                  sizes, colors, types, is_popular, status)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+                [sku, name, category, basePrice,
+                    priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
+                    short_description || '', long_description || '',
+                    short_description_en || '', long_description_en || '',
+                    typeof sizes === 'string' ? sizes : JSON.stringify(sizes),
+                    typeof colors === 'string' ? colors : JSON.stringify(colors),
+                    typeof types === 'string' ? types : JSON.stringify(types),
+                    is_popular === '1' || is_popular === true ? 1 : 0,
+                    status || 'active']
+            );
+            const pid = result.rows[0].id;
+
+            for (const color of selColors) {
+                for (const type of selTypes) {
+                    const slots = photosByVariant.get(`${color}|${type}`) || [];
+                    for (const { slot, url } of slots) {
+                        await client.query(
+                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES ($1,$2,$3,$4,$5)`,
+                            [pid, color, type, url, slot]
+                        );
+                    }
+                    // Pastikan ada baris slot-1 (main) meski tanpa foto.
+                    if (!slots.some(s => s.slot === 1)) {
+                        await client.query(
+                            `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES ($1,$2,$3,$4,1)
+                             ON CONFLICT (product_id, color, variant_type, slot) DO NOTHING`,
+                            [pid, color, type, null]
+                        );
+                    }
+                    for (const size of selSizes) {
+                        await client.query(
+                            `INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES ($1,$2,$3,$4,$5)`,
+                            [pid, size, color, type, 0]
+                        );
+                    }
+                }
+            }
+            return pid;
+        });
+
+        invalidateCache('products', 'inventory');
         res.json({ id: productId, message: 'Produk berhasil dibuat' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1029,46 +1040,23 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
             ? Math.min(...priceValues)
             : parseInt(price || 0);
 
-        await dbRun(
-            `UPDATE products SET name=$1, category=$2, price=$3, price_by_type=$4,
-             short_description=$5, long_description=$6,
-             short_description_en=$7, long_description_en=$8,
-             sizes=$9, colors=$10, types=$11,
-             is_popular=$12, status=$13, sku=$14
-             WHERE id = $15`,
-            [name, category, basePrice,
-                priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
-                short_description || '', long_description || '',
-                short_description_en || '', long_description_en || '',
-                typeof sizes === 'string' ? sizes : JSON.stringify(sizes),
-                typeof colors === 'string' ? colors : JSON.stringify(colors),
-                typeof types === 'string' ? types : JSON.stringify(types),
-                is_popular === '1' || is_popular === true ? 1 : 0,
-                status || 'active', sku,
-                req.params.id]
-        );
-
         const photoMap = safeJSON(req.body.photo_map, {});
         const selColors = safeJSON(colors, []);
         const selTypes  = safeJSON(types,  []);
-        const selSizes  = safeJSON(sizes,  []); // ← FIX: was missing, caused "selSizes is not defined"
-
-        // ── Photo upload: handle up to 3 photos per color-type slot (matching POST logic) ──
+        const selSizes  = safeJSON(sizes,  []);
         const NUM_PHOTOS = 3;
+
+        // Phase 1 (DI LUAR transaksi): resolve operasi foto — upload eksternal di sini.
+        // action 'clear' = hapus slot (tombol X), 'set' = insert/update foto.
+        const photoOps = [];
         for (const color of selColors) {
             for (const type of selTypes) {
                 for (let i = 1; i <= NUM_PHOTOS; i++) {
                     const mapKey = `${color}_${type}_${i}`;
-
-                    // Handle explicit delete (X button): remove this slot row entirely
                     if (req.body[`photo_clear_${mapKey}`] === '1') {
-                        await dbRun(
-                            `DELETE FROM product_variants WHERE product_id=$1 AND color=$2 AND variant_type=$3 AND slot=$4`,
-                            [req.params.id, color, type, i]
-                        );
+                        photoOps.push({ color, type, slot: i, action: 'clear' });
                         continue;
                     }
-
                     let photoUrl = req.body[`photo_url_${mapKey}`] || null;
                     if (!photoUrl) {
                         const fileField = photoMap[mapKey];
@@ -1088,51 +1076,79 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
                             if (legacyFile) photoUrl = await uploadToSupabase(legacyFile.buffer, legacyFile.originalname, 'products');
                         }
                     }
-                    if (photoUrl) {
-                        await dbRun(
+                    if (photoUrl) photoOps.push({ color, type, slot: i, action: 'set', url: photoUrl });
+                }
+            }
+        }
+
+        const effectiveTypes = selTypes.length > 0 ? selTypes : ['null'];
+
+        // Phase 2 (ATOMIK): update product + operasi foto + pastikan baris variant/inventory.
+        await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE products SET name=$1, category=$2, price=$3, price_by_type=$4,
+                 short_description=$5, long_description=$6,
+                 short_description_en=$7, long_description_en=$8,
+                 sizes=$9, colors=$10, types=$11,
+                 is_popular=$12, status=$13, sku=$14
+                 WHERE id = $15`,
+                [name, category, basePrice,
+                    priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
+                    short_description || '', long_description || '',
+                    short_description_en || '', long_description_en || '',
+                    typeof sizes === 'string' ? sizes : JSON.stringify(sizes),
+                    typeof colors === 'string' ? colors : JSON.stringify(colors),
+                    typeof types === 'string' ? types : JSON.stringify(types),
+                    is_popular === '1' || is_popular === true ? 1 : 0,
+                    status || 'active', sku,
+                    req.params.id]
+            );
+
+            for (const op of photoOps) {
+                if (op.action === 'clear') {
+                    await client.query(
+                        `DELETE FROM product_variants WHERE product_id=$1 AND color=$2 AND variant_type=$3 AND slot=$4`,
+                        [req.params.id, op.color, op.type, op.slot]
+                    );
+                } else {
+                    await client.query(
+                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot)
+                         VALUES ($1,$2,$3,$4,$5)
+                         ON CONFLICT(product_id, color, variant_type, slot) DO UPDATE SET photo_url = EXCLUDED.photo_url`,
+                        [req.params.id, op.color, op.type, op.url, op.slot]
+                    );
+                }
+            }
+
+            // Pastikan baris variant + inventory ada untuk setiap kombinasi color/type/size baru
+            for (const color of selColors) {
+                for (const type of effectiveTypes) {
+                    const dbType = type === 'null' ? null : type;
+                    const existing = await client.query(
+                        `SELECT id FROM product_variants
+                         WHERE product_id = $1 AND color = $2 AND variant_type IS NOT DISTINCT FROM $3 LIMIT 1`,
+                        [req.params.id, color, dbType]
+                    );
+                    if (existing.rows.length === 0) {
+                        await client.query(
                             `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot)
-                             VALUES ($1,$2,$3,$4,$5)
-                             ON CONFLICT(product_id, color, variant_type, slot) DO UPDATE SET photo_url = EXCLUDED.photo_url`,
-                            [req.params.id, color, type, photoUrl, i]
+                             VALUES ($1, $2, $3, $4, 1)
+                             ON CONFLICT (product_id, color, variant_type, slot) DO NOTHING`,
+                            [req.params.id, color, dbType, null]
+                        );
+                    }
+                    // Insert inventory rows for each size (DO NOTHING = preserve existing stock)
+                    for (const size of selSizes) {
+                        await client.query(
+                            `INSERT INTO inventory (product_id, size, color, variant_type, stock)
+                             VALUES ($1, $2, $3, $4, $5)
+                             ON CONFLICT (product_id, size, color, variant_type) DO NOTHING`,
+                            [req.params.id, size, color, type, 0]
                         );
                     }
                 }
             }
-        }
-
-        // ── Ensure variant + inventory rows exist for every new color/type/size combo ──
-        const effectiveTypes = selTypes.length > 0 ? selTypes : ['null'];
-
-        for (const color of selColors) {
-            for (const type of effectiveTypes) {
-                const dbType = type === 'null' ? null : type;
-
-                // Insert product_variant row if missing
-                const existingVariant = await dbGet(
-                    `SELECT id FROM product_variants
-                     WHERE product_id = $1 AND color = $2 AND variant_type IS NOT DISTINCT FROM $3 LIMIT 1`,
-                    [req.params.id, color, dbType]
-                );
-                if (!existingVariant) {
-                    await dbRun(
-                        `INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot)
-                         VALUES ($1, $2, $3, $4, 1)
-                         ON CONFLICT (product_id, color, variant_type, slot) DO NOTHING`,
-                        [req.params.id, color, dbType, null]
-                    );
-                }
-
-                // Insert inventory rows for each size (DO NOTHING = preserve existing stock)
-                for (const size of selSizes) {
-                    await dbRun(
-                        `INSERT INTO inventory (product_id, size, color, variant_type, stock)
-                         VALUES ($1, $2, $3, $4, $5)
-                         ON CONFLICT (product_id, size, color, variant_type) DO NOTHING`,
-                        [req.params.id, size, color, type, 0]
-                    );
-                }
-            }
-        }
+        });
 
         invalidateCache('products', 'inventory');
         res.json({ message: 'Produk berhasil diperbarui' });
