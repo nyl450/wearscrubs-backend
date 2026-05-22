@@ -743,6 +743,7 @@
                       <option value="Lion Parcel">Lion Parcel</option>
                       <option value="Lion Parcel Cargo">Lion Parcel Cargo</option>
                       <option value="Sentral Cargo">Sentral Cargo</option>
+                      <option value="Kirim sendiri">Kirim sendiri</option>
                   </select>
               </div>
               <div>
@@ -758,6 +759,7 @@
                   <option value="Mandiri">Transfer Mandiri</option>
                   <option value="BNI">Transfer BNI</option>
                   <option value="QRIS">QRIS</option>
+                  <option value="Bonus/Free">Bonus / Free</option>
                 </select>
               </div>
               <div class="sm:col-span-2">
@@ -4700,10 +4702,15 @@ async function submitPhotoModal() {
 // ── Order Action Buttons ───────────────────────────────────────────────────────
 
 function openConfirmPayment(orderId) {
+    const order = cachedOrders.find(o => o.id === orderId);
+    // Order Bonus/Free tidak ada pembayaran → bukti transfer opsional (server juga
+    // mengizinkan tanpa foto untuk payment_method='Bonus/Free').
+    const isFreeOrder = order?.payment_method === 'Bonus/Free';
     openPhotoModal(
         '✅ Konfirmasi Pembayaran',
-        { endpoint: `/api/orders/${orderId}/confirm-payment`, method: 'PUT', fieldName: 'payment_proof' },
-        `<div>
+        { endpoint: `/api/orders/${orderId}/confirm-payment`, method: 'PUT', fieldName: 'payment_proof', optionalFile: isFreeOrder },
+        `${isFreeOrder ? `<div class="bg-emerald-500/10 border border-emerald-400/25 rounded-xl p-3 text-xs text-emerald-200 mb-1"><i class="fa-solid fa-gift mr-1"></i> Order <strong>Bonus / Free</strong> — bukti pembayaran tidak wajib.</div>` : ''}
+        <div>
             <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan (opsional)</label>
             <input name="note" type="text" placeholder="Nomor rekening asal, jumlah transfer..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
         </div>`
@@ -4736,10 +4743,11 @@ function openShipOrder(orderId) {
     // Find existing courier from cached orders (admin can override)
     const order = cachedOrders.find(o => o.id === orderId);
     const existingCourier = order?.shipping_courier || '';
+    // "Kirim sendiri" (antar langsung) → resi opsional di client & server.
+    const isSelfDelivery = existingCourier === 'Kirim sendiri';
 
-    // Photo modal accepts optional file — backend still requires tracking_number
-    // (the photo-modal "submit" path uses the file as the named field, so we
-    // need a non-empty file. We use a placeholder approach below.)
+    // Photo modal accepts optional file (bukti kirim opsional). Resi WAJIB kecuali
+    // kirim sendiri — dikontrol via atribut `required` yang dipasang kondisional.
     _photoModalAction = {
         endpoint: `/api/orders/${orderId}/ship`,
         method: 'PUT',
@@ -4750,9 +4758,9 @@ function openShipOrder(orderId) {
     document.getElementById('photo-modal-extra').innerHTML = `
         <div class="space-y-3">
             <div>
-                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Nomor Resi *</label>
-                <input name="tracking_number" type="text" required placeholder="Contoh: JX1234567890 / TLJ123ABC..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
-                <p class="text-[10px] text-white/30 mt-1">Resi akan dikirim ke customer via WhatsApp otomatis</p>
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Nomor Resi ${isSelfDelivery ? '<span class="text-white/30 normal-case">(opsional — kirim sendiri)</span>' : '*'}</label>
+                <input name="tracking_number" type="text" ${isSelfDelivery ? '' : 'required'} placeholder="${isSelfDelivery ? 'Kosongkan untuk antar sendiri' : 'Contoh: JX1234567890 / TLJ123ABC...'}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
+                <p class="text-[10px] text-white/30 mt-1">${isSelfDelivery ? 'Antar langsung — customer dapat notifikasi pengantaran, bukan resi.' : 'Resi akan dikirim ke customer via WhatsApp otomatis'}</p>
             </div>
             <div>
                 <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Kurir Final (opsional)</label>

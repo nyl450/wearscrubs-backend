@@ -1713,7 +1713,7 @@ app.post('/api/orders', async (req, res) => {
         const safeOrderSource = (isAdmin && order_source === 'whatsapp') ? 'whatsapp' : 'website';
 
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
-        const ALLOWED_PAYMENT = ['BCA','BRI','Mandiri','BNI','QRIS'];
+        const ALLOWED_PAYMENT = ['BCA','BRI','Mandiri','BNI','QRIS','Bonus/Free'];
         const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
 
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED
@@ -1888,14 +1888,19 @@ app.post('/api/orders', async (req, res) => {
 // PUT /api/orders/:id/confirm-payment  (multipart: payment_proof photo)
 app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upload.single('payment_proof'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: 'Foto bukti pembayaran wajib diupload' });
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.payment_status === 'paid') return res.status(400).json({ error: 'Sudah dikonfirmasi' });
 
+        // Order Bonus/Free tidak ada pembayaran nyata → bukti transfer opsional.
+        const isFreeOrder = order.payment_method === 'Bonus/Free';
+        if (!req.file && !isFreeOrder) return res.status(400).json({ error: 'Foto bukti pembayaran wajib diupload' });
+
         // Upload to Supabase BEFORE the transaction — external call, can be slow.
         // If TX later fails, the photo becomes orphan (harmless, tiny size).
-        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
+        const photoUrl = req.file
+            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
+            : null;
 
         const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
 
@@ -1910,11 +1915,13 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
             if (lockRes.rows[0].payment_status === 'paid') {
                 const e = new Error('Pembayaran sudah dikonfirmasi (oleh proses lain)'); e.statusCode = 409; throw e;
             }
-            // Save photo proof
-            await client.query(
-                `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                [order.id, 'payment', photoUrl, req.body.note || '']
-            );
+            // Save photo proof (skip untuk order Bonus/Free tanpa bukti upload)
+            if (photoUrl) {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
+                    [order.id, 'payment', photoUrl, req.body.note || '']
+                );
+            }
 
             // Aggregate per physical variant first — bordir splits (plain + nama + logo)
             // share one inventory row, so summing avoids missing the true total demand.
@@ -2067,7 +2074,6 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
 app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single('ship_proof'), async (req, res) => {
     try {
         const tracking = (req.body.tracking_number || '').trim();
-        if (!tracking) return res.status(400).json({ error: 'Nomor resi wajib diisi' });
         const courierOverride = (req.body.shipping_courier_final || '').trim();
 
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
@@ -2075,6 +2081,9 @@ app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single(
         if (order.order_status !== 'packed') return res.status(400).json({ error: 'Pesanan belum siap dikirim (harus berstatus dikemas dulu)' });
 
         const finalCourier = courierOverride || order.shipping_courier || 'Kurir';
+        // "Kirim sendiri" (antar langsung) tidak punya nomor resi kurir → resi opsional.
+        const isSelfDelivery = finalCourier === 'Kirim sendiri';
+        if (!tracking && !isSelfDelivery) return res.status(400).json({ error: 'Nomor resi wajib diisi' });
 
         // Upload before TX (slow external)
         const photoUrl = req.file
@@ -2110,12 +2119,16 @@ app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single(
                 : customerPhoneDigits;
 
         if (customerPhone) {
+            const shipBody = isSelfDelivery
+                ? `Pesanan Anda sedang dalam proses pengantaran langsung oleh tim Wearscrubs.\n` +
+                  `Tim kami akan menghubungi Anda terkait waktu pengantaran.\n\n`
+                : `Pesanan Anda sudah dikirim via *${finalCourier}*.\n\n` +
+                  `📦 Nomor Resi: *${tracking}*\n\n` +
+                  `Silakan lacak melalui website kurir atau aplikasi pengiriman dengan nomor resi di atas.\n\n`;
             await safeWA(
                 `🚚 *PESANAN DIKIRIM - #${order.order_code}*\n\n` +
                 `Halo ${order.customer_name},\n\n` +
-                `Pesanan Anda sudah dikirim via *${finalCourier}*.\n\n` +
-                `📦 Nomor Resi: *${tracking}*\n\n` +
-                `Silakan lacak melalui website kurir atau aplikasi pengiriman dengan nomor resi di atas.\n\n` +
+                shipBody +
                 `Terima kasih sudah berbelanja di Wearscrubs! 🙏`,
                 'ship-customer',
                 customerPhone   // send to customer, not admin
@@ -2126,7 +2139,7 @@ app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single(
         await safeWA(
             `🚚 *DIKIRIM - #${order.order_code}*\n\n` +
             `Pesanan ${order.customer_name} sudah dikirim.\n` +
-            `📦 Resi: ${tracking}\n` +
+            `📦 Resi: ${tracking || '(kirim sendiri)'}\n` +
             `📮 Kurir: ${finalCourier}`,
             'ship-admin'
         );
