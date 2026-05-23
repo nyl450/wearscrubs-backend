@@ -334,6 +334,10 @@
     .grid-table .reject-corner:hover { background: rgba(239,68,68,0.25); }
     .grid-table .reserved-badge { position: absolute; bottom: 2px; right: 3px; font-size: 8px; color: #60a5fa; cursor: pointer; font-weight: 700; padding: 1px 3px; border-radius: 3px; background: rgba(96,165,250,0.12); line-height: 1; }
     .grid-table .reserved-badge:hover { background: rgba(96,165,250,0.25); }
+    .grid-table .cell-detail { position: absolute; bottom: 2px; left: 3px; font-size: 8px; color: rgba(255,255,255,0.4); cursor: pointer; padding: 1px 3px; border-radius: 3px; line-height: 1; opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s; }
+    .grid-table .cell-stock:hover .cell-detail { opacity: 1; }
+    .grid-table .cell-detail:hover { color: #fff; background: rgba(255,255,255,0.12); }
+    @media (pointer: coarse) { .grid-table .cell-detail { opacity: 0.5; } }
 
     /* Reserved popover */
     #reserved-popover { position: fixed; z-index: 9999; background: #1f1f1f; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; max-width: 280px; max-height: 320px; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
@@ -2777,12 +2781,14 @@ function renderInventoryGrid(rows, container) {
                 const reservedBadge = reserved && reserved.reserved_qty > 0
                     ? `<span class="reserved-badge" onclick="event.stopPropagation();showReservedPopover(event,'${escAttr(key)}')" title="${reserved.order_count} order pending">ⓘ${reserved.reserved_qty}</span>`
                     : '';
+                const detailBadge = `<span class="cell-detail" onclick="event.stopPropagation();openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')" title="Detail: riwayat stok & pembeli"><i class="fa-solid fa-clock-rotate-left"></i></span>`;
                 return `<td class="cell-stock ${sClass}${selectedClass}"
                     data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-current="${stock}"
                     onclick="gridCellClick(this)">
                     <span class="stock-value ${sClass}">${stock}</span>
                     ${rejectBadge}
                     ${reservedBadge}
+                    ${detailBadge}
                 </td>`;
             }).join('');
             return `<tr>
@@ -3205,7 +3211,10 @@ const movementLabel = {
     order_out:             { icon: 'fa-cart-arrow-down',       color: 'text-yellow-400', label: 'Terjual' },
     order_cancel_restore:  { icon: 'fa-rotate-left',           color: 'text-purple-400', label: 'Dibatalkan' },
     receive_reject:        { icon: 'fa-triangle-exclamation',  color: 'text-red-400',    label: 'Terima Reject' },
-    reject_to_normal:      { icon: 'fa-arrow-right-arrow-left',color: 'text-indigo-400', label: 'Reject → Normal' }
+    reject_to_normal:      { icon: 'fa-arrow-right-arrow-left',color: 'text-indigo-400', label: 'Reject → Normal' },
+    exchange_replacement_out: { icon: 'fa-right-from-bracket',  color: 'text-orange-400', label: 'Tukar Size — Keluar' },
+    exchange_return_in:       { icon: 'fa-right-to-bracket',    color: 'text-teal-400',   label: 'Tukar Size — Masuk' },
+    order_edit_adjust:        { icon: 'fa-pen-ruler',           color: 'text-cyan-400',   label: 'Edit Order' }
 };
 
 async function openVariantHistory(product_id, size, color, variant_type, productName) {
