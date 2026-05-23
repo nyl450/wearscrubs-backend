@@ -740,13 +740,14 @@
               </div>
               <div>
                   <label class="wa-field-label">Ekspedisi</label>
-                  <select id="wa-shipping-courier" class="text-sm">
+                  <select id="wa-shipping-courier" class="text-sm" onchange="waOnCourierChange()">
                       <option value="">-- Pilih Ekspedisi --</option>
                       <option value="J&T">J&T</option>
                       <option value="JNE">JNE</option>
                       <option value="Lion Parcel">Lion Parcel</option>
                       <option value="Lion Parcel Cargo">Lion Parcel Cargo</option>
                       <option value="Sentral Cargo">Sentral Cargo</option>
+                      <option value="Free Ongkir">Free Ongkir</option>
                       <option value="Kirim sendiri">Kirim sendiri</option>
                   </select>
               </div>
@@ -758,10 +759,7 @@
                 <label class="wa-field-label">Metode Pembayaran</label>
                 <select id="wa-payment-method">
                   <option value="">-- Pilih --</option>
-                  <option value="BCA">Transfer BCA</option>
-                  <option value="BRI">Transfer BRI</option>
-                  <option value="Mandiri">Transfer Mandiri</option>
-                  <option value="BNI">Transfer BNI</option>
+                  <option value="Transfer BCA / Mandiri">Transfer BCA / Mandiri</option>
                   <option value="QRIS">QRIS</option>
                   <option value="Bonus/Free">Bonus / Free</option>
                 </select>
@@ -6058,6 +6056,22 @@ function waUpdateTotal() {
 
     document.getElementById('wa-total-preview').textContent = 'Rp ' + total.toLocaleString('id-ID');
     waCheckBordirSection();
+}
+
+// Free Ongkir / Kirim sendiri → ongkir otomatis 0 (dan field dikunci)
+function waOnCourierChange() {
+    const courier = document.getElementById('wa-shipping-courier')?.value || '';
+    const costEl  = document.getElementById('wa-shipping-cost');
+    if (!costEl) return;
+    if (courier === 'Free Ongkir' || courier === 'Kirim sendiri') {
+        costEl.value = 0;
+        costEl.readOnly = true;
+        costEl.style.opacity = '0.5';
+    } else {
+        costEl.readOnly = false;
+        costEl.style.opacity = '';
+    }
+    waUpdateTotal();
 }
 
 async function waSubmitOrder() {

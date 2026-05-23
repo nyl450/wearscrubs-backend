@@ -1729,7 +1729,7 @@ app.post('/api/orders', async (req, res) => {
         const safeOrderSource = (isAdmin && order_source === 'whatsapp') ? 'whatsapp' : 'website';
 
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
-        const ALLOWED_PAYMENT = ['BCA','BRI','Mandiri','BNI','QRIS','Bonus/Free'];
+        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Bonus/Free'];
         const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
 
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED
