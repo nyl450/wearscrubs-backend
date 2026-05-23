@@ -23,7 +23,7 @@
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } }
+            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a', softwhite: '#f8fbfd', softpanel: '#F0EFEB' } } }
         }
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -77,7 +77,7 @@
     </script>
 </head>
 
-<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white">
+<body class="bg-softwhite dark:bg-darkbg text-gray-900 dark:text-white">
 
     <!-- Header -->
     <header
@@ -156,7 +156,7 @@
 
     <!-- Mobile Drawer (slide-in from right) -->
     <div id="mobile-drawer"
-        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
+        class="fixed top-0 right-0 h-full w-full bg-softwhite dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
 
         <!-- Drawer Header -->
         <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
@@ -337,27 +337,27 @@
 
         <!-- Footer Super Lengkap (Partners & Subscribe) -->
     <footer
-        class="bg-gray-50 dark:bg-black/40 pt-16 pb-8 border-t border-gray-200 dark:border-white/5 relative z-10 transition-colors duration-300">
+        class="bg-[#1D1D1F] dark:bg-[#0d0d0d] text-white pt-16 pb-8 rounded-t-[48px] relative z-10">
         <div class="container mx-auto px-6">
 
             <!-- Top Footer: Subscribe & Partners -->
             <div
-                class="flex flex-col lg:flex-row justify-between items-center border-b border-gray-200 dark:border-white/10 pb-12 mb-12 gap-10">
+                class="flex flex-col lg:flex-row justify-between items-center border-b border-white/10 pb-12 mb-12 gap-10">
                 <div class="w-full lg:w-1/2">
-                    <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Get the Latest Updates</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md">Subscribe to our newsletter for exclusive deals, new releases, and the latest medical industry news.</p>
+                    <h3 class="text-2xl font-bold text-white mb-2">Get the Latest Updates</h3>
+                    <p class="text-sm text-white/60 mb-6 max-w-md">Subscribe to our newsletter for exclusive deals, new releases, and the latest medical industry news.</p>
                     <form class="flex w-full max-w-md shadow-sm">
                         <input type="email" placeholder="Your email address"
-                            class="flex-1 bg-white dark:bg-darkcard border border-gray-300 dark:border-white/20 rounded-l-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
+                            class="flex-1 bg-white/10 border border-white/20 rounded-l-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/50 transition-colors"
                             required>
                         <button type="submit"
-                            class="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:bg-blue-600 dark:hover:bg-gray-200 transition-colors">Subscribe</button>
+                            class="bg-white text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:bg-white/90 transition-colors">Subscribe</button>
                     </form>
                 </div>
                 <div class="w-full lg:w-1/2 flex flex-col lg:items-end">
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">Official Partner</h3>
-                    <div class="flex flex-wrap gap-6 items-center text-gray-400 dark:text-white/40">
-                        <img loading="lazy" decoding="async" src="images/heiq dymatic.png" alt="HeiQ Dymatic" class="h-8 md:h-10 object-contain opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
+                    <h3 class="text-sm font-bold text-white mb-4 uppercase tracking-wider">Official Partner</h3>
+                    <div class="flex flex-wrap gap-6 items-center text-white/40">
+                        <img src="images/heiq dymatic.png" alt="HeiQ Dymatic" class="h-8 md:h-10 object-contain opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
                     </div>
                 </div>
             </div>
@@ -365,45 +365,54 @@
             <!-- Middle Footer: Link Menu -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Scrub Catalog</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="scrub-top-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Tops</a></li>
-                        <li><a href="scrub-pants-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Pants</a></li>
-                        <li><a href="scrub-caps-en.html" class="hover:text-black dark:hover:text-white transition">Scrub Caps</a></li>
-                        <li><a href="gown-en.html" class="hover:text-black dark:hover:text-white transition">Gowns</a></li>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Scrub Catalog</h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+                        <li><a href="scrub-top-en.html" class="hover:text-white transition">Scrub Tops</a></li>
+                        <li><a href="scrub-pants-en.html" class="hover:text-white transition">Scrub Pants</a></li>
+                        <li><a href="scrub-caps-en.html" class="hover:text-white transition">Scrub Caps</a></li>
+                        <li><a href="gown-en.html" class="hover:text-white transition">Gowns</a></li>
+
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Services</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="shipping-en.html" class="hover:text-black dark:hover:text-white transition">Shipping &amp; Returns</a></li>
-                        <li><a href="payments-shipping-en.html" class="hover:text-black dark:hover:text-white transition">Payment &amp; Shipping</a></li>
-                        <li><a href="ukuran-en.html" class="hover:text-black dark:hover:text-white transition">Size Guide</a></li>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Services
+                    </h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+
+                        <li><a href="shipping-en.html" class="hover:text-white transition">Shipping & Returns</a>
+                        </li>
+                        <li><a href="payments-shipping-en.html" class="hover:text-white transition">Payment &amp; Shipping</a></li>
+                        <li><a href="ukuran-en.html" class="hover:text-white transition">Size Guide</a>
+                        </li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Company</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="about-us-en.html" class="hover:text-black dark:hover:text-white transition">Our Story</a></li>
-                        <li><a href="karir-en.html" class="hover:text-black dark:hover:text-white transition">Careers</a></li>
-                        <li><a href="contact-en.html" class="hover:text-black dark:hover:text-white transition">Contact Us</a></li>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Company
+                    </h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+                        <li><a href="about-us-en.html" class="hover:text-white transition">Our Story</a></li>
+                        <li><a href="karir-en.html" class="hover:text-white transition">Careers</a></li>
+
+                        <li><a href="contact-en.html" class="hover:text-white transition">Contact Us</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase">Follow Us</h4>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Follow Us
+                    </h4>
                     <div class="flex space-x-4">
-                        <a href="https://www.instagram.com/wearscrubs.id/" aria-label="Instagram" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-gray-600 dark:text-white hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 transition-colors"><i class="fa-brands fa-instagram"></i></a>
-                    </div>
+                        <a href="https://www.instagram.com/wearscrubs.id/" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-blue-600 hover:text-white transition-colors"><i class="fa-brands fa-instagram"></i></a>
+                        </div>
                 </div>
             </div>
 
             <!-- Bottom Footer: Copyright -->
             <div
-                class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
-                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400">&copy; 2026 Wearscrubs. All Rights Reserved.</p>
+                class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-white/10">
+                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-white/50">&copy;
+                    2026 Wearscrubs. All Rights Reserved.</p>
                 <div class="flex space-x-6 items-center flex-wrap justify-center gap-y-4">
-                    <a href="privasi-en.html" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Privacy Policy</a>
-                    <a href="syarat-en.html" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Terms of Service</a>
+                    <a href="privasi-en.html" class="text-[10px] uppercase tracking-widest text-white/50 hover:text-white transition">Privacy Policy</a>
+                    <a href="syarat-en.html" class="text-[10px] uppercase tracking-widest text-white/50 hover:text-white transition">Terms of Service</a>
                 </div>
             </div>
         </div>

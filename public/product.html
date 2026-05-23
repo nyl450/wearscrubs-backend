@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id" class="dark">
 <head>
     <meta charset="UTF-8">
@@ -20,7 +20,7 @@
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a' } } }
+            theme: { extend: { colors: { darkbg: '#1c1c1c', darkcard: '#2a2a2a', softwhite: '#f8fbfd', softpanel: '#F0EFEB' } } }
         }
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -59,7 +59,7 @@
         #img-prev.visible, #img-next.visible { display: flex; }
     </style>
 </head>
-<body class="bg-white dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
+<body class="bg-softwhite dark:bg-darkbg text-gray-900 dark:text-white min-h-screen">
 
 <!-- HEADER (same as catalog pages) -->
 <header class="sticky top-0 z-40 bg-white/90 dark:bg-darkbg/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10 transition-colors duration-300">
@@ -125,7 +125,7 @@
 
     <!-- Mobile Drawer (slide-in dari kanan) -->
     <div id="mobile-drawer"
-        class="fixed top-0 right-0 h-full w-full bg-white dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
+        class="fixed top-0 right-0 h-full w-full bg-softwhite dark:bg-darkbg z-[999] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col xl:hidden shadow-2xl">
 
         <!-- Drawer Header -->
         <div class="flex items-center justify-between px-5 py-5 border-b border-gray-100 dark:border-white/10">
@@ -364,27 +364,30 @@
 
 <!-- Footer Super Lengkap (Partners & Subscribe) -->
     <footer
-        class="bg-gray-50 dark:bg-black/40 pt-16 pb-8 border-t border-gray-200 dark:border-white/5 relative z-10 transition-colors duration-300">
+        class="bg-[#1D1D1F] dark:bg-[#0d0d0d] text-white pt-16 pb-8 rounded-t-[48px] relative z-10">
         <div class="container mx-auto px-6">
 
             <!-- Top Footer: Subscribe & Partners -->
             <div
-                class="flex flex-col lg:flex-row justify-between items-center border-b border-gray-200 dark:border-white/10 pb-12 mb-12 gap-10">
+                class="flex flex-col lg:flex-row justify-between items-center border-b border-white/10 pb-12 mb-12 gap-10">
                 <div class="w-full lg:w-1/2">
-                    <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-2" data-id="Dapatkan Info Terbaru" data-en="Get the Latest Updates">Dapatkan Info Terbaru</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md" data-id="Berlangganan newsletter untuk penawaran eksklusif, rilis produk baru, dan info dunia medis terkini." data-en="Subscribe to our newsletter for exclusive deals, new releases, and the latest medical industry news.">Berlangganan newsletter untuk penawaran eksklusif, rilis produk baru, dan info dunia medis terkini.</p>
-                    <form class="flex w-full max-w-md shadow-sm" onsubmit="event.preventDefault();">
-                        <input type="email" placeholder="Alamat email Anda" data-id-placeholder="Alamat email Anda" data-en-placeholder="Your email address"
-                            class="flex-1 bg-white dark:bg-darkcard border border-gray-300 dark:border-white/20 rounded-l-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
+                    <h3 class="text-2xl font-bold text-white mb-2">Dapatkan Berita Terbaru Kami</h3>
+                    <p class="text-sm text-white/60 mb-6 max-w-md">Berlangganan buletin kami untuk
+                        penawaran eksklusif, produk terbaru, dan info medis terkini.</p>
+                    <form class="flex w-full max-w-md shadow-sm">
+                        <input type="email" placeholder="Alamat email Anda"
+                            class="flex-1 bg-white/10 border border-white/20 rounded-l-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/50 transition-colors"
                             required>
                         <button type="submit"
-                            class="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:bg-blue-600 dark:hover:bg-gray-200 transition-colors" data-id="Berlangganan" data-en="Subscribe">Berlangganan</button>
+                            class="bg-white text-black px-6 py-3 rounded-r-xl text-sm font-bold hover:bg-white/90 transition-colors">Daftar</button>
                     </form>
                 </div>
                 <div class="w-full lg:w-1/2 flex flex-col lg:items-end">
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider" data-id="Mitra Resmi" data-en="Official Partner">Mitra Resmi</h3>
-                    <div class="flex flex-wrap gap-6 items-center text-gray-400 dark:text-white/40">
-                        <img loading="lazy" decoding="async" src="images/heiq dymatic.png" alt="HeiQ Dymatic" class="h-8 md:h-10 object-contain opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
+                    <h3 class="text-sm font-bold text-white mb-4 uppercase tracking-wider">Mitra
+                        Resmi</h3>
+                    <div class="flex flex-wrap gap-6 items-center text-white/40">
+                        <img loading="lazy" decoding="async" src="images/heiq dymatic.png" alt="HeiQ Dymatic"
+                            class="h-8 md:h-10 object-contain opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
                     </div>
                 </div>
             </div>
@@ -392,45 +395,64 @@
             <!-- Middle Footer: Link Menu -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Katalog Scrub" data-en="Scrub Catalog">Katalog Scrub</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="scrub-top.html" data-href-id="scrub-top.html" data-href-en="scrub-top-en.html" data-id="Atasan Scrub" data-en="Scrub Tops" class="hover:text-black dark:hover:text-white transition">Atasan Scrub</a></li>
-                        <li><a href="scrub-pants.html" data-href-id="scrub-pants.html" data-href-en="scrub-pants-en.html" data-id="Celana Scrub" data-en="Scrub Pants" class="hover:text-black dark:hover:text-white transition">Celana Scrub</a></li>
-                        <li><a href="scrub-caps.html" data-href-id="scrub-caps.html" data-href-en="scrub-caps-en.html" data-id="Cap Scrub" data-en="Scrub Caps" class="hover:text-black dark:hover:text-white transition">Cap Scrub</a></li>
-                        <li><a href="gown.html" data-href-id="gown.html" data-href-en="gown-en.html" data-id="Gown" data-en="Gowns" class="hover:text-black dark:hover:text-white transition">Gown</a></li>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Katalog
+                        Scrub</h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+                        <li><a href="scrub-top.html" class="hover:text-white transition">Atasan
+                                Scrub</a></li>
+                        <li><a href="scrub-pants.html" class="hover:text-white transition">Celana
+                                Scrub</a></li>
+                        <li><a href="scrub-caps.html" class="hover:text-white transition">Cap
+                                Scrub</a></li>
+                        <li><a href="gown.html" class="hover:text-white transition">Gown</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Layanan" data-en="Services">Layanan</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="shipping.html" data-href-id="shipping.html" data-href-en="shipping-en.html" data-id="Pengiriman & Retur" data-en="Shipping & Returns" class="hover:text-black dark:hover:text-white transition">Pengiriman &amp; Retur</a></li>
-                        <li><a href="payments-shipping.html" data-href-id="payments-shipping.html" data-href-en="payments-shipping-en.html" data-id="Pembayaran & Pengiriman" data-en="Payment & Shipping" class="hover:text-black dark:hover:text-white transition">Pembayaran &amp; Pengiriman</a></li>
-                        <li><a href="ukuran.html" data-href-id="ukuran.html" data-href-en="ukuran-en.html" data-id="Panduan Ukuran" data-en="Size Guide" class="hover:text-black dark:hover:text-white transition">Panduan Ukuran</a></li>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Layanan
+                    </h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+
+                        <li><a href="shipping.html" class="hover:text-white transition">Pengiriman
+                                & Retur</a>
+                        </li>
+                        <li><a href="payments-shipping.html" class="hover:text-white transition">Pembayaran &amp; Pengiriman</a></li>
+                        <li><a href="ukuran.html" class="hover:text-white transition">Panduan
+                                Ukuran</a>
+                        </li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Perusahaan" data-en="Company">Perusahaan</h4>
-                    <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                        <li><a href="about-us.html" data-href-id="about-us.html" data-href-en="about-us-en.html" data-id="Cerita Kami" data-en="Our Story" class="hover:text-black dark:hover:text-white transition">Cerita Kami</a></li>
-                        <li><a href="karir.html" data-href-id="karir.html" data-href-en="karir-en.html" data-id="Karir" data-en="Careers" class="hover:text-black dark:hover:text-white transition">Karir</a></li>
-                        <li><a href="contact.html" data-href-id="contact.html" data-href-en="contact-en.html" data-id="Hubungi Kami" data-en="Contact Us" class="hover:text-black dark:hover:text-white transition">Hubungi Kami</a></li>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Perusahaan
+                    </h4>
+                    <ul class="space-y-3 text-sm text-white/60">
+                        <li><a href="about-us.html" class="hover:text-white transition">Cerita
+                                Kami</a></li>
+                        <li><a href="karir.html" class="hover:text-white transition">Karir</a>
+                        </li>
+
+                        <li><a href="contact.html" class="hover:text-white transition">Hubungi
+                                Kami</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white mb-4 text-sm tracking-wider uppercase" data-id="Ikuti Kami" data-en="Follow Us">Ikuti Kami</h4>
+                    <h4 class="font-bold text-white mb-4 text-sm tracking-wider uppercase">Ikuti Kami
+                    </h4>
                     <div class="flex space-x-4">
-                        <a href="https://www.instagram.com/wearscrubs.id/" aria-label="Instagram" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-gray-600 dark:text-white hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 transition-colors"><i class="fa-brands fa-instagram"></i></a>
-                    </div>
+                        <a href="https://www.instagram.com/wearscrubs.id/" aria-label="Instagram" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-blue-600 hover:text-white transition-colors"><i class="fa-brands fa-instagram"></i></a>
+                        </div>
                 </div>
             </div>
 
             <!-- Bottom Footer: Copyright -->
             <div
-                class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 dark:border-white/10">
-                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-gray-600 dark:text-gray-400" data-id="&copy; 2026 Wearscrubs. Hak Cipta Dilindungi." data-en="&copy; 2026 Wearscrubs. All Rights Reserved.">&copy; 2026 Wearscrubs. Hak Cipta Dilindungi.</p>
+                class="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-white/10">
+                <p class="text-[10px] uppercase tracking-widest mb-4 md:mb-0 text-white/50">&copy;
+                    2026 Wearscrubs. Hak Cipta Dilindungi.</p>
                 <div class="flex space-x-6 items-center flex-wrap justify-center gap-y-4">
-                    <a href="privasi.html" data-href-id="privasi.html" data-href-en="privasi-en.html" data-id="Kebijakan Privasi" data-en="Privacy Policy" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Kebijakan Privasi</a>
-                    <a href="syarat.html" data-href-id="syarat.html" data-href-en="syarat-en.html" data-id="Syarat & Ketentuan" data-en="Terms of Service" class="text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition">Syarat &amp; Ketentuan</a>
+                    <a href="privasi.html"
+                        class="text-[10px] uppercase tracking-widest text-white/50 hover:text-white transition">Privasi</a>
+                    <a href="syarat.html"
+                        class="text-[10px] uppercase tracking-widest text-white/50 hover:text-white transition">Syarat</a>
                 </div>
             </div>
         </div>
