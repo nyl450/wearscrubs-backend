@@ -435,6 +435,8 @@ async function initDB() {
 
     // ── Migrate: tracking_number for shipment ─────────────────────────────────
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`).catch(() => {});
+    // ── Migrate: track which admin performed each order photo step ─────────────
+    await dbRun(`ALTER TABLE order_photos ADD COLUMN IF NOT EXISTS performed_by TEXT`);
 
     // ── Refunds (cancelled-paid orders + rejected bordir) ─────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS refunds (
@@ -1932,8 +1934,8 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
             // Save photo proof (skip untuk order Bonus/Free tanpa bukti upload)
             if (photoUrl) {
                 await client.query(
-                    `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                    [order.id, 'payment', photoUrl, req.body.note || '']
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
+                    [order.id, 'payment', photoUrl, req.body.note || '', req.user.username]
                 );
             }
 
@@ -2027,8 +2029,8 @@ app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.
         // Atomic: photo record + status transition
         await withTransaction(async (client) => {
             await client.query(
-                `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                [order.id, 'bordir', photoUrl, req.body.note || '']
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
+                [order.id, 'bordir', photoUrl, req.body.note || '', req.user.username]
             );
             await client.query(
                 `UPDATE orders SET order_status = 'confirmed', updated_at = NOW() WHERE id = $1`,
@@ -2061,8 +2063,8 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
 
         await withTransaction(async (client) => {
             await client.query(
-                `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                [order.id, 'pack', photoUrl, req.body.note || '']
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
+                [order.id, 'pack', photoUrl, req.body.note || '', req.user.username]
             );
             await client.query(
                 `UPDATE orders SET order_status = 'packed', updated_at = NOW() WHERE id = $1`,
@@ -2107,8 +2109,8 @@ app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single(
         await withTransaction(async (client) => {
             if (photoUrl) {
                 await client.query(
-                    `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                    [order.id, 'ship', photoUrl, `Resi: ${tracking}${req.body.note ? ' · ' + req.body.note : ''}`]
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
+                    [order.id, 'ship', photoUrl, `Resi: ${tracking}${req.body.note ? ' · ' + req.body.note : ''}`, req.user.username]
                 );
             }
             if (courierOverride) {
@@ -2216,8 +2218,8 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                 // Semantic-wise this is "cancellation context", not the actual transfer proof
                 // (that one lives on refunds.proof_url after mark-transferred).
                 await client.query(
-                    `INSERT INTO order_photos (order_id, step, photo_url, note) VALUES ($1,$2,$3,$4)`,
-                    [order.id, 'refund', cancelContextUrl, cancel_reason || '']
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
+                    [order.id, 'refund', cancelContextUrl, cancel_reason || '', req.user.username]
                 );
             }
 

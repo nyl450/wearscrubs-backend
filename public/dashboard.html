@@ -4276,7 +4276,7 @@ async function viewOrder(id) {
                     <div class="p-2.5">
                         <p class="text-[10px] font-bold text-white/60">${stepLabels[p.step]||p.step}</p>
                         ${p.note ? `<p class="text-[10px] text-white/30 mt-0.5">${p.note}</p>` : ''}
-                        <p class="text-[9px] text-white/20 mt-0.5">${new Date(p.created_at).toLocaleString('id-ID')}</p>
+                        <p class="text-[9px] text-white/20 mt-0.5">${new Date(p.created_at).toLocaleString('id-ID')}${p.performed_by ? ` · <span class="text-white/35">oleh ${esc(p.performed_by)}</span>` : ''}</p>
                     </div>
                 </div>`).join('')}
             </div>
@@ -5412,6 +5412,11 @@ function initSidebar() {
             btn.style.display = 'none';
         }
     });
+
+    // If overview is restricted, redirect to the first accessible module
+    if (!allowed.includes('overview') && allowed.length > 0) {
+        showModule(allowed[0]);
+    }
 }
 
 // ── Load Settings module (users table + sidebar init) ─────────────────────────
