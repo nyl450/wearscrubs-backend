@@ -997,6 +997,69 @@
         setMeta('meta[property="og:title"]', titleStr);
         setMeta('meta[property="og:description"]', descStr);
         setMeta('meta[property="og:locale"]', isEn ? 'en_US' : 'id_ID');
+        setMeta('meta[name="twitter:title"]', titleStr);
+        setMeta('meta[name="twitter:description"]', descStr);
+        injectProductSchema(p);
+    }
+
+    // JSON-LD Product + BreadcrumbList (dinamis, data asli dari API). Tanpa
+    // aggregateRating karena belum ada review nyata (anti-fabrikasi).
+    function injectProductSchema(p) {
+        const isEn = getCurrentLang() === 'en';
+        const base = 'https://wearscrubs.id/';
+        const absUrl = u => !u ? base + 'images/logo/logo%20ws%20white%20250x55.png'
+            : /^https?:/.test(u) ? u
+            : base + u.split('/').map(encodeURIComponent).join('/');
+        const img = absUrl(resolvePhoto(p.main_photo));
+        const desc = (isEn ? (p.short_description_en || p.short_description) : p.short_description)
+            || (isEn ? `Premium medical scrub ${p.name} from Wearscrubs.` : `Scrub medis ${p.name} dari Wearscrubs.`);
+        let price = Number(p.price) || 0;
+        if (!price && p.price_by_type) {
+            const vals = Object.values(p.price_by_type).map(Number).filter(n => n > 0);
+            if (vals.length) price = Math.min(...vals);
+        }
+        const catLabel = (isEn ? CAT_LABELS_EN : CAT_LABELS)[p.category] || p.category;
+        const catPage  = (isEn ? CAT_PAGES_EN  : CAT_PAGES)[p.category]  || 'scrub-top.html';
+        const productUrl = base + 'product.html?id=' + p.id;
+
+        const product = {
+            "@type": "Product",
+            "name": p.name,
+            "description": desc,
+            "image": img,
+            "brand": { "@type": "Brand", "name": "Wearscrubs" },
+            "category": catLabel
+        };
+        if (p.sku) product.sku = p.sku;
+        if (price > 0) {
+            product.offers = {
+                "@type": "Offer",
+                "url": productUrl,
+                "priceCurrency": "IDR",
+                "price": String(price),
+                "availability": "https://schema.org/InStock",
+                "seller": { "@type": "Organization", "name": "Wearscrubs" }
+            };
+        }
+        const breadcrumb = {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                { "@type": "ListItem", "position": 1, "name": isEn ? "Home" : "Beranda", "item": base },
+                { "@type": "ListItem", "position": 2, "name": catLabel, "item": base + catPage },
+                { "@type": "ListItem", "position": 3, "name": p.name, "item": productUrl }
+            ]
+        };
+        const data = { "@context": "https://schema.org", "@graph": [product, breadcrumb] };
+        let el = document.getElementById('ld-product');
+        if (!el) { el = document.createElement('script'); el.type = 'application/ld+json'; el.id = 'ld-product'; document.head.appendChild(el); }
+        el.textContent = JSON.stringify(data);
+
+        // Sekalian samakan og:image & og:url dengan produk (sebelumnya statis logo)
+        const setM = (sel, val) => { const m = document.querySelector(sel); if (m) m.setAttribute('content', val); };
+        setM('meta[property="og:image"]', img);
+        setM('meta[property="og:url"]', productUrl);
+        const can = document.querySelector('link[rel="canonical"]');
+        if (can) can.setAttribute('href', productUrl);
     }
     // Apply saved language on load
     const savedLang = localStorage.getItem('ws_lang') || 'id';
