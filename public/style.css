@@ -8,6 +8,21 @@
             transition: background-color 0.3s ease, color 0.3s ease;
         }
 
+        /* ── Floating Navbar (Lumio-style, Varian A) — sesi nice-lichterman ───── */
+        .nav-floating {
+            background: rgba(255, 255, 255, 0.8);
+            -webkit-backdrop-filter: blur(24px);
+            backdrop-filter: blur(24px);
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        html.dark .nav-floating {
+            background: rgba(42, 42, 42, 0.8);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+            border-color: rgba(255, 255, 255, 0.10);
+        }
+
         .hero-pane {
             position: relative;
             height: 85vh;
