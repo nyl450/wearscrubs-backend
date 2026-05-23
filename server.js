@@ -1717,10 +1717,15 @@ app.post('/api/orders', async (req, res) => {
             // SECURITY: bonus is ADMIN-ONLY. A public caller sending is_bonus:true must
             // not get free products — gate it behind isAdmin.
             const isBonus = isAdmin && item.is_bonus === true;
-            const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0));
+            // Bordir price: admin may override per-order (e.g. logo lebih susah → 40rb);
+            // public callers ALWAYS use the fixed 20rb/30rb (gate behind isAdmin, anti-tamper).
+            const namaPrice = (isAdmin && Number.isInteger(item.bordir_nama_price) && item.bordir_nama_price >= 0) ? item.bordir_nama_price : 20000;
+            const logoPrice = (isAdmin && Number.isInteger(item.bordir_logo_price) && item.bordir_logo_price >= 0) ? item.bordir_logo_price : 30000;
+            const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? namaPrice : 0) + (item.bordir_logo ? logoPrice : 0));
             const basePrice = isBonus ? 0 : product.price;
             const unitPrice = basePrice + itemEmbroidery;
-            itemDetails.push({ ...item, is_bonus: isBonus, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery });
+            itemDetails.push({ ...item, is_bonus: isBonus, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery,
+                bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null });
             productTotal += unitPrice * item.quantity;
         }
 
@@ -1810,11 +1815,12 @@ app.post('/api/orders', async (req, res) => {
 
             for (const item of itemDetails) {
                 await client.query(
-                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
                     [newOrderId, item.product_id, item.size, item.color,
                         item.variant_type || 'null', item.quantity, item.price,
-                        item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false]
+                        item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false,
+                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null]
                 );
             }
             return newOrderId;
@@ -2387,15 +2393,15 @@ app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), uploa
 
         // Calculate refund amount per type by summing per-item embroidery cost
         // from order_items where the matching bordir flag is true.
-        const items = await dbAll('SELECT quantity, bordir_nama, bordir_logo FROM order_items WHERE order_id = $1', [order.id]);
-        const BORDIR_NAMA_PRICE = 20000;
-        const BORDIR_LOGO_PRICE = 30000;
+        const items = await dbAll('SELECT quantity, bordir_nama, bordir_logo, bordir_nama_price, bordir_logo_price FROM order_items WHERE order_id = $1', [order.id]);
+        // Refund the amount that was actually charged (admin may have overridden the
+        // bordir price); fall back to legacy fixed prices for older orders (NULL).
         const refundsByType = {};
         if (parsedTypes.includes('nama')) {
-            refundsByType.nama = items.reduce((sum, i) => sum + (i.bordir_nama ? BORDIR_NAMA_PRICE * i.quantity : 0), 0);
+            refundsByType.nama = items.reduce((sum, i) => sum + (i.bordir_nama ? (i.bordir_nama_price ?? 20000) * i.quantity : 0), 0);
         }
         if (parsedTypes.includes('logo')) {
-            refundsByType.logo = items.reduce((sum, i) => sum + (i.bordir_logo ? BORDIR_LOGO_PRICE * i.quantity : 0), 0);
+            refundsByType.logo = items.reduce((sum, i) => sum + (i.bordir_logo ? (i.bordir_logo_price ?? 30000) * i.quantity : 0), 0);
         }
 
         // Determine new bordir_status: full reject if all types rejected, partial otherwise

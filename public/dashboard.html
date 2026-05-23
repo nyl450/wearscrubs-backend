@@ -5826,6 +5826,10 @@ function waAddItem() {
                         </select>
                     </div>
                 </div>
+                <div>
+                    <label class="wa-field-label">Harga Bordir Nama (Rp)</label>
+                    <input type="number" id="wa-bordir-nama-price-${idx}" value="20000" min="0" step="1000" oninput="waUpdateTotal()" class="input-sm" />
+                </div>
                 </div>
               </div>
             </div>
@@ -5854,6 +5858,10 @@ function waAddItem() {
                             <option value="kanan">Kanan Dada</option>
                         </select>
                     </div>
+                </div>
+                <div>
+                    <label class="wa-field-label">Harga Bordir Logo (Rp)</label>
+                    <input type="number" id="wa-bordir-logo-price-${idx}" value="30000" min="0" step="1000" oninput="waUpdateTotal()" class="input-sm" />
                 </div>
                 </div>
               </div>
@@ -6031,8 +6039,8 @@ function waUpdateTotal() {
         if (isBonus) return; // bonus item: free, excluded from total
         const price = parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
-        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? 20000 : 0;
-        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? 30000 : 0;
+        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 0) : 0;
+        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 0) : 0;
         productTotal += (price + bordirNama + bordirLogo) * qty;
     });
     const ongkir = parseInt(document.getElementById('wa-shipping-cost')?.value || 0);
@@ -6122,6 +6130,8 @@ async function waSubmitOrder() {
             quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
             bordir_nama:  bordirNama,
             bordir_logo:  bordirLogo,
+            bordir_nama_price: parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000,
+            bordir_logo_price: parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000,
             is_bonus:     isBonus,
         });
 
@@ -6174,7 +6184,7 @@ async function waSubmitOrder() {
         const itemLines = items.map(it => {
             const prod = waProducts.find(p => p.id === it.product_id);
             const price = prod ? prod.price : 0;
-            const embCost = (it.bordir_nama ? 20000 : 0) + (it.bordir_logo ? 30000 : 0);
+            const embCost = (it.bordir_nama ? (it.bordir_nama_price||20000) : 0) + (it.bordir_logo ? (it.bordir_logo_price||30000) : 0);
             const lineTotal = it.is_bonus ? 0 : (price + embCost) * it.quantity;
             let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : 'Rp ' + lineTotal.toLocaleString('id-ID')}`;
             if (it.bordir_nama) line += ' [Bordir Nama]';
@@ -6292,17 +6302,22 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     let productSubtotal = 0;
     let totalBordirNamaQty = 0;
     let totalBordirLogoQty = 0;
+    let totalBordirNamaCost = 0;
+    let totalBordirLogoCost = 0;
     items.forEach(item => {
         const isBonus = item.is_bonus === true;
+        // Per-item bordir price (admin may have overridden; fallback to legacy fixed).
+        const namaP = item.bordir_nama_price ?? 20000;
+        const logoP = item.bordir_logo_price ?? 30000;
         // Derive base garment price (stored price includes embroidery cost).
         // Bonus item: entirely free — price 0, and its bordir is NOT charged.
-        const embCost = isBonus ? 0 : ((item.bordir_nama ? 20000 : 0) + (item.bordir_logo ? 30000 : 0));
+        const embCost = isBonus ? 0 : ((item.bordir_nama ? namaP : 0) + (item.bordir_logo ? logoP : 0));
         const basePrice = isBonus ? 0 : ((item.price || 0) - embCost);
         const qty = item.quantity || 1;
         if (!isBonus) {
             productSubtotal += basePrice * qty;
-            if (item.bordir_nama) totalBordirNamaQty += qty;
-            if (item.bordir_logo) totalBordirLogoQty += qty;
+            if (item.bordir_nama) { totalBordirNamaQty += qty; totalBordirNamaCost += namaP * qty; }
+            if (item.bordir_logo) { totalBordirLogoQty += qty; totalBordirLogoCost += logoP * qty; }
         }
 
         const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
@@ -6316,9 +6331,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     // Consolidated bordir rows — max 2 lines regardless of how many items have bordir
     let bordirLineRowsHTML = '';
     if (totalBordirNamaQty > 0)
-        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Nama</td><td>${fmtRp(20000)}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(20000 * totalBordirNamaQty)}</td></tr>`;
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Nama</td><td>${fmtRp(Math.round(totalBordirNamaCost / totalBordirNamaQty))}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(totalBordirNamaCost)}</td></tr>`;
     if (totalBordirLogoQty > 0)
-        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Logo</td><td>${fmtRp(30000)}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(30000 * totalBordirLogoQty)}</td></tr>`;
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Logo</td><td>${fmtRp(Math.round(totalBordirLogoCost / totalBordirLogoQty))}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(totalBordirLogoCost)}</td></tr>`;
     const shippingCost = order.shipping_cost || 0;
     const courier = order.shipping_courier || 'Kurir';
     const shippingCity = order.shipping_city || '';
