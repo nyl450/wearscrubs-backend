@@ -48,8 +48,10 @@
         @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         .fade-up { animation: fadeUp 0.4s ease forwards; }
         #main-product-image { transition: opacity 0.3s ease; }
-        #img-container { background: #ffffff; }
+        #img-container { background: #f8fbfd; }
         .dark #img-container { background: #1c1c1c; }
+        .thumb-img { background: #f8fbfd; }
+        .dark .thumb-img { background: #1c1c1c; }
         #img-prev, #img-next { display: none; }
         #img-prev.visible, #img-next.visible { display: flex; }
     </style>
@@ -192,7 +194,7 @@
 
         <!-- LEFT: Image -->
         <div class="space-y-3">
-            <!-- Main image — dark mode bg #1c1c1c (CSS), light mode #fff (CSS) -->
+            <!-- Main image — dark mode bg #1c1c1c, light mode #f8fbfd (softwhite, matches page) -->
             <div id="img-container" class="relative w-full overflow-hidden rounded-sm" style="min-height:300px;">
 
                 <img fetchpriority="high" decoding="async" id="main-product-image" src="" alt=""
@@ -725,8 +727,7 @@
                 idx === currentPhotoIdx ? 'border-gray-800 dark:border-white' : 'border-gray-200 dark:border-white/10'
             } hover:border-gray-400 dark:hover:border-white/30 transition-all" style="aspect-ratio:1/1;">
                 <img loading="lazy" decoding="async" src="${url}" alt="Foto ${idx+1}"
-                    class="w-full h-full object-contain"
-                    style="background:#fff"
+                    class="w-full h-full object-contain thumb-img"
                     onerror="this.parentElement.style.display='none'">
             </button>`
         ).join('');
