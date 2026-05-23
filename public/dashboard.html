@@ -4302,6 +4302,17 @@ async function viewOrder(id) {
             ${isAdmin && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
+        // ── WA resi confirmation link (admin only) ────────────────────────────
+        const waResiLink = (() => {
+            if (!o.tracking_number) return null;
+            const shipDate = stepTimestamp.shipped
+                ? new Date(stepTimestamp.shipped).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+                : new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            const courier = o.shipping_courier || 'ekspedisi';
+            const msg = `Halo ${o.customer_name} 👋\n\nPesanan Anda *#${o.order_code}* telah dikirim! 🚚\n\n📦 *Nomor Resi:* ${o.tracking_number}\n🚚 *Ekspedisi:* ${courier}\n📅 *Tanggal Kirim:* ${shipDate}\n\nGunakan nomor resi di atas untuk melacak paket Anda. 🔍\n\nTerima kasih sudah berbelanja di Wearscrubs! 🙏`;
+            return `${waLink}?text=${encodeURIComponent(msg)}`;
+        })();
+
         document.getElementById('order-modal-content').innerHTML = `
         <!-- Info Customer -->
         <div class="grid grid-cols-2 gap-3 text-sm">
@@ -4321,7 +4332,13 @@ async function viewOrder(id) {
             </div>
             ${o.shipping_city ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kota</p><p class="font-bold">${esc(o.shipping_city)}</p></div>` : ''}
             ${o.shipping_courier ? `<div class="bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Kurir</p><p class="font-bold">${esc(o.shipping_courier)}</p></div>` : ''}
-            ${o.tracking_number ? `<div class="col-span-2 bg-indigo-500/10 border border-indigo-400/20 rounded-xl p-3"><p class="text-indigo-300/70 text-xs mb-1 uppercase tracking-wider font-bold">📦 Nomor Resi</p><p class="font-mono font-bold text-indigo-200 text-base select-all">${esc(o.tracking_number)}</p></div>` : ''}
+            ${o.tracking_number ? `<div class="col-span-2 bg-indigo-500/10 border border-indigo-400/20 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                    <p class="text-indigo-300/70 text-xs mb-1 uppercase tracking-wider font-bold">📦 Nomor Resi</p>
+                    <p class="font-mono font-bold text-indigo-200 text-base select-all">${esc(o.tracking_number)}</p>
+                </div>
+                ${isAdmin && waResiLink ? `<a href="${waResiLink}" target="_blank" class="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold transition shrink-0"><i class="fa-brands fa-whatsapp"></i> Kirim Resi ke Customer</a>` : ''}
+            </div>` : ''}
             ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${esc(o.notes)}</p></div>` : ''}
         </div>
 
