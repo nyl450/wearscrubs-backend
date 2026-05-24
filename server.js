@@ -415,6 +415,14 @@ async function initDB() {
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_logo BOOLEAN DEFAULT FALSE`);
     // Bonus item — gift, charged Rp 0 (product + bordir all free). Stock still deducted.
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_bonus BOOLEAN DEFAULT FALSE`);
+    // WA-Order enhancement (per-item): admin-overridable bordir prices, custom size
+    // (off-catalog, skips stock), and PO (qty > stock, fulfilled later). Live DB already
+    // has these via earlier migration — kept here so server.js is authoritative on fresh DBs.
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_nama_price INTEGER DEFAULT NULL`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_logo_price INTEGER DEFAULT NULL`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_custom_size BOOLEAN DEFAULT FALSE`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_po BOOLEAN DEFAULT FALSE`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS po_fulfilled BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_by TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT DEFAULT NULL`);
     // Migrate: order channel & payment method
@@ -1688,6 +1696,10 @@ app.post('/api/orders', async (req, res) => {
         // the same shirt appears as multiple lines (plain + with name + with logo).
         const variantTotals = new Map();
         for (const item of items) {
+            // Custom-size items are off-catalog (no inventory row) → skip stock check.
+            // ADMIN-ONLY: a public caller sending is_custom_size must NOT bypass stock,
+            // so the skip is gated behind isAdmin (same anti-tamper posture as is_bonus).
+            if (isAdmin && item.is_custom_size === true) continue;
             const k = `${item.product_id}|${item.size}|${item.color}|${item.variant_type || 'null'}`;
             variantTotals.set(k, (variantTotals.get(k) || 0) + Number(item.quantity || 0));
         }
@@ -1717,14 +1729,19 @@ app.post('/api/orders', async (req, res) => {
             // SECURITY: bonus is ADMIN-ONLY. A public caller sending is_bonus:true must
             // not get free products — gate it behind isAdmin.
             const isBonus = isAdmin && item.is_bonus === true;
+            // Custom size (e.g. 4XL): off-catalog garment with an admin-set base price.
+            // ADMIN-ONLY (anti-tamper). When custom, the base price comes from custom_price
+            // instead of the catalog product.price; falls back to product.price if missing.
+            const isCustomSize = isAdmin && item.is_custom_size === true;
+            const customBase = (isCustomSize && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : product.price;
             // Bordir price: admin may override per-order (e.g. logo lebih susah → 40rb);
             // public callers ALWAYS use the fixed 20rb/30rb (gate behind isAdmin, anti-tamper).
             const namaPrice = (isAdmin && Number.isInteger(item.bordir_nama_price) && item.bordir_nama_price >= 0) ? item.bordir_nama_price : 20000;
             const logoPrice = (isAdmin && Number.isInteger(item.bordir_logo_price) && item.bordir_logo_price >= 0) ? item.bordir_logo_price : 30000;
             const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? namaPrice : 0) + (item.bordir_logo ? logoPrice : 0));
-            const basePrice = isBonus ? 0 : product.price;
+            const basePrice = isBonus ? 0 : customBase;
             const unitPrice = basePrice + itemEmbroidery;
-            itemDetails.push({ ...item, is_bonus: isBonus, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery,
+            itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery,
                 bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null });
             productTotal += unitPrice * item.quantity;
         }
@@ -1815,12 +1832,12 @@ app.post('/api/orders', async (req, res) => {
 
             for (const item of itemDetails) {
                 await client.query(
-                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
                     [newOrderId, item.product_id, item.size, item.color,
                         item.variant_type || 'null', item.quantity, item.price,
                         item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false,
-                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null]
+                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null, item.is_custom_size || false]
                 );
             }
             return newOrderId;
@@ -1949,6 +1966,9 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
             // share one inventory row, so summing avoids missing the true total demand.
             const variantTotals = new Map();
             for (const it of items) {
+                // Custom-size lines have no inventory row → never deduct (and skip the
+                // hard stock check below, which would otherwise throw a false 409).
+                if (it.is_custom_size) continue;
                 const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
                 if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
                 variantTotals.get(k).quantity += it.quantity;
@@ -2198,6 +2218,9 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             if (order.payment_status === 'paid') {
                 const itemsRes = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
                 for (const item of itemsRes.rows) {
+                    // Custom-size lines were never deducted at confirm → nothing to restore
+                    // (and they have no inventory row; restoring would just log a bogus ledger entry).
+                    if (item.is_custom_size) continue;
                     const invRes = await client.query(
                         'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
                         [item.product_id, item.size, item.color, item.variant_type]
@@ -3008,6 +3031,10 @@ app.put('/api/orders/:id/items/:itemId/size', requireAuth(['admin','manager']), 
 
         const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [req.params.itemId, order.id]);
         if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
+        // Custom-size items are off-catalog (no inventory row). Editing their size would
+        // create a phantom inventory row via the ON CONFLICT restore below — block it.
+        if (item.is_custom_size)
+            return res.status(400).json({ error: 'Item custom size tidak punya stok di katalog — size tidak bisa diubah lewat edit. Batalkan & buat ulang bila perlu.' });
 
         const toSize = String(req.body.to_size || '').trim();
         if (!toSize) return res.status(400).json({ error: 'Size baru wajib diisi' });

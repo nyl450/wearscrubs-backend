@@ -5774,6 +5774,20 @@ function waAddItem() {
                     </select>
                 </div>
             </div>
+            <!-- Custom size: off-catalog (mis. 4XL). Stok tidak dicek; harga diisi manual. -->
+            <div id="wa-custom-fields-${idx}" class="hidden p-2.5 rounded-xl" style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);">
+                <p class="text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(125,211,252,0.85);">✏️ Custom Size — di luar katalog, stok tidak dikurangi</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="wa-field-label">Label Ukuran <span style="color:#f87171">*</span></label>
+                        <input type="text" id="wa-custom-size-${idx}" placeholder="mis. 4XL" class="input-sm" oninput="waUpdateTotal()" />
+                    </div>
+                    <div>
+                        <label class="wa-field-label">Harga Satuan (Rp) <span style="color:#f87171">*</span></label>
+                        <input type="number" id="wa-custom-price-${idx}" min="0" placeholder="mis. 250000" class="input-sm" oninput="waUpdateTotal()" />
+                    </div>
+                </div>
+            </div>
             <div class="grid grid-cols-2 gap-2 items-end">
                 <div>
                     <label class="wa-field-label">Jumlah</label>
@@ -5981,6 +5995,8 @@ function waOnVariantChange(idx) {
     const inv = waInventoryCache[idx] || [];
     const sizes = [...new Set(inv.filter(i => i.color === color && i.variant_type === variant).map(i => i.size))];
     sizes.forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
+    // Off-catalog custom size (e.g. 4XL) — always available, skips stock entirely.
+    sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;
     waUpdateTotal();
 }
 
@@ -5990,6 +6006,15 @@ function waOnSizeChange(idx) {
     const variant = document.getElementById(`wa-variant-${idx}`).value;
     const size    = document.getElementById(`wa-size-${idx}`).value;
     const qtyEl   = document.getElementById(`wa-qty-${idx}`);
+    const customPanel = document.getElementById(`wa-custom-fields-${idx}`);
+    const isCustom = size === '__custom__';
+    if (customPanel) customPanel.classList.toggle('hidden', !isCustom);
+    if (isCustom) {
+        // Off-catalog: no stock, so no qty cap.
+        if (qtyEl) { qtyEl.removeAttribute('max'); qtyEl.title = 'Custom size — stok tidak dicek'; }
+        waUpdateTotal();
+        return;
+    }
     const row = (waInventoryCache[idx] || []).find(i => i.color === color && i.variant_type === variant && i.size === size);
     if (qtyEl && row) {
         const maxStock = Number(row.stock);
@@ -6037,7 +6062,11 @@ function waUpdateTotal() {
         if (!prodEl || !prodEl.value) return;
         const isBonus = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
         if (isBonus) return; // bonus item: free, excluded from total
-        const price = parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
+        // Custom size: base price is the admin-entered custom price, not the catalog price.
+        const sizeVal = document.getElementById(`wa-size-${idx}`)?.value;
+        const price = sizeVal === '__custom__'
+            ? (parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value) || 0)
+            : parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 0) : 0;
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 0) : 0;
@@ -6118,6 +6147,17 @@ async function waSubmitOrder() {
         if (variantEl && variantEl.options.length > 1 && !variantEl.value) { posErrors.push(`${pName}: pilih variant dulu.`); continue; }
         if (!sizeEl?.value) { posErrors.push(`${pName}: pilih ukuran dulu.`); continue; }
 
+        // Custom size: resolve the real size label + admin-entered price; skip stock.
+        const isCustomSize = sizeEl.value === '__custom__';
+        let finalSize = sizeEl.value;
+        let customPrice = null;
+        if (isCustomSize) {
+            finalSize = document.getElementById(`wa-custom-size-${idx}`)?.value.trim() || '';
+            customPrice = parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value);
+            if (!finalSize) { posErrors.push(`${pName}: isi label ukuran custom (mis. 4XL).`); continue; }
+            if (!Number.isInteger(customPrice) || customPrice < 0) { posErrors.push(`${pName}: isi harga satuan custom size.`); continue; }
+        }
+
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
         const isBonus    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
@@ -6126,20 +6166,22 @@ async function waSubmitOrder() {
             product_id:   parseInt(productId),
             color:        document.getElementById(`wa-color-${idx}`)?.value,
             variant_type: document.getElementById(`wa-variant-${idx}`)?.value || 'null',
-            size:         document.getElementById(`wa-size-${idx}`)?.value,
+            size:         finalSize,
             quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
             bordir_nama:  bordirNama,
             bordir_logo:  bordirLogo,
             bordir_nama_price: parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000,
             bordir_logo_price: parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000,
             is_bonus:     isBonus,
+            is_custom_size: isCustomSize,
+            custom_price: customPrice,
         });
 
         if (bordirNama || bordirLogo) {
             const prodEl    = document.getElementById(`wa-prod-${idx}`);
             const prodName  = prodEl?.options[prodEl.selectedIndex]?.text || 'Produk';
             const color     = document.getElementById(`wa-color-${idx}`)?.value || '';
-            const size      = document.getElementById(`wa-size-${idx}`)?.value || '';
+            const size      = finalSize || '';
             const itemLabel = `${prodName} (${color}, ${size})`;
 
             let namaPos = null, logoPos = null;
@@ -6183,10 +6225,12 @@ async function waSubmitOrder() {
 
         const itemLines = items.map(it => {
             const prod = waProducts.find(p => p.id === it.product_id);
-            const price = prod ? prod.price : 0;
+            // Custom size: base price is the admin-entered custom price, not the catalog price.
+            const price = it.is_custom_size ? (it.custom_price || 0) : (prod ? prod.price : 0);
             const embCost = (it.bordir_nama ? (it.bordir_nama_price||20000) : 0) + (it.bordir_logo ? (it.bordir_logo_price||30000) : 0);
             const lineTotal = it.is_bonus ? 0 : (price + embCost) * it.quantity;
             let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : 'Rp ' + lineTotal.toLocaleString('id-ID')}`;
+            if (it.is_custom_size) line += ' [Custom Size]';
             if (it.bordir_nama) line += ' [Bordir Nama]';
             if (it.bordir_logo) line += ' [Bordir Logo]';
             if (it.is_bonus) line += ' [BONUS]';
@@ -6321,8 +6365,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         }
 
         const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
+        const customTag = item.is_custom_size ? ' <span style="background:#e0f2fe;color:#075985;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM</span>' : '';
         itemRowsHTML += `<tr>
-            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${bonusTag}</td>
+            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${customTag}${bonusTag}</td>
             <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
             <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>
