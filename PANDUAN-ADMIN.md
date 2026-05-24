@@ -88,7 +88,7 @@ Setelah pelanggan transfer & kirim bukti:
 
 ## 6. Bordir (jika pesanan ada bordir)
 - Setelah dibayar, pesanan ber-bordir masuk status **"Bordir"**.
-- Setelah baju selesai dibordir, buka pesanan → klik tombol **bordir selesai** → pesanan jadi **siap dikemas**.
+- Setelah baju selesai dibordir, buka pesanan → klik **Bordir Selesai** → **centang konfirmasi** → pesanan jadi **siap dikemas**. (Foto opsional.)
 
 ---
 
@@ -105,7 +105,8 @@ Pesanan dengan **Custom Size** atau **Pre-Order** **tidak bisa dikemas** sampai 
 
 ## 8. Mengemas (Kemas)
 1. Pesanan berstatus **siap kemas** → buka pesanan.
-2. Klik **Kemas** → **upload foto kemasan** → simpan.
+2. Klik **Kemas** → **centang konfirmasi** (sudah dikemas rapi + isi sesuai pesanan) → **Konfirmasi Dikemas**.
+3. Foto **opsional** (boleh dilampirkan kalau perlu, tidak wajib).
 
 ---
 

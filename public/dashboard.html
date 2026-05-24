@@ -1072,8 +1072,8 @@
         <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
             <h3 class="font-bold text-base">5. Bordir → Kemas → Kirim → Selesai</h3>
             <ul class="list-disc pl-5 space-y-1 text-white/70">
-                <li><b>Bordir</b> (jika ada): setelah dibordir, buka pesanan → klik <b>bordir selesai</b> → siap dikemas.</li>
-                <li><b>Kemas</b>: buka pesanan → <b>Kemas</b> → upload foto kemasan.</li>
+                <li><b>Bordir</b> (jika ada): setelah dibordir → buka pesanan → <b>Bordir Selesai</b> → centang konfirmasi (foto opsional) → siap dikemas.</li>
+                <li><b>Kemas</b>: buka pesanan → <b>Kemas</b> → centang konfirmasi "sudah dikemas rapi + isi sesuai pesanan" → <b>Konfirmasi Dikemas</b> (foto opsional).</li>
                 <li><b>Kirim</b>: <b>Kirim</b> → isi <b>Nomor Resi</b> (& kurir) → <b>Kirim Resi ke Customer</b> (WA ke pelanggan). Kalau antar sendiri, kurir "Kirim sendiri", resi boleh kosong.</li>
                 <li><b>Selesai</b>: setelah barang sampai, ubah status pesanan jadi <b>Selesai</b>.</li>
             </ul>
@@ -4959,6 +4959,12 @@ async function submitPhotoModal() {
     const file = document.getElementById('photo-file-input').files[0];
     if (!file && !_photoModalAction.optionalFile) { toast('Pilih foto terlebih dahulu', true); return; }
 
+    // Checklist konfirmasi (checkbox[data-check]) — semua wajib dicentang sebelum lanjut
+    const checks = document.getElementById('photo-modal-extra').querySelectorAll('input[type=checkbox][data-check]');
+    for (const c of checks) {
+        if (!c.checked) { toast('Centang semua konfirmasi dulu', true); c.focus(); return; }
+    }
+
     // Validate required fields in extra panel (e.g. tracking_number for ship)
     const requiredFields = document.getElementById('photo-modal-extra').querySelectorAll('input[required],textarea[required]');
     for (const el of requiredFields) {
@@ -5022,22 +5028,44 @@ function openConfirmPayment(orderId) {
 
 function openBordirDone(orderId) {
     openPhotoModal(
-        '🧵 Bordir Selesai — Upload Foto',
-        { endpoint: `/api/orders/${orderId}/bordir-done`, method: 'PUT', fieldName: 'bordir_proof' },
-        `<div>
-            <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan</label>
-            <input name="note" type="text" placeholder="Contoh: bordir nama selesai, logo ok..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+        '🧵 Bordir Selesai — Konfirmasi',
+        { endpoint: `/api/orders/${orderId}/bordir-done`, method: 'PUT', fieldName: 'bordir_proof', optionalFile: true },
+        `<div class="space-y-2.5">
+            <label class="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
+                <input type="checkbox" data-check class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
+                <span>Bordir selesai &amp; sesuai pesanan (nama/logo, posisi, warna benang)</span>
+            </label>
+            <label class="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
+                <input type="checkbox" data-check class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
+                <span>Hasil sudah dicek, tidak ada cacat</span>
+            </label>
+            <div class="pt-1">
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan (opsional)</label>
+                <input name="note" type="text" placeholder="Contoh: bordir nama & logo ok" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+            </div>
+            <p class="text-[10px] text-white/30"><i class="fa-solid fa-circle-info mr-1"></i> Foto opsional — lampirkan di bawah hanya bila perlu.</p>
         </div>`
     );
 }
 
 function openPackOrder(orderId) {
     openPhotoModal(
-        '📦 Kemas Pesanan — Upload Foto',
-        { endpoint: `/api/orders/${orderId}/pack`, method: 'PUT', fieldName: 'pack_proof' },
-        `<div>
-            <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan</label>
-            <input name="note" type="text" placeholder="Contoh: sudah dikemas rapi, siap kirim..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+        '📦 Kemas Pesanan — Konfirmasi',
+        { endpoint: `/api/orders/${orderId}/pack`, method: 'PUT', fieldName: 'pack_proof', optionalFile: true },
+        `<div class="space-y-2.5">
+            <label class="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
+                <input type="checkbox" data-check class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
+                <span>Barang sudah dikemas rapi &amp; diberi label tujuan</span>
+            </label>
+            <label class="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
+                <input type="checkbox" data-check class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
+                <span>Isi sesuai pesanan (produk, ukuran, warna, jumlah)</span>
+            </label>
+            <div class="pt-1">
+                <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan (opsional)</label>
+                <input name="note" type="text" placeholder="Contoh: sudah dikemas, siap kirim" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none">
+            </div>
+            <p class="text-[10px] text-white/30"><i class="fa-solid fa-circle-info mr-1"></i> Foto opsional — lampirkan bila perlu.</p>
         </div>`
     );
 }

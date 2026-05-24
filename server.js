@@ -2133,13 +2133,13 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
 // PUT /api/orders/:id/bordir-done  (multipart: bordir_proof photo)
 app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.single('bordir_proof'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: 'Foto bukti bordir selesai wajib diupload' });
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'bordir') return res.status(400).json({ error: 'Pesanan tidak dalam status bordir' });
 
-        // Upload before TX (external, may be slow). Orphan photo on rollback is harmless.
-        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
+        // Photo OPTIONAL (storage saving): admin confirms via checklist. The step record
+        // (who + when + note) is still logged for audit — only the image is skipped.
+        const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders') : null;
 
         // Atomic: photo record + status transition
         await withTransaction(async (client) => {
@@ -2157,7 +2157,7 @@ app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.
         await safeWA(
             `🧵 *BORDIR SELESAI - #${order.order_code}*\n\n` +
             `Bordir untuk pesanan ${order.customer_name} sudah selesai.\n` +
-            `📸 Foto bordir sudah diupload di dashboard.\n` +
+            (photoUrl ? `📸 Foto bordir sudah diupload.\n` : '') +
             `➡️ Status: Siap dikemas`,
             'bordir-done'
         );
@@ -2169,7 +2169,6 @@ app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.
 // PUT /api/orders/:id/pack  (multipart: pack_proof photo)
 app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single('pack_proof'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: 'Foto bukti pengemasan wajib diupload' });
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'confirmed') return res.status(400).json({ error: 'Pesanan belum berstatus confirmed/siap kemas' });
@@ -2185,7 +2184,8 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
         if (pendingPO && pendingPO.n > 0)
             return res.status(409).json({ error: 'Ada item Pre-Order / Custom yang belum siap. Tidak bisa dikemas dulu. PO katalog dipenuhi otomatis saat terima stok; item custom tandai "Siap" dulu di detail pesanan.' });
 
-        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
+        // Photo OPTIONAL (storage saving): admin confirms via checklist. Step record still logged.
+        const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders') : null;
 
         await withTransaction(async (client) => {
             await client.query(
@@ -2201,7 +2201,7 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
         await safeWA(
             `📦 *DIKEMAS - #${order.order_code}*\n\n` +
             `Pesanan ${order.customer_name} sudah dikemas.\n` +
-            `📸 Foto kemasan sudah diupload.\n` +
+            (photoUrl ? `📸 Foto kemasan sudah diupload.\n` : '') +
             `➡️ Siap dikirim via ${order.shipping_courier}`,
             'pack'
         );
