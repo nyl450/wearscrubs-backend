@@ -883,7 +883,7 @@
             <pre id="wa-result-message" class="text-sm text-white/80 whitespace-pre-wrap font-mono leading-relaxed"></pre>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button onclick="waCopyMessage()" class="py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Pesan WA</button>
+            <button onclick="waSendToCustomer()" class="py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-brands fa-whatsapp"></i> Kirim ke WA Customer</button>
             <button onclick="openInvoiceModal(window.waLastOrderId, waProductPhotoBase64s, waBordirRefBase64)" class="py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">📄 Print Invoice</button>
             <button onclick="waResetForm()" class="py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/70 font-medium text-sm transition-all">Order Baru</button>
           </div>
@@ -4492,6 +4492,7 @@ async function viewOrder(id) {
                 <a href="${waLink}" target="_blank" class="font-bold text-green-400 hover:text-green-300 flex items-center gap-1.5">
                     <i class="fa-brands fa-whatsapp"></i> ${esc(o.customer_phone)}
                 </a>
+                ${isAdmin ? `<button onclick="waResendOrderMessage(${o.id})" class="mt-2 w-full text-xs px-3 py-1.5 rounded-lg bg-green-600/90 hover:bg-green-500 text-white font-bold transition flex items-center justify-center gap-1.5" title="Kirim ulang pesan konfirmasi + instruksi pembayaran ke WA customer"><i class="fa-brands fa-whatsapp"></i> Kirim Konfirmasi WA</button>` : ''}
             </div>
             <div class="col-span-2 bg-white/5 rounded-xl p-3">
                 <p class="text-white/40 text-xs mb-1">Alamat</p>
@@ -6529,50 +6530,15 @@ async function waSubmitOrder() {
 
         window.waLastOrderId = data.id;
 
-        const itemLines = items.map(it => {
-            const prod = waProducts.find(p => p.id === it.product_id);
-            // Custom size: base price is the admin-entered custom price, not the catalog price.
-            const price = it.is_custom_size ? (it.custom_price || 0) : (prod ? prod.price : 0);
-            const embCost = (it.bordir_nama ? (it.bordir_nama_price||20000) : 0) + (it.bordir_logo ? (it.bordir_logo_price||30000) : 0);
-            const lineTotal = it.is_bonus ? 0 : (price + embCost) * it.quantity;
-            let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : 'Rp ' + lineTotal.toLocaleString('id-ID')}`;
-            if (it.is_custom_size) line += ' [Custom Size]';
-            if (it.is_po) line += ' [Pre-Order]';
-            if (it.bordir_nama) line += ' [Bordir Nama]';
-            if (it.bordir_logo) line += ' [Bordir Logo]';
-            if (it.is_bonus) line += ' [BONUS]';
-            return line;
-        }).join('\n');
-
-        const bordirLines = embroideryDetails.length
-            ? `\n\n🧵 *Detail Bordir:*\n` + embroideryDetails.map(e => {
-                const posLabel = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
-                if (e.type === 'nama') return `✏️ Nama: *${e.value}* | Benang: ${e.color||'-'} | Posisi: ${posLabel}`;
-                // Logo value can be a long base64/URL — never dump that into the WA text.
-                const v = typeof e.value === 'string' ? e.value : '';
-                const logoLabel = (v.startsWith('data:image/') || v.startsWith('http')) ? '[Logo Customer]' : (v || '[Logo Customer]');
-                return `🎨 Logo: ${logoLabel} | Benang: ${e.color||'-'} | Posisi: ${posLabel}`;
-              }).join('\n')
-            : '';
-
-        const discAmtFromServer = data.discount_amount || 0;
-        const discLblFromServer = data.discount_label || '';
-        const discountLine = discAmtFromServer > 0
-            ? `🏷️ ${discLblFromServer}: -Rp ${discAmtFromServer.toLocaleString('id-ID')}\n`
-            : '';
-
-        const waMsg =
-            `Halo ${customerName} 👋\n\n` +
-            `Pesanan Anda sudah kami catat.\n\n` +
-            `🧾 *Invoice: ${data.order_code}*\n\n` +
-            `📦 Detail Produk:\n${itemLines}` +
-            bordirLines + `\n\n` +
-            `🚚 Ekspedisi: ${shippingCourier || data.courier || '-'} (${shippingWeight} kg)\n` +
-            `📦 Ongkir: Rp ${Number(data.shipping_cost).toLocaleString('id-ID')}\n` +
-            discountLine +
-            `💰 *TOTAL: Rp ${Number(data.total_amount).toLocaleString('id-ID')}*` +
-            (paymentMethod ? `\n💳 Metode: ${paymentMethod}` : '') +
-            `\n\nSilakan lakukan pembayaran dan kirim bukti transfer ke WA ini ya Dok 🙏\n\nTerima kasih sudah berbelanja di Wearscrubs! 🏥`;
+        // Build the confirmation message from the SAVED order (single source of truth —
+        // same builder used by the "Kirim Konfirmasi WA" resend button in order detail).
+        let savedOrder = null;
+        try { savedOrder = await apiFetch('/api/orders/' + data.id); } catch (e) {}
+        const waMsg = savedOrder
+            ? buildOrderWaMessage(savedOrder)
+            : `Pesanan tercatat. Invoice ${data.order_code}. Buka detail pesanan untuk pesan lengkap.`;
+        window.waLastWaMsg = waMsg;
+        window.waLastWaPhone = normalizeWAPhone(savedOrder ? savedOrder.customer_phone : customerPhone);
 
         document.getElementById('wa-result-code').textContent = data.order_code;
         document.getElementById('wa-result-message').textContent = waMsg;
@@ -6592,13 +6558,74 @@ async function waSubmitOrder() {
     }
 }
 
-function waCopyMessage() {
-    const msg = document.getElementById('wa-result-message').textContent;
-    navigator.clipboard.writeText(msg).then(() => {
-        const btn = event.target.closest('button');
-        btn.innerHTML = '<i class="fa-solid fa-check"></i> Tersalin!';
-        setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i> Salin Pesan WA'; }, 2000);
-    });
+// Shared builder for the customer WA confirmation message — from an API order object.
+// Used by both the post-save result panel and the order-detail resend button so the two
+// can never drift. Includes alamat, no HP, payment instruction (BCA/Mandiri) + 2x24 jam note.
+function buildOrderWaMessage(o) {
+    const rp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+    const items = o.items || [];
+    const itemLines = items.map(it => {
+        const lineTotal = it.is_bonus ? 0 : (Number(it.price) || 0) * (it.quantity || 1);
+        let line = `• ${it.product_name || 'Produk'} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : rp(lineTotal)}`;
+        if (it.is_custom_size) line += ' [Custom Size]';
+        if (it.is_po) line += ' [Pre-Order]';
+        if (it.bordir_nama) line += ' [Bordir Nama]';
+        if (it.bordir_logo) line += ' [Bordir Logo]';
+        if (it.is_bonus) line += ' [BONUS]';
+        return line;
+    }).join('\n');
+
+    let emb = [];
+    try { emb = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch (e) {}
+    const bordirLines = (Array.isArray(emb) && emb.length)
+        ? `\n\n🧵 *Detail Bordir:*\n` + emb.map(e => {
+            const posLabel = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+            if (e.type === 'nama') return `✏️ Nama: *${e.value}* | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
+            const v = typeof e.value === 'string' ? e.value : '';
+            const logoLabel = (v.startsWith('data:image/') || v.startsWith('http')) ? '[Logo Customer]' : (v || '[Logo Customer]');
+            return `🎨 Logo: ${logoLabel} | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
+          }).join('\n')
+        : '';
+
+    const discountLine = (o.discount_amount > 0)
+        ? `🏷️ ${o.discount_label || 'Diskon'}: -${rp(o.discount_amount)}\n`
+        : '';
+
+    return `Halo ${o.customer_name || ''} 👋\n\n` +
+        `Pesanan Anda sudah kami catat.\n\n` +
+        `🧾 *Invoice: ${o.order_code}*\n\n` +
+        `📦 Detail Produk:\n${itemLines}` +
+        bordirLines + `\n\n` +
+        `📍 *Alamat Pengiriman:*\n${o.customer_address || '-'}\n` +
+        `📱 *No. HP:* ${o.customer_phone || '-'}\n\n` +
+        `🚚 Ekspedisi: ${o.shipping_courier || '-'} (${o.shipping_weight_kg || '-'} kg)\n` +
+        `📦 Ongkir: ${rp(o.shipping_cost)}\n` +
+        discountLine +
+        `💰 *TOTAL: ${rp(o.total_amount)}*` +
+        (o.payment_method ? `\n💳 Metode: ${o.payment_method}` : '') +
+        `\n\nSilakan lakukan pembayaran *BCA 8780269791* / *Mandiri 1220010735721* a/n *Priscilla Lavine* dan kirim bukti transfer ke WA ini ya Dok 🙏\n\n` +
+        `⏰ Mohon melakukan pembayaran dalam waktu maksimal *2 x 24 jam*. Melebihi waktu yang diberikan, pemesanan akan dibatalkan oleh sistem kami secara otomatis.\n\n` +
+        `Terima kasih sudah berbelanja di Wearscrubs! 🏥`;
+}
+
+// Open WhatsApp to the customer with the message pre-filled (post-save result panel).
+function waSendToCustomer() {
+    const msg = document.getElementById('wa-result-message')?.textContent || window.waLastWaMsg || '';
+    const phone = window.waLastWaPhone || '';
+    if (!phone) { navigator.clipboard.writeText(msg); toast('Nomor customer tidak ada — pesan disalin ke clipboard'); return; }
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// Resend the confirmation message for an existing order (order detail) — rebuilds from
+// the saved order so it works even after "Order Baru" was clicked.
+async function waResendOrderMessage(orderId) {
+    try {
+        const o = await apiFetch('/api/orders/' + orderId);
+        const msg = buildOrderWaMessage(o);
+        const phone = normalizeWAPhone(o.customer_phone);
+        if (!phone) { navigator.clipboard.writeText(msg); toast('Nomor customer tidak ada — pesan disalin ke clipboard'); return; }
+        window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+    } catch (e) { toast('Gagal: ' + e.message, true); }
 }
 
 function waResetForm() {
