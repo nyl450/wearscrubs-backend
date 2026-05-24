@@ -905,8 +905,11 @@
         // Toggle active/inactive classes on ALL lang switcher instances (desktop + mobile drawer)
         const activeCls = 'font-bold text-black dark:text-white';
         const inactiveCls = 'font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors';
-        ['lang-id', 'mobile-lang-id'].forEach(id => { const el = document.getElementById(id); if (el && el.tagName === 'A' && el.classList.contains('text-sm')) el.className = `text-sm ${isId ? activeCls : inactiveCls}`; });
-        ['lang-en', 'mobile-lang-en'].forEach(id => { const el = document.getElementById(id); if (el && el.tagName === 'A' && el.classList.contains('text-sm')) el.className = `text-sm ${!isId ? activeCls : inactiveCls}`; });
+        // NB: skip the mobile drawer pills (they carry `rounded-xl` box styling) — those are
+        // restyled separately below. Without this guard, the line stripped their box classes
+        // (flex-1/py-2.5/rounded-xl/bg-*) leaving only bare "ID"/"EN" text on mobile.
+        ['lang-id', 'mobile-lang-id'].forEach(id => { const el = document.getElementById(id); if (el && el.tagName === 'A' && el.classList.contains('text-sm') && !el.classList.contains('rounded-xl')) el.className = `text-sm ${isId ? activeCls : inactiveCls}`; });
+        ['lang-en', 'mobile-lang-en'].forEach(id => { const el = document.getElementById(id); if (el && el.tagName === 'A' && el.classList.contains('text-sm') && !el.classList.contains('rounded-xl')) el.className = `text-sm ${!isId ? activeCls : inactiveCls}`; });
         // Mobile drawer lang pills use a different style — keep them as-is but ensure correct active visual
         const mLangId = document.getElementById('mobile-lang-id');
         const mLangEn = document.getElementById('mobile-lang-en');
