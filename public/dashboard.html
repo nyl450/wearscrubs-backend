@@ -338,6 +338,8 @@
     .grid-table .cell-stock:hover .cell-detail { opacity: 1; }
     .grid-table .cell-detail:hover { color: #fff; background: rgba(255,255,255,0.12); }
     @media (pointer: coarse) { .grid-table .cell-detail { opacity: 0.5; } }
+    .grid-table .po-corner { position: absolute; top: 2px; left: 3px; font-size: 8px; color: #fb923c; cursor: pointer; font-weight: 700; padding: 1px 3px; border-radius: 3px; background: rgba(251,146,60,0.16); line-height: 1; }
+    .grid-table .po-corner:hover { background: rgba(251,146,60,0.3); }
 
     /* Reserved popover */
     #reserved-popover { position: fixed; z-index: 9999; background: #1f1f1f; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; max-width: 280px; max-height: 320px; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
@@ -451,6 +453,10 @@
             </button>
             <button onclick="showModule('manual-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="manual-order">
                 <i class="fa-brands fa-whatsapp w-4 text-xs"></i> Input Order WA
+            </button>
+            <button onclick="showModule('preorder')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="preorder">
+                <i class="fa-solid fa-clock w-4 text-xs"></i> Pre-Order
+                <span id="preorder-sidebar-badge" class="hidden ml-auto bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
             </button>
             <button onclick="showModule('refund')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="refund">
                 <i class="fa-solid fa-rotate-left w-4 text-xs"></i> Refund
@@ -958,6 +964,35 @@
         </div>
         <div id="exchanges-list" class="space-y-3"></div>
         <div id="exchanges-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada data tukar size di kategori ini.</div>
+    </div>
+
+    <!-- ═══ PRE-ORDER ══════════════════════════════════════════════════════ -->
+    <div id="module-preorder" class="hidden p-4 md:p-6 space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+                <h2 class="text-xl font-bold">Pre-Order</h2>
+                <p class="text-xs text-white/40 mt-0.5">Antrian pesanan menunggu stok (PO katalog) & item custom yang sedang dijahit. PO katalog terpenuhi otomatis saat terima stok; custom ditandai "Siap" manual di detail pesanan.</p>
+            </div>
+            <button onclick="loadPreOrders()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+            <div class="bg-darkcard border border-orange-400/20 rounded-2xl p-3">
+                <div id="po-stat-catalog" class="text-xl font-bold text-orange-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">PO Katalog (nunggu stok)</div>
+            </div>
+            <div class="bg-darkcard border border-sky-400/20 rounded-2xl p-3">
+                <div id="po-stat-custom" class="text-xl font-bold text-sky-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Custom (nunggu dijahit)</div>
+            </div>
+            <div class="bg-darkcard border border-white/10 rounded-2xl p-3">
+                <div id="po-stat-total" class="text-xl font-bold text-white">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Total Antrian</div>
+            </div>
+        </div>
+        <div id="preorder-list" class="space-y-2.5"></div>
+        <div id="preorder-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada Pre-Order menunggu. 🎉</div>
     </div>
 
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
@@ -1791,6 +1826,82 @@ function showModule(name) {
     if (name === 'manual-order')  waInitModule();
     if (name === 'refund')        loadRefunds();
     if (name === 'exchange')      loadExchanges();
+    if (name === 'preorder')      loadPreOrders();
+}
+
+// ─── PRE-ORDER LIST ──────────────────────────────────────────────────────────
+function poAgeDays(createdAt) {
+    const ms = Date.now() - new Date(createdAt).getTime();
+    return Math.max(0, Math.floor(ms / 86400000));
+}
+
+async function loadPreOrders() {
+    const listEl  = document.getElementById('preorder-list');
+    const emptyEl = document.getElementById('preorder-empty');
+    if (listEl) listEl.innerHTML = '<div class="text-center py-8 text-white/30 text-sm">Memuat…</div>';
+    try {
+        const rows = await apiFetch('/api/pre-orders');
+        // Sidebar badge = total waiting
+        updatePreOrderBadge(rows.length);
+        const catalogCount = rows.filter(r => !r.is_custom_size).reduce((s, r) => s + Number(r.quantity || 0), 0);
+        const customCount  = rows.filter(r => r.is_custom_size).reduce((s, r) => s + Number(r.quantity || 0), 0);
+        const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        setTxt('po-stat-catalog', catalogCount);
+        setTxt('po-stat-custom', customCount);
+        setTxt('po-stat-total', rows.length);
+
+        if (!rows.length) {
+            if (listEl) listEl.innerHTML = '';
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            return;
+        }
+        if (emptyEl) emptyEl.classList.add('hidden');
+
+        listEl.innerHTML = rows.map(r => {
+            const age = poAgeDays(r.created_at);
+            const ageClass = age >= 14 ? 'text-red-400' : age >= 7 ? 'text-orange-400' : 'text-white/50';
+            const isCustom = r.is_custom_size;
+            const typeBadge = isCustom
+                ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">✂️ CUSTOM</span>'
+                : '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PO KATALOG</span>';
+            const paid = r.payment_status === 'paid';
+            const payBadge = paid
+                ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">LUNAS</span>'
+                : '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/15 text-yellow-300 border border-yellow-400/25">BELUM BAYAR</span>';
+            const vt = (r.variant_type && r.variant_type !== 'null') ? ' · ' + esc(r.variant_type) : '';
+            const stockInfo = isCustom ? '' : ` · stok kini: ${r.variant_stock == null ? 0 : r.variant_stock}`;
+            const action = isCustom
+                ? `<button onclick="fulfillCustomItem(${r.order_id}, ${r.item_id})" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-green-500/15 border border-green-400/30 text-green-300 hover:bg-green-500/25 transition font-bold"><i class="fa-solid fa-check text-[9px]"></i> Tandai Siap</button>`
+                : `<span class="text-[10px] text-white/30 italic">otomatis saat terima stok</span>`;
+            return `
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-3.5 flex items-start gap-3 flex-wrap">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap mb-0.5">
+                        ${typeBadge} ${payBadge}
+                        <span class="text-[10px] font-mono text-white/40">${esc(r.order_code)}</span>
+                    </div>
+                    <div class="font-bold text-sm">${esc(r.product_name)} <span class="text-white/60 font-medium">${esc(r.color)}${vt} · ${esc(r.size)}</span> <span class="text-white/40">×${r.quantity}</span></div>
+                    <div class="text-xs text-white/40 mt-0.5">${esc(r.customer_name || '-')} · ${esc(r.order_source || '-')}${stockInfo}</div>
+                </div>
+                <div class="flex flex-col items-end gap-1.5 shrink-0">
+                    <span class="text-[11px] font-bold ${ageClass}">${age} hari</span>
+                    <div class="flex gap-1.5">
+                        <button onclick="viewOrder(${r.order_id})" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition" title="Buka pesanan"><i class="fa-solid fa-up-right-from-square text-[9px]"></i></button>
+                        ${action}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        if (listEl) listEl.innerHTML = `<div class="text-center py-8 text-red-400 text-sm">${esc(e.message)}</div>`;
+    }
+}
+
+function updatePreOrderBadge(count) {
+    const badge = document.getElementById('preorder-sidebar-badge');
+    if (!badge) return;
+    if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); }
+    else badge.classList.add('hidden');
 }
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
@@ -1810,6 +1921,8 @@ async function loadOverview() {
         }
         switchChart('products');
         loadRecentOrders();
+        // Pre-Order sidebar badge (silent; full list loads when the module opens)
+        apiFetch('/api/pre-orders').then(r => updatePreOrderBadge(Array.isArray(r) ? r.length : 0)).catch(() => {});
     } catch(e) { console.error('Overview error:', e); }
 }
 
@@ -2672,6 +2785,13 @@ function renderInventory() {
                            title="Stok Reject — klik untuk ubah ke Normal">
                            <i class="fa-solid fa-triangle-exclamation text-[8px]"></i>${stockReject} reject
                        </button>` : '';
+                const resv     = cachedReservations[key];
+                const poBadge  = resv && resv.po_qty > 0
+                    ? `<button onclick="showModule('preorder')"
+                           class="flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg bg-orange-500/10 border border-orange-400/30 text-orange-300 hover:bg-orange-500/20 transition"
+                           title="${resv.po_qty} pcs Pre-Order menunggu stok — buka menu Pre-Order">
+                           <i class="fa-solid fa-clock text-[8px]"></i>${resv.po_qty} PO
+                       </button>` : '';
                 sizeRows += `
                 <div class="flex items-center gap-2 py-2.5 border-t border-white/5 first:border-0 flex-wrap">
                     <span class="text-xs font-bold text-white/50 w-8 shrink-0">${r.size}</span>
@@ -2680,6 +2800,7 @@ function renderInventory() {
                         class="!w-16 !rounded-lg !py-1.5 !px-2 text-center text-sm shrink-0 ${badgeClass}"
                         onblur="invSaveOnBlur(this)">
                     <span class="${stockClass} text-xs flex-1 min-w-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    ${poBadge}
                     ${rejectBadge}
                     <div class="flex gap-1.5 shrink-0">
                         <button onclick="openReceiveStock(${r.product_id},'${r.size}','${r.color}','${r.variant_type}','${prod.name}',${stock},${stockReject})"
@@ -2779,6 +2900,9 @@ function renderInventoryGrid(rows, container) {
                 const reservedBadge = reserved && reserved.reserved_qty > 0
                     ? `<span class="reserved-badge" onclick="event.stopPropagation();showReservedPopover(event,'${escAttr(key)}')" title="${reserved.order_count} order pending">ⓘ${reserved.reserved_qty}</span>`
                     : '';
+                const poBadge = reserved && reserved.po_qty > 0
+                    ? `<span class="po-corner" onclick="event.stopPropagation();showReservedPopover(event,'${escAttr(key)}')" title="${reserved.po_qty} pcs Pre-Order menunggu stok">PO${reserved.po_qty}</span>`
+                    : '';
                 const detailBadge = `<span class="cell-detail" onclick="event.stopPropagation();openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')" title="Detail: riwayat stok & pembeli"><i class="fa-solid fa-clock-rotate-left"></i></span>`;
                 return `<td class="cell-stock ${sClass}${selectedClass}"
                     data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-current="${stock}"
@@ -2786,6 +2910,7 @@ function renderInventoryGrid(rows, container) {
                     <span class="stock-value ${sClass}">${stock}</span>
                     ${rejectBadge}
                     ${reservedBadge}
+                    ${poBadge}
                     ${detailBadge}
                 </td>`;
             }).join('');
@@ -4142,7 +4267,9 @@ async function viewOrder(id) {
                 <div class="flex-1 min-w-0">
                     <p class="font-semibold text-sm">${esc(i.product_name)}
                         ${i.is_bonus ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/25">🎁 BONUS</span>' : ''}
-                        ${i.is_custom_size ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">CUSTOM</span>' : ''}
+                        ${i.is_custom_size ? (i.po_fulfilled
+                            ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">✂️ CUSTOM · siap</span>'
+                            : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">✂️ CUSTOM · menunggu dijahit</span>') : ''}
                         ${i.is_po ? (i.po_fulfilled
                             ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">📦 PRE-ORDER · siap</span>'
                             : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PRE-ORDER · menunggu stok</span>') : ''}
@@ -4150,6 +4277,7 @@ async function viewOrder(id) {
                     <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}
                         ${canEditSize && !i.is_custom_size && !(i.is_po && !i.po_fulfilled) ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
                     </p>
+                    ${i.is_custom_size && !i.po_fulfilled && !['shipped','done','cancelled'].includes(o.order_status) ? `<button onclick="fulfillCustomItem(${o.id}, ${i.id})" class="mt-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-green-500/15 border border-green-400/30 text-green-300 hover:bg-green-500/25 transition font-bold"><i class="fa-solid fa-check text-[9px]"></i> Tandai Siap (custom selesai dijahit)</button>` : ''}
                     <p class="text-xs text-white/30 mt-0.5">${i.is_bonus ? 'Gratis (bonus)' : '@Rp ' + fmt(i.price) + '/pcs'}</p>
                 </div>
                 <p class="${i.is_bonus ? 'text-amber-300' : 'text-green-400'} font-bold text-sm shrink-0">${i.is_bonus ? 'GRATIS' : 'Rp ' + fmt(i.price*i.quantity)}</p>
@@ -5279,6 +5407,18 @@ async function editItemSize(orderId, itemId, currentSize) {
     } catch(e) { toast('Gagal: ' + e.message, true); }
 }
 
+// Mark a CUSTOM item as ready (sewn). Releases the pack guard for this line.
+async function fulfillCustomItem(orderId, itemId) {
+    if (!confirm('Tandai item custom ini sudah selesai dijahit & siap dikirim?')) return;
+    try {
+        const res = await apiFetch(`/api/orders/${orderId}/items/${itemId}/fulfill-po`, { method: 'PUT' });
+        toast('✅ ' + (res.message || 'Item custom ditandai siap'));
+        if (typeof closeOrderModal === 'function') closeOrderModal();
+        viewOrder(orderId);
+        if (typeof loadPreOrders === 'function' && !document.getElementById('module-preorder')?.classList.contains('hidden')) loadPreOrders();
+    } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
 // ── Create exchange from order detail ──────────────────────────────────────
 function openExchangeCreate(orderId) {
     const o = (typeof cachedOrders !== 'undefined' ? cachedOrders : []).find(x => x.id === orderId);
@@ -5418,6 +5558,7 @@ const MENU_DEFS = [
     { key: 'inventory',  label: 'Inventori',  icon: 'fa-warehouse' },
     { key: 'popular',    label: 'Popular',    icon: 'fa-star' },
     { key: 'orders',     label: 'Pesanan',    icon: 'fa-bag-shopping' },
+    { key: 'preorder',   label: 'Pre-Order',  icon: 'fa-clock' },
     { key: 'refund',     label: 'Refund',     icon: 'fa-rotate-left' },
 ];
 
@@ -5577,7 +5718,7 @@ function updateMenuAccessByRole() {
 }
 
 function getDefaultMenusByRole(role) {
-    if (role === 'manager') return ['overview', 'products', 'inventory', 'popular', 'orders', 'refund'];
+    if (role === 'manager') return ['overview', 'products', 'inventory', 'popular', 'orders', 'preorder', 'refund'];
     if (role === 'viewer')  return ['overview', 'products', 'orders'];
     return null;
 }

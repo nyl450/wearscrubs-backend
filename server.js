@@ -1220,12 +1220,15 @@ app.get('/api/inventory/reservations', requireAuth(), async (req, res) => {
             `SELECT oi.product_id, oi.size, oi.color, oi.variant_type,
                     SUM(oi.quantity)::int AS reserved_qty,
                     COUNT(DISTINCT o.id)::int AS order_count,
+                    COALESCE(SUM(oi.quantity) FILTER (WHERE oi.is_po = TRUE AND oi.po_fulfilled = FALSE), 0)::int AS po_qty,
                     json_agg(json_build_object(
                         'order_id', o.id,
                         'order_code', o.order_code,
                         'customer_name', o.customer_name,
                         'qty', oi.quantity,
                         'order_status', o.order_status,
+                        'is_po', oi.is_po,
+                        'po_fulfilled', oi.po_fulfilled,
                         'created_at', o.created_at
                     ) ORDER BY o.created_at DESC) AS buyers
              FROM order_items oi
@@ -1240,10 +1243,38 @@ app.get('/api/inventory/reservations', requireAuth(), async (req, res) => {
             map[key] = {
                 reserved_qty: r.reserved_qty,
                 order_count: r.order_count,
+                po_qty: r.po_qty,
                 buyers: r.buyers
             };
         }
         res.json(map);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/pre-orders — semua line yang masih MENUNGGU dipenuhi (PO katalog + Custom),
+// untuk menu Pre-Order. Diurutkan FIFO (tertua dulu). Frontend menghitung umur dari created_at.
+app.get('/api/pre-orders', requireAuth(), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT oi.id AS item_id, oi.order_id, oi.product_id, oi.size, oi.color, oi.variant_type,
+                    oi.quantity, oi.is_po, oi.is_custom_size, oi.po_fulfilled, oi.price,
+                    o.order_code, o.customer_name, o.customer_phone, o.order_source,
+                    o.payment_status, o.order_status, o.created_at,
+                    p.name AS product_name,
+                    inv.stock AS variant_stock,
+                    CASE WHEN oi.is_custom_size THEN 'custom' ELSE 'catalog' END AS po_type
+             FROM order_items oi
+             JOIN orders o ON o.id = oi.order_id
+             JOIN products p ON p.id = oi.product_id
+             LEFT JOIN inventory inv ON inv.product_id = oi.product_id AND inv.size = oi.size
+                  AND inv.color = oi.color AND inv.variant_type = oi.variant_type
+             WHERE (oi.is_po = TRUE OR oi.is_custom_size = TRUE)
+               AND oi.po_fulfilled = FALSE
+               AND o.order_status <> 'cancelled'
+             ORDER BY o.created_at ASC, oi.id ASC`,
+            []
+        );
+        res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2143,15 +2174,16 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'confirmed') return res.status(400).json({ error: 'Pesanan belum berstatus confirmed/siap kemas' });
 
-        // Pre-Order guard: a paid PO order stays at 'confirmed' until its stock arrives
-        // and is allocated (po_fulfilled) at receive. Block packing/shipping while any
-        // PO line is still waiting — otherwise we'd ship goods we don't have.
+        // Pre-Order / Custom guard: an order stays at 'confirmed' until every made-to-order
+        // line is ready (po_fulfilled). Catalog PO is fulfilled automatically at receive;
+        // custom size is marked ready manually. Block packing/shipping while any line is
+        // still waiting — otherwise we'd ship goods we don't have yet.
         const pendingPO = await dbGet(
-            'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND is_po = TRUE AND po_fulfilled = FALSE',
+            'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND (is_po = TRUE OR is_custom_size = TRUE) AND po_fulfilled = FALSE',
             [order.id]
         );
         if (pendingPO && pendingPO.n > 0)
-            return res.status(409).json({ error: 'Ada item Pre-Order yang belum dipenuhi (menunggu stok datang). Tidak bisa dikemas dulu. Stok akan dialokasikan otomatis saat penerimaan barang.' });
+            return res.status(409).json({ error: 'Ada item Pre-Order / Custom yang belum siap. Tidak bisa dikemas dulu. PO katalog dipenuhi otomatis saat terima stok; item custom tandai "Siap" dulu di detail pesanan.' });
 
         const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
 
@@ -3169,6 +3201,31 @@ app.put('/api/orders/:id/items/:itemId/size', requireAuth(['admin','manager']), 
         });
         res.json({ message: `Size diubah ${item.size} → ${toSize}${isPaid ? ' (stok disesuaikan)' : ''}` });
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// PUT /api/orders/:id/items/:itemId/fulfill-po — mark a made-to-order line "ready".
+// Used for CUSTOM size only: it's off-catalog (no inventory, no "receive" event), so the
+// admin marks it ready manually once the garment is sewn. Catalog PO is NOT handled here —
+// it's fulfilled automatically (FIFO) at stock receive; allowing a manual flip would skip
+// the stock deduction and desync inventory. No stock mutation here (custom has none).
+app.put('/api/orders/:id/items/:itemId/fulfill-po', requireAuth(['admin','manager']), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (['shipped','done','cancelled'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan sudah dikirim/selesai/batal — tidak bisa diubah' });
+
+        const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [req.params.itemId, order.id]);
+        if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
+        if (!item.is_custom_size)
+            return res.status(400).json({ error: 'Hanya item Custom yang ditandai siap manual. PO katalog dipenuhi otomatis saat terima stok.' });
+        if (item.po_fulfilled)
+            return res.status(400).json({ error: 'Item ini sudah ditandai siap' });
+
+        await dbRun('UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1', [item.id]);
+        await dbRun('UPDATE orders SET updated_at = NOW() WHERE id = $1', [order.id]);
+        res.json({ message: 'Item custom ditandai siap — pesanan sekarang bisa dikemas' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 
