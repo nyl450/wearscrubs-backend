@@ -479,6 +479,13 @@
             </button>
         </div>
     </nav>
+    <!-- Bantuan (semua role) -->
+    <div class="p-3 border-t border-darkborder">
+        <p class="sidebar-group-label" style="padding-top:4px;">Bantuan</p>
+        <button onclick="showModule('panduan')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left">
+            <i class="fa-solid fa-circle-question w-4 text-xs"></i> Panduan
+        </button>
+    </div>
     <!-- Settings (Admin only) -->
     <div id="sidebar-settings-wrap" class="p-3 border-t border-darkborder">
         <p class="sidebar-group-label" style="padding-top:4px;">Sistem</p>
@@ -1004,6 +1011,117 @@
         </div>
         <div id="preorder-list" class="space-y-2.5"></div>
         <div id="preorder-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada Pre-Order menunggu. 🎉</div>
+    </div>
+
+    <!-- ═══ PANDUAN (Bantuan) ══════════════════════════════════════════════ -->
+    <div id="module-panduan" class="hidden p-4 md:p-6">
+      <div class="max-w-3xl mx-auto space-y-4" id="panduan-content">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+                <h2 class="text-xl font-bold">📘 Panduan Admin Wearscrubs</h2>
+                <p class="text-xs text-white/40 mt-0.5">Langkah-demi-langkah mengelola pesanan. Ikuti saja urutannya — kalau bingung, hubungi James.</p>
+            </div>
+            <button onclick="window.print()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition shrink-0"><i class="fa-solid fa-print"></i> Cetak / PDF</button>
+        </div>
+
+        <div class="bg-indigo-500/10 border border-indigo-400/20 rounded-2xl p-4 text-sm">
+            <p class="font-bold mb-1">🔄 Gambaran besar alur pesanan</p>
+            <p class="text-white/70">Order masuk → <b>Konfirmasi Bayar</b> → (Bordir, jika ada) → <b>Kemas</b> → <b>Kirim (+resi)</b> → <b>Selesai</b>. Stok otomatis berkurang saat konfirmasi bayar.</p>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">1. Masuk (Login)</h3>
+            <p class="text-white/70">Buka dashboard → isi <b>username</b> & <b>password</b> → klik <b>Masuk</b>. Lupa password? Hubungi James (jangan coba berkali-kali, akun bisa terkunci sementara).</p>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">2. Mencatat Order dari WhatsApp</h3>
+            <p class="text-white/70">Menu <b>Input Order WA</b>:</p>
+            <ol class="list-decimal pl-5 space-y-1 text-white/70">
+                <li>Isi <b>Data Pelanggan</b> (nama, no WA, kota, alamat, berat, ekspedisi, ongkir, metode bayar). Pilih ekspedisi <b>"Free Ongkir"</b>/<b>"Kirim sendiri"</b> → ongkir otomatis 0.</li>
+                <li>Pilih <b>Produk → Warna → Variant → Ukuran → Jumlah</b>. Muncul info stok (hijau aman / kuning menipis / merah habis).</li>
+                <li><b>Bordir</b> (hanya Atasan): klik kotak <b>Nama</b>/<b>Logo</b> lalu isi detailnya. Celana/Cap/Gown otomatis tidak bisa bordir.</li>
+                <li>Mau tambah produk → <b>Tambah Produk</b>. Diskon opsional (5% / 30%).</li>
+                <li>Klik <b>Simpan &amp; Generate Invoice WA</b> → tombol jadi abu-abu "Tersimpan".</li>
+                <li>Klik <b>Kirim ke WA Customer</b> → WhatsApp terbuka berisi pesan + instruksi bayar. Kirim.</li>
+                <li>Order berikutnya → <b>Order Baru</b>.</li>
+            </ol>
+            <div class="bg-white/5 rounded-xl p-3 mt-2 space-y-1 text-white/60 text-[13px]">
+                <p>✏️ <b>Ukuran Custom</b> (mis. 4XL): di pilihan Ukuran pilih <b>"Custom Size…"</b>, isi label + harga. Barang dijahit dulu (lihat poin 4).</p>
+                <p>📦 <b>Jumlah &gt; stok</b>: muncul tombol <b>Jadikan Pre-Order</b> (barang menyusul). Lihat poin 4.</p>
+                <p>🎁 <b>Bonus</b>: centang "Jadikan Bonus" kalau item gratis.</p>
+            </div>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">3. Konfirmasi Pembayaran</h3>
+            <p class="text-white/70">Pelanggan sudah transfer & kirim bukti → buka pesanan di menu <b>Pesanan</b> → <b>Konfirmasi Pembayaran</b> → upload foto bukti. Stok otomatis berkurang.</p>
+            <p class="text-amber-300/80">⏰ Pelanggan wajib bayar maksimal <b>2×24 jam</b>; lewat itu sebaiknya dibatalkan.</p>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">4. Pre-Order &amp; Custom (barang belum ada / dijahit dulu)</h3>
+            <p class="text-white/70">Pesanan Custom/Pre-Order <b>tidak bisa dikemas</b> sampai barang siap.</p>
+            <ul class="list-disc pl-5 space-y-1 text-white/70">
+                <li><b>Custom</b>: setelah baju jadi → buka pesanan → <b>Tandai Siap</b>.</li>
+                <li><b>Pre-Order katalog</b>: <b>otomatis siap</b> begitu Anda <b>Terima Stok</b> ukuran itu (poin 7). Tak perlu klik.</li>
+                <li>Lihat antrian di menu <b>Pre-Order</b> (ada umur hari-nya).</li>
+            </ul>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">5. Bordir → Kemas → Kirim → Selesai</h3>
+            <ul class="list-disc pl-5 space-y-1 text-white/70">
+                <li><b>Bordir</b> (jika ada): setelah dibordir, buka pesanan → klik <b>bordir selesai</b> → siap dikemas.</li>
+                <li><b>Kemas</b>: buka pesanan → <b>Kemas</b> → upload foto kemasan.</li>
+                <li><b>Kirim</b>: <b>Kirim</b> → isi <b>Nomor Resi</b> (& kurir) → <b>Kirim Resi ke Customer</b> (WA ke pelanggan). Kalau antar sendiri, kurir "Kirim sendiri", resi boleh kosong.</li>
+                <li><b>Selesai</b>: setelah barang sampai, ubah status pesanan jadi <b>Selesai</b>.</li>
+            </ul>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">6. Membatalkan Pesanan</h3>
+            <p class="text-white/70">Hanya <b>sebelum dikirim</b>. Buka pesanan → <b>Batalkan</b> → isi alasan. Kalau sudah dibayar, stok otomatis dikembalikan. Pesanan yang <b>sudah dikirim tidak bisa dibatalkan</b>.</p>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">7. Menerima Stok dari Penjahit</h3>
+            <ol class="list-decimal pl-5 space-y-1 text-white/70">
+                <li>Menu <b>Inventori</b> → cari produk + ukuran/warna.</li>
+                <li>Klik tombol <b>➕ (Terima Stok)</b> → isi jumlah masuk → simpan.</li>
+                <li>Kalau ada Pre-Order menunggu ukuran itu → <b>otomatis terpenuhi</b> (muncul pesan) & pesanan jadi siap dikemas.</li>
+            </ol>
+            <p class="text-white/50 text-[13px]">Varian yang ada antrian PO diberi tanda oranye <b>"N PO"</b> di Inventori.</p>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">8. Tukar Size &amp; Refund</h3>
+            <ul class="list-disc pl-5 space-y-1 text-white/70">
+                <li><b>Tukar Size</b>: dalam <b>3 hari</b> setelah pesanan Selesai. Menu <b>Tukar Size</b> → pilih item → ukuran baru. Stok otomatis disesuaikan. <b>Bukan</b> refund uang.</li>
+                <li><b>Refund uang HANYA untuk bordir yang ditolak</b>. Menu <b>Refund</b> → proses → upload bukti transfer. <b>Produk tidak pernah dikembalikan uangnya</b> — hanya tukar ukuran.</li>
+            </ul>
+        </div>
+
+        <div class="bg-amber-500/10 border border-amber-400/25 rounded-2xl p-5 space-y-2 text-sm">
+            <h3 class="font-bold text-base">⭐ Aturan Penting</h3>
+            <ol class="list-decimal pl-5 space-y-1 text-white/80">
+                <li>Produk <b>tidak pernah refund uang</b> — hanya tukar size.</li>
+                <li>Refund uang <b>hanya untuk bordir yang ditolak</b>.</li>
+                <li><b>Bordir hanya untuk Atasan</b> (bukan celana/cap/gown).</li>
+                <li>Pelanggan wajib bayar maksimal <b>2×24 jam</b>.</li>
+                <li><b>Custom &amp; Pre-Order</b> harus siap dulu sebelum dikemas.</li>
+                <li>Selalu <b>kirim WA konfirmasi</b> setelah catat order, dan <b>kirim resi</b> setelah dikirim.</li>
+            </ol>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-1 text-sm">
+            <h3 class="font-bold text-base">📞 Rekening &amp; Kontak</h3>
+            <p class="text-white/70"><b>BCA</b> 8780269791 a/n <b>Priscilla Lavine</b></p>
+            <p class="text-white/70"><b>Mandiri</b> 1220010735721 a/n <b>Priscilla Lavine</b></p>
+            <p class="text-white/70">WhatsApp toko: +62 878-8717-2220</p>
+            <p class="text-white/50">Ada error / masalah teknis → hubungi James.</p>
+        </div>
+      </div>
     </div>
 
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
