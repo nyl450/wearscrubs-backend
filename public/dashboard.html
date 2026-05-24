@@ -72,6 +72,13 @@
         /* Compact variant — for tight grids */
         input.input-sm, select.input-sm { min-height: 38px; padding: 0.4rem 0.85rem; font-size: 0.8125rem; }
         select.input-sm { padding-right: 2.25rem; }
+        /* FIX: Tailwind CDN Preflight sets `select,textarea { padding:0 }` and loads AFTER
+           this stylesheet — with equal specificity it wins, flushing select/textarea text
+           to the left edge (text inputs are safe via the more-specific input[type=...]).
+           Re-assert padding with a higher-specificity `body` prefix so it wins again.
+           Compact `.input-sm` selects keep their own padding (class selector is stronger). */
+        body select, body textarea { padding: 0.7rem 1rem; }
+        body select { padding-right: 2.5rem; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         .sidebar-group-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.18); padding: 14px 16px 4px; }
         .pop-card { cursor: pointer; transition: border-color 200ms cubic-bezier(0.23,1,0.32,1), background-color 200ms cubic-bezier(0.23,1,0.32,1), transform 160ms cubic-bezier(0.23,1,0.32,1); border: 2px solid transparent; border-radius: 1rem; overflow: hidden; }
