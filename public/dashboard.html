@@ -245,6 +245,8 @@
     .wa-bordir-pill.active { border-color: rgba(74,222,128,0.35); background: rgba(74,222,128,0.07); }
     /* Submit button locked (silver) after a successful save, until "Order Baru" */
     #wa-submit-btn.wa-submit-locked { background: #6b7280 !important; cursor: not-allowed !important; opacity: 0.85; }
+    /* Bordir only applies to tops (atasan); disabled for other categories */
+    .wa-bordir-pill.wa-disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
     .wa-bordir-box { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.2); background: transparent; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, background 0.15s; }
     .wa-bordir-pill.active .wa-bordir-box { border-color: #4ade80; background: #4ade80; }
     .wa-bordir-box::after { content: ''; display: none; width: 5px; height: 8px; border: 1.5px solid black; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); }
@@ -5915,7 +5917,7 @@ function waAddItem() {
                 <label class="wa-field-label">Produk</label>
                 <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})">
                     <option value="">-- Pilih Produk --</option>
-                    ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}">${p.name} — Rp ${Number(p.price).toLocaleString('id-ID')}</option>`).join('')}
+                    ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-cat="${p.category||''}">${p.name} — Rp ${Number(p.price).toLocaleString('id-ID')}</option>`).join('')}
                 </select>
             </div>
             <div class="grid grid-cols-3 gap-2">
@@ -5960,7 +5962,7 @@ function waAddItem() {
                     <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waOnQtyInput(${idx})" />
                 </div>
                 <div>
-                    <label class="wa-field-label">Bordir</label>
+                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya untuk Atasan)</span></label>
                     <div class="grid grid-cols-2 gap-1.5 mt-0.5">
                         <div class="wa-bordir-pill" id="wa-bordir-nama-pill-${idx}" onclick="waToggleBordir(${idx},'nama')">
                             <span class="wa-bordir-box" id="wa-bordir-nama-box-${idx}"></span>
@@ -6077,11 +6079,39 @@ function waToggleBonus(idx) {
     waUpdateTotal();
 }
 
+// Bordir only applies to tops (atasan). Disable both pills + reset any active bordir
+// when the selected product isn't a top.
+function waSetBordirEnabled(idx) {
+    const prodEl = document.getElementById(`wa-prod-${idx}`);
+    const cat = prodEl?.selectedOptions?.[0]?.dataset?.cat || '';
+    const enabled = cat === 'tops';
+    const hint = document.getElementById(`wa-bordir-hint-${idx}`);
+    if (hint) hint.classList.toggle('hidden', enabled || !cat); // show hint only when a non-top product is chosen
+    ['nama','logo'].forEach(type => {
+        const pill = document.getElementById(`wa-bordir-${type}-pill-${idx}`);
+        if (pill) pill.classList.toggle('wa-disabled', !enabled);
+        if (!enabled) {
+            const hidden = document.getElementById(`wa-bordir-${type}-${idx}`);
+            if (hidden) hidden.value = 'false';
+            if (pill) pill.classList.remove('active');
+            const fields = document.getElementById(`wa-bordir-${type}-fields-${idx}`);
+            if (fields) fields.classList.remove('wa-open');
+        }
+    });
+    if (!enabled) {
+        delete waBordirLogoFiles[idx];
+        const prev = document.getElementById(`wa-bordir-logo-preview-${idx}`);
+        if (prev) { prev.innerHTML = ''; prev.classList.add('hidden'); }
+        waCheckBordirSection();
+    }
+}
+
 function waToggleBordir(idx, type) {
     const pill   = document.getElementById(`wa-bordir-${type}-pill-${idx}`);
     const hidden = document.getElementById(`wa-bordir-${type}-${idx}`);
     const fields = document.getElementById(`wa-bordir-${type}-fields-${idx}`);
     if (!pill || !hidden) return;
+    if (pill.classList.contains('wa-disabled')) return; // bordir only for tops
     const nowActive = !pill.classList.contains('active');
     pill.classList.toggle('active', nowActive);
     hidden.value = nowActive ? 'true' : 'false';
@@ -6133,6 +6163,8 @@ async function waOnProductChange(idx) {
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
     delete waInventoryCache[idx];
+    // Bordir only applies to tops — enable/disable the pills for the chosen product.
+    waSetBordirEnabled(idx);
     if (!productId) { waUpdateTotal(); return; }
     try {
         const res = await fetch(API + `/api/inventory/${productId}`);
