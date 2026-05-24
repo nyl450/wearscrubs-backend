@@ -2467,10 +2467,20 @@ app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, 
             });
         }
 
-        await dbRun(
-            `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
-            [order_status, req.params.id]
-        );
+        // Atomic: update status + (for 'done') log an audit record so the process timeline
+        // can show WHO marked it done. photo_url is null (no image) — record is for audit only.
+        await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
+                [order_status, req.params.id]
+            );
+            if (order_status === 'done') {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'done',NULL,$2,$3)`,
+                    [req.params.id, 'Pesanan ditandai selesai', req.user.username]
+                );
+            }
+        });
         res.json({ message: `Status: ${order_status}` });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -4340,7 +4340,7 @@ async function viewOrder(id) {
             confirmed:       photoByWho.bordir  || '',
             packed:          photoByWho.pack    || '',
             shipped:         photoByWho.ship    || '',
-            done:            '',
+            done:            photoByWho.done    || '',
         };
 
         // Map current status to step index
