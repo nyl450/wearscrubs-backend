@@ -3133,7 +3133,11 @@ async function submitReceiveStock() {
             body: JSON.stringify({ product_id, size, color, variant_type, quantity, note, stock_type })
         });
         const label = stock_type === 'reject' ? 'reject' : 'normal';
-        toast(`Stok ${label} ditambah +${quantity} → total ${res.after} ✅`);
+        const finalStock = (res.stock_final != null) ? res.stock_final : res.after;
+        let msg = `Stok ${label} ditambah +${quantity} → total ${finalStock} ✅`;
+        if (res.fulfilled_pos && res.fulfilled_pos.length)
+            msg += ` · ${res.fulfilled_pos.length} Pre-Order terpenuhi (siap dikirim): ${res.fulfilled_pos.join(', ')}`;
+        toast(msg);
         closeReceiveStock();
         await loadInventory();
     } catch(e) {
@@ -4138,9 +4142,13 @@ async function viewOrder(id) {
                 <div class="flex-1 min-w-0">
                     <p class="font-semibold text-sm">${esc(i.product_name)}
                         ${i.is_bonus ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/25">🎁 BONUS</span>' : ''}
+                        ${i.is_custom_size ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">CUSTOM</span>' : ''}
+                        ${i.is_po ? (i.po_fulfilled
+                            ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">📦 PRE-ORDER · siap</span>'
+                            : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PRE-ORDER · menunggu stok</span>') : ''}
                     </p>
                     <p class="text-xs text-white/40 mt-0.5">${i.size} · ${i.color}${i.variant_type&&i.variant_type!=='null'?' · '+i.variant_type:''} · x${i.quantity}
-                        ${canEditSize ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
+                        ${canEditSize && !i.is_custom_size && !(i.is_po && !i.po_fulfilled) ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
                     </p>
                     <p class="text-xs text-white/30 mt-0.5">${i.is_bonus ? 'Gratis (bonus)' : '@Rp ' + fmt(i.price) + '/pcs'}</p>
                 </div>
@@ -5791,7 +5799,7 @@ function waAddItem() {
             <div class="grid grid-cols-2 gap-2 items-end">
                 <div>
                     <label class="wa-field-label">Jumlah</label>
-                    <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waUpdateTotal()" />
+                    <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waOnQtyInput(${idx})" />
                 </div>
                 <div>
                     <label class="wa-field-label">Bordir</label>
@@ -5810,6 +5818,16 @@ function waAddItem() {
                     <input type="hidden" id="wa-bordir-nama-${idx}" value="false" />
                     <input type="hidden" id="wa-bordir-logo-${idx}" value="false" />
                 </div>
+            </div>
+            <!-- Pre-Order: muncul otomatis saat jumlah > stok. Stok dialokasikan saat barang datang. -->
+            <div id="wa-po-notice-${idx}" class="hidden p-2.5 rounded-xl" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.32);">
+                <p class="text-[10px] font-semibold leading-snug mb-1.5" style="color:rgba(253,186,116,0.95);">⚠️ Jumlah (<span id="wa-po-need-${idx}">0</span>) melebihi stok tersedia (<span id="wa-po-avail-${idx}">0</span>). Kurangi jumlah, atau jadikan Pre-Order — stok dipenuhi saat barang datang.</p>
+                <div class="wa-bonus-pill" id="wa-po-pill-${idx}" onclick="waTogglePO(${idx})">
+                    <span class="wa-bordir-box" id="wa-po-box-${idx}"></span>
+                    <span class="wa-bordir-text">📦 Jadikan Pre-Order</span>
+                    <span class="wa-bordir-price" id="wa-po-hint-${idx}">stok menyusul</span>
+                </div>
+                <input type="hidden" id="wa-po-${idx}" value="false" />
             </div>
             <!-- Bonus toggle: item gratis (produk + bordir Rp 0), stok tetap dikurangi -->
             <div class="wa-bonus-pill" id="wa-bonus-pill-${idx}" onclick="waToggleBonus(${idx})">
@@ -5984,6 +6002,9 @@ function waOnColorChange(idx) {
         });
         if (variants.length === 1) { variantSel.value = variants[0]; waOnVariantChange(idx); return; }
     }
+    // Size was reset → hide stale custom panel + PO notice for this item.
+    const cp = document.getElementById(`wa-custom-fields-${idx}`); if (cp) cp.classList.add('hidden');
+    waCheckPO(idx);
     waUpdateTotal();
 }
 
@@ -5997,6 +6018,9 @@ function waOnVariantChange(idx) {
     sizes.forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
     // Off-catalog custom size (e.g. 4XL) — always available, skips stock entirely.
     sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;
+    // Size was reset → hide stale custom panel + PO notice for this item.
+    const cp = document.getElementById(`wa-custom-fields-${idx}`); if (cp) cp.classList.add('hidden');
+    waCheckPO(idx);
     waUpdateTotal();
 }
 
@@ -6010,19 +6034,56 @@ function waOnSizeChange(idx) {
     const isCustom = size === '__custom__';
     if (customPanel) customPanel.classList.toggle('hidden', !isCustom);
     if (isCustom) {
-        // Off-catalog: no stock, so no qty cap.
+        // Off-catalog: no stock, so no qty cap and never a Pre-Order.
         if (qtyEl) { qtyEl.removeAttribute('max'); qtyEl.title = 'Custom size — stok tidak dicek'; }
+        waCheckPO(idx);   // hides the PO notice for custom
         waUpdateTotal();
         return;
     }
     const row = (waInventoryCache[idx] || []).find(i => i.color === color && i.variant_type === variant && i.size === size);
-    if (qtyEl && row) {
-        const maxStock = Number(row.stock);
-        qtyEl.max = maxStock;
-        if (parseInt(qtyEl.value || 1) > maxStock) qtyEl.value = maxStock;
-        qtyEl.title = `Stok tersedia: ${maxStock}`;
+    if (qtyEl) {
+        // Stock hint only — we DON'T force-cap anymore, so admin can exceed stock and
+        // turn the line into a Pre-Order (waCheckPO surfaces that option).
+        if (row) { qtyEl.max = Number(row.stock); qtyEl.title = `Stok tersedia: ${row.stock}`; }
+        else { qtyEl.removeAttribute('max'); qtyEl.title = ''; }
     }
+    waCheckPO(idx);   // reveal PO option if qty > stock
     waUpdateTotal();
+}
+
+// Show the Pre-Order option when requested qty exceeds available stock for the selected
+// variant. Custom sizes never PO. Auto-resets PO when qty is back within stock.
+function waCheckPO(idx) {
+    const sizeSel = document.getElementById(`wa-size-${idx}`);
+    const notice  = document.getElementById(`wa-po-notice-${idx}`);
+    const poInput = document.getElementById(`wa-po-${idx}`);
+    const pill    = document.getElementById(`wa-po-pill-${idx}`);
+    if (!sizeSel || !notice) return;
+    const resetPO = () => { notice.classList.add('hidden'); if (poInput) poInput.value = 'false'; if (pill) pill.classList.remove('active'); };
+    if (sizeSel.value === '__custom__' || !sizeSel.value) { resetPO(); return; }
+    const color   = document.getElementById(`wa-color-${idx}`)?.value;
+    const variant = document.getElementById(`wa-variant-${idx}`)?.value;
+    const row = (waInventoryCache[idx] || []).find(i => i.color === color && i.variant_type === variant && i.size === sizeSel.value);
+    const available = row ? Number(row.stock) : 0;
+    const qty = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
+    if (qty > available) {
+        notice.classList.remove('hidden');
+        const needEl = document.getElementById(`wa-po-need-${idx}`); if (needEl) needEl.textContent = qty;
+        const availEl = document.getElementById(`wa-po-avail-${idx}`); if (availEl) availEl.textContent = available;
+    } else {
+        resetPO();
+    }
+}
+
+function waOnQtyInput(idx) { waCheckPO(idx); waUpdateTotal(); }
+
+function waTogglePO(idx) {
+    const pill   = document.getElementById(`wa-po-pill-${idx}`);
+    const hidden = document.getElementById(`wa-po-${idx}`);
+    if (!pill || !hidden) return;
+    const nowActive = !pill.classList.contains('active');
+    pill.classList.toggle('active', nowActive);
+    hidden.value = nowActive ? 'true' : 'false';
 }
 
 let waSelectedDiscount = 0; // 0, 5, atau 30
@@ -6158,6 +6219,22 @@ async function waSubmitOrder() {
             if (!Number.isInteger(customPrice) || customPrice < 0) { posErrors.push(`${pName}: isi harga satuan custom size.`); continue; }
         }
 
+        // Pre-Order: a line whose qty exceeds available stock. Read the toggle (custom
+        // sizes are never PO). An over-stock line MUST be PO or custom, else the server
+        // would reject it — surface that here for a clear message.
+        const qtyVal = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
+        const isPO = !isCustomSize && document.getElementById(`wa-po-${idx}`)?.value === 'true';
+        if (!isCustomSize) {
+            const cSel = document.getElementById(`wa-color-${idx}`)?.value;
+            const vSel = document.getElementById(`wa-variant-${idx}`)?.value;
+            const stockRow = (waInventoryCache[idx] || []).find(i => i.color === cSel && i.variant_type === vSel && i.size === finalSize);
+            const avail = stockRow ? Number(stockRow.stock) : 0;
+            if (qtyVal > avail && !isPO) {
+                posErrors.push(`${pName}: jumlah ${qtyVal} melebihi stok ${avail}. Aktifkan Pre-Order atau kurangi jumlah.`);
+                continue;
+            }
+        }
+
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
         const isBonus    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
@@ -6167,7 +6244,7 @@ async function waSubmitOrder() {
             color:        document.getElementById(`wa-color-${idx}`)?.value,
             variant_type: document.getElementById(`wa-variant-${idx}`)?.value || 'null',
             size:         finalSize,
-            quantity:     parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1),
+            quantity:     qtyVal,
             bordir_nama:  bordirNama,
             bordir_logo:  bordirLogo,
             bordir_nama_price: parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000,
@@ -6175,6 +6252,7 @@ async function waSubmitOrder() {
             is_bonus:     isBonus,
             is_custom_size: isCustomSize,
             custom_price: customPrice,
+            is_po:        isPO,
         });
 
         if (bordirNama || bordirLogo) {
@@ -6231,6 +6309,7 @@ async function waSubmitOrder() {
             const lineTotal = it.is_bonus ? 0 : (price + embCost) * it.quantity;
             let line = `• ${prod ? prod.name : 'Produk'} (${it.color||'-'}, ${it.size||'-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : 'Rp ' + lineTotal.toLocaleString('id-ID')}`;
             if (it.is_custom_size) line += ' [Custom Size]';
+            if (it.is_po) line += ' [Pre-Order]';
             if (it.bordir_nama) line += ' [Bordir Nama]';
             if (it.bordir_logo) line += ' [Bordir Logo]';
             if (it.is_bonus) line += ' [BONUS]';
@@ -6366,8 +6445,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
         const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
         const customTag = item.is_custom_size ? ' <span style="background:#e0f2fe;color:#075985;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM</span>' : '';
+        const poTag = item.is_po ? ` <span style="background:#ffedd5;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">PRE-ORDER${item.po_fulfilled ? ' ✓' : ''}</span>` : '';
         itemRowsHTML += `<tr>
-            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${customTag}${bonusTag}</td>
+            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${customTag}${poTag}${bonusTag}</td>
             <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
             <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>

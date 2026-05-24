@@ -1311,8 +1311,8 @@ app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req,
             return res.status(400).json({ error: 'Jumlah harus lebih dari 0' });
 
         const isReject = stock_type === 'reject';
-        // Atomic: lock row → read current → update → log movement
-        const { before, after } = await withTransaction(async (client) => {
+        // Atomic: lock row → read current → update → log movement → allocate POs (FIFO)
+        const result = await withTransaction(async (client) => {
             const curRes = await client.query(
                 'SELECT stock, stock_reject FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
                 [product_id, size, color, variant_type]
@@ -1344,11 +1344,60 @@ app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req,
                  qty, before, after, note || (isReject ? 'Terima stok reject' : 'Terima stok baru'),
                  req.user.username, isReject]
             );
-            return { before, after };
+
+            // ── Pre-Order FIFO allocation ────────────────────────────────────────────
+            // When NORMAL stock arrives, auto-allocate it to waiting Pre-Orders for this
+            // exact variant. Rules (locked with James):
+            //   • Only PAID, non-cancelled PO lines are eligible (don't lock stock for
+            //     orders that may never pay).
+            //   • Strict FIFO by order date — oldest first.
+            //   • Whole-item: a PO is fulfilled only if the full qty fits; otherwise we
+            //     STOP (don't skip ahead to a smaller PO — preserves fairness/order).
+            // Fulfilling = deduct stock now ("blok") + mark po_fulfilled; admin ships
+            // manually afterward (the pack guard releases once po_fulfilled = TRUE).
+            // Reject stock never fulfills POs.
+            const fulfilledPOs = [];
+            let stockFinal = after;
+            if (!isReject) {
+                const poRes = await client.query(
+                    `SELECT oi.id, oi.quantity, oi.order_id, o.order_code
+                       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                      WHERE oi.product_id=$1 AND oi.size=$2 AND oi.color=$3 AND oi.variant_type=$4
+                        AND oi.is_po = TRUE AND oi.po_fulfilled = FALSE
+                        AND o.payment_status = 'paid' AND o.order_status <> 'cancelled'
+                      ORDER BY o.created_at ASC, oi.id ASC
+                      FOR UPDATE OF oi`,
+                    [product_id, size, color, variant_type]
+                );
+                for (const po of poRes.rows) {
+                    const need = parseInt(po.quantity);
+                    if (stockFinal < need) break;            // whole-item, strict FIFO
+                    const sb = stockFinal;
+                    stockFinal -= need;
+                    await client.query(
+                        `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                        [need, product_id, size, color, variant_type]
+                    );
+                    await client.query(`UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1`, [po.id]);
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                         VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+                        [product_id, size, color, variant_type, -need, sb, stockFinal,
+                         `PO terpenuhi ${po.order_code}`, po.order_id, req.user.username]
+                    );
+                    fulfilledPOs.push(po.order_code);
+                }
+            }
+            return { before, after, fulfilledPOs, stockFinal };
         });
 
         invalidateCache('inventory');
-        res.json({ message: isReject ? 'Stok reject ditambahkan' : 'Stok berhasil ditambahkan', before, after, added: qty, stock_type: isReject ? 'reject' : 'normal' });
+        const fulfilled = result.fulfilledPOs || [];
+        let msg = isReject ? 'Stok reject ditambahkan' : 'Stok berhasil ditambahkan';
+        if (fulfilled.length) msg += ` · ${fulfilled.length} Pre-Order terpenuhi (siap dikirim): ${fulfilled.join(', ')}`;
+        res.json({ message: msg, before: result.before, after: result.after, stock_final: result.stockFinal,
+                   fulfilled_pos: fulfilled, added: qty, stock_type: isReject ? 'reject' : 'normal' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1696,10 +1745,11 @@ app.post('/api/orders', async (req, res) => {
         // the same shirt appears as multiple lines (plain + with name + with logo).
         const variantTotals = new Map();
         for (const item of items) {
-            // Custom-size items are off-catalog (no inventory row) → skip stock check.
-            // ADMIN-ONLY: a public caller sending is_custom_size must NOT bypass stock,
-            // so the skip is gated behind isAdmin (same anti-tamper posture as is_bonus).
-            if (isAdmin && item.is_custom_size === true) continue;
+            // Custom-size (off-catalog, no inventory row) and Pre-Order (qty > stock,
+            // fulfilled later at receive) both skip the stock check. ADMIN-ONLY: a public
+            // caller sending these flags must NOT bypass stock (same anti-tamper posture
+            // as is_bonus), so the skip is gated behind isAdmin.
+            if (isAdmin && (item.is_custom_size === true || item.is_po === true)) continue;
             const k = `${item.product_id}|${item.size}|${item.color}|${item.variant_type || 'null'}`;
             variantTotals.set(k, (variantTotals.get(k) || 0) + Number(item.quantity || 0));
         }
@@ -1734,6 +1784,10 @@ app.post('/api/orders', async (req, res) => {
             // instead of the catalog product.price; falls back to product.price if missing.
             const isCustomSize = isAdmin && item.is_custom_size === true;
             const customBase = (isCustomSize && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : product.price;
+            // Pre-Order (qty > stock): whole line is deferred, stock allocated later at
+            // receive (FIFO, paid-only). ADMIN-ONLY. Custom size takes precedence — a
+            // custom (off-catalog) line is never a PO since it has no inventory to wait for.
+            const isPO = isAdmin && item.is_po === true && !isCustomSize;
             // Bordir price: admin may override per-order (e.g. logo lebih susah → 40rb);
             // public callers ALWAYS use the fixed 20rb/30rb (gate behind isAdmin, anti-tamper).
             const namaPrice = (isAdmin && Number.isInteger(item.bordir_nama_price) && item.bordir_nama_price >= 0) ? item.bordir_nama_price : 20000;
@@ -1741,7 +1795,7 @@ app.post('/api/orders', async (req, res) => {
             const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? namaPrice : 0) + (item.bordir_logo ? logoPrice : 0));
             const basePrice = isBonus ? 0 : customBase;
             const unitPrice = basePrice + itemEmbroidery;
-            itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery,
+            itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, is_po: isPO, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery,
                 bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null });
             productTotal += unitPrice * item.quantity;
         }
@@ -1832,12 +1886,12 @@ app.post('/api/orders', async (req, res) => {
 
             for (const item of itemDetails) {
                 await client.query(
-                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size, is_po)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
                     [newOrderId, item.product_id, item.size, item.color,
                         item.variant_type || 'null', item.quantity, item.price,
                         item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false,
-                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null, item.is_custom_size || false]
+                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null, item.is_custom_size || false, item.is_po || false]
                 );
             }
             return newOrderId;
@@ -1847,6 +1901,8 @@ app.post('/api/orders', async (req, res) => {
         // invalidate the order; just logs and the customer still gets success)
         const itemSummary = itemDetails.map(i => {
             let line = `• ${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) x${i.quantity}`;
+            if (i.is_custom_size) line += ` [Custom Size]`;
+            if (i.is_po) line += ` [PRE-ORDER]`;
             if (i.bordir_nama) line += ` [Bordir Nama]`;
             if (i.bordir_logo) line += ` [Bordir Logo]`;
             if (i.is_bonus) line += ` [BONUS]`;
@@ -1968,7 +2024,9 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
             for (const it of items) {
                 // Custom-size lines have no inventory row → never deduct (and skip the
                 // hard stock check below, which would otherwise throw a false 409).
-                if (it.is_custom_size) continue;
+                // Pre-Order lines are deferred: stock is allocated/deducted later at
+                // receive (FIFO), not here — so skip them at confirm too.
+                if (it.is_custom_size || it.is_po) continue;
                 const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
                 if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
                 variantTotals.get(k).quantity += it.quantity;
@@ -2084,6 +2142,16 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'confirmed') return res.status(400).json({ error: 'Pesanan belum berstatus confirmed/siap kemas' });
+
+        // Pre-Order guard: a paid PO order stays at 'confirmed' until its stock arrives
+        // and is allocated (po_fulfilled) at receive. Block packing/shipping while any
+        // PO line is still waiting — otherwise we'd ship goods we don't have.
+        const pendingPO = await dbGet(
+            'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND is_po = TRUE AND po_fulfilled = FALSE',
+            [order.id]
+        );
+        if (pendingPO && pendingPO.n > 0)
+            return res.status(409).json({ error: 'Ada item Pre-Order yang belum dipenuhi (menunggu stok datang). Tidak bisa dikemas dulu. Stok akan dialokasikan otomatis saat penerimaan barang.' });
 
         const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
 
@@ -2221,6 +2289,9 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                     // Custom-size lines were never deducted at confirm → nothing to restore
                     // (and they have no inventory row; restoring would just log a bogus ledger entry).
                     if (item.is_custom_size) continue;
+                    // Pre-Order lines: only fulfilled ones had stock deducted (at receive).
+                    // An unfulfilled PO was never deducted → skip (restoring would inflate stock).
+                    if (item.is_po && !item.po_fulfilled) continue;
                     const invRes = await client.query(
                         'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
                         [item.product_id, item.size, item.color, item.variant_type]
@@ -3035,6 +3106,10 @@ app.put('/api/orders/:id/items/:itemId/size', requireAuth(['admin','manager']), 
         // create a phantom inventory row via the ON CONFLICT restore below — block it.
         if (item.is_custom_size)
             return res.status(400).json({ error: 'Item custom size tidak punya stok di katalog — size tidak bisa diubah lewat edit. Batalkan & buat ulang bila perlu.' });
+        // Unfulfilled PO has no stock deducted yet → restoring the old size below would
+        // create phantom stock. Block until the PO is fulfilled (then it behaves normally).
+        if (item.is_po && !item.po_fulfilled)
+            return res.status(400).json({ error: 'Item Pre-Order belum dipenuhi (menunggu stok) — size tidak bisa diubah dulu. Batalkan & buat ulang bila perlu.' });
 
         const toSize = String(req.body.to_size || '').trim();
         if (!toSize) return res.status(400).json({ error: 'Size baru wajib diisi' });
