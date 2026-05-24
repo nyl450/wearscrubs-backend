@@ -243,6 +243,8 @@
     .wa-bordir-pill { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.03); cursor: pointer; transition: border-color 0.15s, background 0.15s; user-select: none; }
     .wa-bordir-pill:hover { border-color: rgba(255,255,255,0.18); }
     .wa-bordir-pill.active { border-color: rgba(74,222,128,0.35); background: rgba(74,222,128,0.07); }
+    /* Submit button locked (silver) after a successful save, until "Order Baru" */
+    #wa-submit-btn.wa-submit-locked { background: #6b7280 !important; cursor: not-allowed !important; opacity: 0.85; }
     .wa-bordir-box { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.2); background: transparent; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, background 0.15s; }
     .wa-bordir-pill.active .wa-bordir-box { border-color: #4ade80; background: #4ade80; }
     .wa-bordir-box::after { content: ''; display: none; width: 5px; height: 8px; border: 1.5px solid black; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); }
@@ -6537,11 +6539,16 @@ async function waSubmitOrder() {
         document.getElementById('wa-result-message').textContent = waMsg;
         document.getElementById('wa-result-panel').classList.remove('hidden');
         document.getElementById('wa-result-panel').scrollIntoView({ behavior: 'smooth' });
+        // Lock the submit button (silver, disabled) after a successful save so it can't be
+        // double-submitted. It re-activates only when admin clicks "Order Baru" (waResetForm).
+        btn.disabled = true;
+        btn.classList.add('wa-submit-locked');
+        btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Tersimpan — klik "Order Baru"';
     } catch (err) {
         alert('Error: ' + err.message);
-    } finally {
-        // Always restore the button — on success it must not stay stuck on "Menyimpan...".
+        // On failure, keep the button active so admin can retry.
         btn.disabled = false;
+        btn.classList.remove('wa-submit-locked');
         btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
     }
 }
@@ -6556,46 +6563,42 @@ function waCopyMessage() {
 }
 
 function waResetForm() {
-    ['wa-customer-name','wa-customer-phone','wa-customer-address','wa-shipping-cost','wa-payment-method','wa-notes']
-        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-    document.getElementById('wa-shipping-city').value = '';
-    const wCourierEl = document.getElementById('wa-shipping-courier');
-    if (wCourierEl) wCourierEl.value = '';
-    const wWeightEl = document.getElementById('wa-shipping-weight');
-    if (wWeightEl) wWeightEl.value = '1';
-    // Reset semua pill bordir
-    document.querySelectorAll('[id^="wa-bordir-nama-pill-"], [id^="wa-bordir-logo-pill-"]')
-        .forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('[id^="wa-bordir-nama-"], [id^="wa-bordir-logo-"]')
-        .forEach(el => { if (el.tagName === 'INPUT') el.value = 'false'; });
-    document.getElementById('wa-items-container').innerHTML = '';
-    document.getElementById('wa-total-preview').textContent = 'Rp 0';
-    document.getElementById('wa-result-panel').classList.add('hidden');
-    document.getElementById('wa-submit-btn').disabled = false;
-    document.getElementById('wa-submit-btn').innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
-    // Reset foto
+    // CRITICAL visible resets first — these must run even if a later cleanup line throws,
+    // otherwise "Order Baru" would appear to do nothing (result panel stays, button stuck).
+    const itemsC = document.getElementById('wa-items-container'); if (itemsC) itemsC.innerHTML = '';
+    const panel  = document.getElementById('wa-result-panel');    if (panel)  panel.classList.add('hidden');
+    const sBtn   = document.getElementById('wa-submit-btn');
+    if (sBtn) {
+        sBtn.disabled = false;
+        sBtn.classList.remove('wa-submit-locked');
+        sBtn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
+    }
+    const totalEl = document.getElementById('wa-total-preview'); if (totalEl) totalEl.textContent = 'Rp 0';
+
+    // Reset state vars (cheap, can't throw).
     waProductPhotoBase64s = [];
     waBordirRefBase64 = null;
     waBordirLogoFiles = {};
     waInventoryCache = {};
-    const prev = document.getElementById('wa-photo-previews');
-    if (prev) prev.innerHTML = '';
-    const bprev = document.getElementById('wa-bordir-ref-preview');
-    if (bprev) bprev.innerHTML = '';
-    const phInput = document.getElementById('wa-product-photos');
-    if (phInput) phInput.value = '';
-    const brInput = document.getElementById('wa-bordir-ref-photo');
-    if (brInput) brInput.value = '';
-    // Reset per-item logo previews and sub-forms
-    document.querySelectorAll('[id^="wa-bordir-logo-preview-"]').forEach(el => { el.innerHTML = ''; el.classList.add('hidden'); });
-    document.querySelectorAll('[id^="wa-bordir-nama-fields-"],[id^="wa-bordir-logo-fields-"]').forEach(el => el.classList.remove('wa-open'));
     window.waLastOrderId = null;
-    // Reset diskon
     waSelectedDiscount = 0;
-    waRenderDiscountUI();
+
+    // Best-effort field/UI clears — guarded so a single missing element can't block the
+    // fresh-item rebuild below.
+    try {
+        ['wa-customer-name','wa-customer-phone','wa-customer-address','wa-shipping-cost',
+         'wa-payment-method','wa-notes','wa-shipping-city','wa-shipping-courier']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        const wWeightEl = document.getElementById('wa-shipping-weight'); if (wWeightEl) wWeightEl.value = '1';
+        ['wa-photo-previews','wa-bordir-ref-preview'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+        ['wa-product-photos','wa-bordir-ref-photo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        if (typeof waRenderDiscountUI === 'function') waRenderDiscountUI();
+    } catch (e) { console.warn('waResetForm cleanup skipped:', e); }
+
+    // Rebuild a fresh item row (guaranteed to run).
     waItemCount = 0;
     waAddItem();
-    // Scroll back to the top of the form so it's obvious a fresh order is ready.
+    // Scroll back to the top so it's obvious a fresh order is ready.
     document.getElementById('module-manual-order')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
