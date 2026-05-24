@@ -4313,10 +4313,12 @@ async function viewOrder(id) {
 
         // Map step → timestamp (best-effort from order data + photos)
         const fmtDate = (d) => d ? new Date(d).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'2-digit' }) : '';
-        const photoBy = {};   // step → most recent created_at
+        const photoBy = {};     // step → most recent created_at
+        const photoByWho = {};  // step → admin/staff yang mengerjakan (performed_by)
         photos.forEach(p => {
             if (!photoBy[p.step] || new Date(p.created_at) > new Date(photoBy[p.step])) {
                 photoBy[p.step] = p.created_at;
+                photoByWho[p.step] = p.performed_by || '';
             }
         });
         const stepTimestamp = {
@@ -4327,6 +4329,18 @@ async function viewOrder(id) {
             packed:          photoBy.pack    || (['packed','shipped','done'].includes(o.order_status) ? o.updated_at : null),
             shipped:         photoBy.ship    || (['shipped','done'].includes(o.order_status) ? o.updated_at : null),
             done:            o.order_status === 'done' ? o.updated_at : null,
+        };
+
+        // Siapa (admin/staff) yang mengerjakan tiap step — dari order_photos.performed_by.
+        // waiting_payment (dibuat saat order masuk) & done (ubah status) tidak punya record → kosong.
+        const stepPerformer = {
+            waiting_payment: '',
+            confirmed_pay:   photoByWho.payment || '',
+            bordir:          photoByWho.bordir  || '',
+            confirmed:       photoByWho.bordir  || '',
+            packed:          photoByWho.pack    || '',
+            shipped:         photoByWho.ship    || '',
+            done:            '',
         };
 
         // Map current status to step index
@@ -4352,6 +4366,7 @@ async function viewOrder(id) {
                 const active = (idx === currentStepIdx && currentStepIdx >= 0);
                 const cancelled = o.order_status === 'cancelled';
                 const ts = !cancelled && (done || active) ? stepTimestamp[s] : null;
+                const who = !cancelled && (done || active) ? (stepPerformer[s] || '') : '';
                 return `
                 <div class="flex items-center">
                     <div class="flex flex-col items-center w-20">
@@ -4367,6 +4382,7 @@ async function viewOrder(id) {
                             ${meta.label}
                         </p>
                         ${ts ? `<p class="text-[9px] text-white/40 text-center mt-0.5 font-mono">${fmtDate(ts)}</p>` : ''}
+                        ${who ? `<p class="text-[9px] text-cyan-300/70 text-center leading-tight">oleh ${esc(who)}</p>` : ''}
                         ${meta.sub && active ? `<p class="text-[9px] text-purple-300 text-center">${meta.sub}</p>` : ''}
                     </div>
                     ${idx < steps.length - 1 ? `<div class="w-6 h-0.5 mx-0.5 ${done ? 'bg-green-500/60' : 'bg-white/10'} flex-shrink-0"></div>` : ''}
