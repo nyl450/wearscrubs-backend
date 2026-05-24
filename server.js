@@ -445,6 +445,8 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`).catch(() => {});
     // ── Migrate: track which admin performed each order photo step ─────────────
     await dbRun(`ALTER TABLE order_photos ADD COLUMN IF NOT EXISTS performed_by TEXT`);
+    // Photo optional for some steps (bordir-done, pack): step record saved w/o image → allow NULL.
+    await dbRun(`ALTER TABLE order_photos ALTER COLUMN photo_url DROP NOT NULL`).catch(() => {});
 
     // ── Refunds (cancelled-paid orders + rejected bordir) ─────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS refunds (

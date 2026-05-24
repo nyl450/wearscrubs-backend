@@ -4536,16 +4536,19 @@ async function viewOrder(id) {
         };
         // Stash photo URLs for lightbox access (avoids escape issues in inline onclick)
         window._orderPhotos = window._orderPhotos || {};
-        window._orderPhotos[o.id] = photos.map(p => ({
+        // Only records WITH an actual image go in the photo grid (bordir/kemas can now be
+        // photo-less — their timeline timestamp still comes from the full `photos` list above).
+        const photosWithImg = (photos || []).filter(p => p.photo_url);
+        window._orderPhotos[o.id] = photosWithImg.map(p => ({
             src: resolvePhoto(p.photo_url),
             caption: `${stepLabels[p.step]||p.step} · ${o.order_code}`,
             filename: `${o.order_code}-${p.step}-${new Date(p.created_at).toISOString().slice(0,10)}`,
         }));
-        const photosHTML = photos.length ? `
+        const photosHTML = photosWithImg.length ? `
         <div>
             <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">📸 Foto Bukti Proses</p>
             <div class="grid grid-cols-2 gap-3">
-                ${photos.map((p, pIdx) => `
+                ${photosWithImg.map((p, pIdx) => `
                 <div class="bg-white/5 rounded-xl overflow-hidden">
                     <div class="relative group">
                         <img loading="lazy" decoding="async" src="${resolvePhoto(p.photo_url)}"
