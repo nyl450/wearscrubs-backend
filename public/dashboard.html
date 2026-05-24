@@ -6566,7 +6566,7 @@ function buildOrderWaMessage(o) {
     const items = o.items || [];
     const itemLines = items.map(it => {
         const lineTotal = it.is_bonus ? 0 : (Number(it.price) || 0) * (it.quantity || 1);
-        let line = `• ${it.product_name || 'Produk'} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS 🎁' : rp(lineTotal)}`;
+        let line = `- ${it.product_name || 'Produk'} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS' : rp(lineTotal)}`;
         if (it.is_custom_size) line += ' [Custom Size]';
         if (it.is_po) line += ' [Pre-Order]';
         if (it.bordir_nama) line += ' [Bordir Nama]';
@@ -6578,34 +6578,34 @@ function buildOrderWaMessage(o) {
     let emb = [];
     try { emb = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch (e) {}
     const bordirLines = (Array.isArray(emb) && emb.length)
-        ? `\n\n🧵 *Detail Bordir:*\n` + emb.map(e => {
+        ? `\n\n*Detail Bordir:*\n` + emb.map(e => {
             const posLabel = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
-            if (e.type === 'nama') return `✏️ Nama: *${e.value}* | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
+            if (e.type === 'nama') return `Nama: *${e.value}* | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
             const v = typeof e.value === 'string' ? e.value : '';
             const logoLabel = (v.startsWith('data:image/') || v.startsWith('http')) ? '[Logo Customer]' : (v || '[Logo Customer]');
-            return `🎨 Logo: ${logoLabel} | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
+            return `Logo: ${logoLabel} | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
           }).join('\n')
         : '';
 
     const discountLine = (o.discount_amount > 0)
-        ? `🏷️ ${o.discount_label || 'Diskon'}: -${rp(o.discount_amount)}\n`
+        ? `${o.discount_label || 'Diskon'}: -${rp(o.discount_amount)}\n`
         : '';
 
-    return `Halo ${o.customer_name || ''} 👋\n\n` +
-        `Pesanan Anda sudah kami catat.\n\n` +
-        `🧾 *Invoice: ${o.order_code}*\n\n` +
-        `📦 Detail Produk:\n${itemLines}` +
+    return `Halo ${o.customer_name || ''}\n\n` +
+        `Order Anda sudah tercatat di sistem kami.\n\n` +
+        `*Invoice: ${o.order_code}*\n\n` +
+        `*Alamat Pengiriman:*\n${o.customer_address || '-'}\n` +
+        `*No. HP:* ${o.customer_phone || '-'}\n\n` +
+        `*Detail Produk:*\n${itemLines}` +
         bordirLines + `\n\n` +
-        `📍 *Alamat Pengiriman:*\n${o.customer_address || '-'}\n` +
-        `📱 *No. HP:* ${o.customer_phone || '-'}\n\n` +
-        `🚚 Ekspedisi: ${o.shipping_courier || '-'} (${o.shipping_weight_kg || '-'} kg)\n` +
-        `📦 Ongkir: ${rp(o.shipping_cost)}\n` +
+        `Ekspedisi: ${o.shipping_courier || '-'} (${o.shipping_weight_kg || '-'} kg)\n` +
+        `Ongkir: ${rp(o.shipping_cost)}\n` +
         discountLine +
-        `💰 *TOTAL: ${rp(o.total_amount)}*` +
-        (o.payment_method ? `\n💳 Metode: ${o.payment_method}` : '') +
-        `\n\nSilakan lakukan pembayaran *BCA 8780269791* / *Mandiri 1220010735721* a/n *Priscilla Lavine* dan kirim bukti transfer ke WA ini ya Dok 🙏\n\n` +
-        `⏰ Mohon melakukan pembayaran dalam waktu maksimal *2 x 24 jam*. Melebihi waktu yang diberikan, pemesanan akan dibatalkan oleh sistem kami secara otomatis.\n\n` +
-        `Terima kasih sudah berbelanja di Wearscrubs! 🏥`;
+        `*TOTAL: ${rp(o.total_amount)}*` +
+        (o.payment_method ? `\nMetode: ${o.payment_method}` : '') +
+        `\n\nSilakan lakukan pembayaran *BCA 8780269791* / *Mandiri 1220010735721* a/n *Priscilla Lavine* dan kirim bukti transfer ke WA ini ya Dok\n\n` +
+        `Mohon melakukan pembayaran dalam waktu maksimal *2 x 24 jam*. Melebihi waktu yang diberikan, pemesanan akan dibatalkan oleh sistem kami secara otomatis.\n\n` +
+        `Terima kasih sudah berbelanja di Wearscrubs!`;
 }
 
 // Open WhatsApp to the customer with the message pre-filled (post-save result panel).
