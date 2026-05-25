@@ -2142,18 +2142,18 @@ function renderProducts() {
         const photo = resolvePhoto(p.main_photo);
         const safeP = JSON.stringify(p).replace(/"/g, '&quot;');
         return `<div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden group">
-            <div class="aspect-[4/3] bg-black/20 overflow-hidden relative">
+            <div class="aspect-[4/3] bg-black/20 overflow-hidden">
                 <img loading="lazy" decoding="async" src="${photo}" alt="${p.name}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
                      onerror="this.src='images/logo/logo%20ws%20white%20250x55.png'; this.classList.add('object-contain','p-8','opacity-30')">
-                <div class="absolute top-3 left-3 flex gap-2">
-                    <span class="text-[9px] font-bold px-2 py-1 rounded-full ${p.status==='active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">${p.status}</span>
-                    ${p.is_popular ? '<span class="text-[9px] font-bold px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">⭐ Popular</span>' : ''}
-                </div>
             </div>
             <div class="p-4">
                 <p class="text-[9px] text-white/30 uppercase tracking-wider">${catLabel[p.category]||p.category}</p>
                 <h4 class="font-bold text-sm mt-0.5">${p.name}</h4>
-                <p class="text-xs text-white/40 font-mono">${p.sku}</p>
+                <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <p class="text-xs text-white/40 font-mono">${p.sku}</p>
+                    <span class="text-[9px] font-bold px-2 py-0.5 rounded-full ${p.status==='active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">${p.status}</span>
+                    ${p.is_popular ? '<span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">⭐ Popular</span>' : ''}
+                </div>
                 <p class="text-sm text-green-400 font-bold mt-2">Rp ${fmt(p.price)}</p>
                 <div class="flex gap-2 mt-3 pt-3 border-t border-darkborder">
                     <button onclick='openProductModal(${safeP})' class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
