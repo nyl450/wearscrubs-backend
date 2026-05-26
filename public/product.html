@@ -610,7 +610,7 @@
                 return `<button onclick="selectColor('${c}')" data-val="${c}" title="${label}"
                     class="motif-box">${label}</button>`;
             }
-            const hex = p.color_hex_map[c] || '#ccc';
+            const hex = (p.color_hex_map && p.color_hex_map[c]) || (COLOR_META[c] && COLOR_META[c].hex) || '#ccc';
             return `<button onclick="selectColor('${c}')" data-val="${c}" title="${label}"
                 class="color-dot w-9 h-9 rounded-full border-2 border-transparent transition-all p-0.5">
                 <span class="w-full h-full rounded-full block" style="background:${hex}"></span>

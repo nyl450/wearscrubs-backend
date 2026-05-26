@@ -699,6 +699,7 @@ function safeJSON(str, fallback = []) {
 }
 
 const COLOR_HEX = {
+    // Scrub colors
     'black': '#000000',
     'beige': '#d7c5a9',
     'olive': '#696250',
@@ -708,7 +709,19 @@ const COLOR_HEX = {
     'purple': '#a4b4e8',
     'blush': '#f0c6bb',
     'turquoise': '#40e0d0',
-    'white': '#f0f0f0'
+    'white': '#f0f0f0',
+    // Gown/Avery colors (purple di Avery di-override ke plum via PRODUCT_COLOR_HEX_OVERRIDES)
+    'navy': '#242738',
+    'tosca': '#02869d',
+    'orange': '#d7a353',
+    'blue': '#7a97b5',
+    'off-white': '#dee0df',
+    'grey': '#bbb5b5',
+    'new-pink': '#f472b6',
+    'green-mint': '#6ee7b7',
+    'baby-blue': '#b9d1db',
+    'baby-pink': '#c0a9ad',
+    'old-pink': '#d6b6bb'
 };
 const COLOR_LABEL = {
     'black': 'Black',
@@ -720,7 +733,23 @@ const COLOR_LABEL = {
     'purple': 'Purple',
     'blush': 'Blush',
     'turquoise': 'Turquoise',
-    'white': 'White'
+    'white': 'White',
+    'navy': 'Navy',
+    'tosca': 'Tosca',
+    'orange': 'Orange',
+    'blue': 'Blue',
+    'off-white': 'Off White',
+    'grey': 'Grey',
+    'new-pink': 'New Pink',
+    'green-mint': 'Green Mint',
+    'baby-blue': 'Baby Blue',
+    'baby-pink': 'Baby Pink',
+    'old-pink': 'Pink'
+};
+// Override hex per produk untuk warna yang artinya beda antar lini (mis. "purple" di
+// Avery = plum gelap, beda dari purple scrub periwinkle). Key = SKU produk.
+const PRODUCT_COLOR_HEX_OVERRIDES = {
+    'WS-GWN-AVERY': { 'purple': '#362136' }
 };
 
 function formatProduct(p, mainPhoto = null) {
@@ -733,7 +762,7 @@ function formatProduct(p, mainPhoto = null) {
         price_by_type: priceByType,
         main_photo: mainPhoto || '',
         price_formatted: `Rp ${Number(p.price).toLocaleString('id-ID')}`,
-        color_hex_map: COLOR_HEX,
+        color_hex_map: { ...COLOR_HEX, ...(PRODUCT_COLOR_HEX_OVERRIDES[p.sku] || {}) },
         color_label_map: COLOR_LABEL,
         short_description: p.short_description || '',
         long_description: p.long_description || '',
