@@ -741,7 +741,10 @@ async function submitOrder() {
             ? `\n🧵 Embroidery:\n` + embroideryData.map(e => {
                 const posLbl = e.position === 'kanan' ? 'Right Chest' : 'Left Chest';
                 if (e.type === 'nama') return `• ✏️ Name: ${e.value}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
-                return `• 🎨 Logo: ${e.value}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
+                // Don't put base64 logo in the wa.me URL (makes the link too long → fails on
+                // Android/desktop/WA Business). The logo is already saved with the order; short label only.
+                const logoLabel = (typeof e.value === 'string' && e.value.startsWith('data:')) ? '[Customer Logo]' : e.value;
+                return `• 🎨 Logo: ${logoLabel}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
               }).join('\n')
             : '';
         const waMsg = encodeURIComponent(
