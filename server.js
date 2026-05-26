@@ -470,6 +470,8 @@ async function initDB() {
     await dbRun(`ALTER TABLE order_photos ADD COLUMN IF NOT EXISTS performed_by TEXT`);
     // Photo optional for some steps (bordir-done, pack): step record saved w/o image → allow NULL.
     await dbRun(`ALTER TABLE order_photos ALTER COLUMN photo_url DROP NOT NULL`).catch(() => {});
+    // Covering index for FK order_photos.order_id (dipakai saat fetch foto per order + FK CASCADE).
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_order_photos_order ON order_photos(order_id)`).catch(() => {});
 
     // ── Refunds (cancelled-paid orders + rejected bordir) ─────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS refunds (
