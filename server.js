@@ -11,7 +11,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { CITIES } = require('./cities');
+const { CITIES, rateForZone } = require('./cities');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1664,10 +1664,10 @@ app.get('/api/cities', (req, res) => {
 });
 
 // GET /api/shipping-cost?city=Jakarta%20Selatan&qty=5
-// Rules:
-//  - DKI: JNE / J&T Reguler, Rp10.000/kg
-//  - Luar DKI ≤10kg: J&T Reguler / Lion Parcel, Rp20.000/kg
-//  - Luar DKI >10kg: Lion Cargo, ongkir dikonfirmasi admin per kota (cost=0, needs_confirmation=true)
+// Tarif INTERIM berbasis ZONA (sebelum integrasi KiriminAja). Lihat cities.js:
+//   Zona 1 Jabodetabek 10rb · 2 Banten/Jabar 12rb · 3 Jateng/DIY/Jatim/Bali 20rb
+//   Zona 4 Sumatra/Kalimantan/NTB/NTT 28rb · 5 Sulawesi/Maluku/Papua 31rb (per kg)
+//   >10kg di luar Zona 1: Lion Cargo, ongkir dikonfirmasi admin (cost=0, needs_confirmation=true)
 app.get('/api/shipping-cost', (req, res) => {
     const { city, qty } = req.query;
     const quantity = parseInt(qty || 1);
@@ -1675,25 +1675,23 @@ app.get('/api/shipping-cost', (req, res) => {
     const cityInfo = CITIES.find(c => c.name === city);
     if (!cityInfo) return res.status(404).json({ error: 'Kota tidak ditemukan' });
 
+    const zone = cityInfo.zone || 3;
     let courier, ratePerKg, cost, needsConfirmation = false;
-    if (!cityInfo.is_dki && weightKg > 10) {
+    if (zone !== 1 && weightKg > 10) {
         courier = 'Lion Cargo (ongkir dikonfirmasi admin via WhatsApp)';
         ratePerKg = 0;
         cost = 0;
         needsConfirmation = true;
-    } else if (cityInfo.is_dki) {
-        courier = 'JNE / J&T Reguler';
-        ratePerKg = 10000;
-        cost = weightKg * ratePerKg;
     } else {
-        courier = 'J&T Reguler / Lion Parcel';
-        ratePerKg = 20000;
+        ratePerKg = rateForZone(zone);
         cost = weightKg * ratePerKg;
+        courier = zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
     }
 
     res.json({
         city: cityInfo.name,
         is_dki: cityInfo.is_dki,
+        zone,
         courier,
         qty: quantity,
         weight_kg: weightKg,
@@ -1875,9 +1873,8 @@ app.post('/api/orders', async (req, res) => {
             const totalQty = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
             const wKg = Math.ceil(totalQty / 3);
             if (!ci) shippingCost = 0;
-            else if (!ci.is_dki && wKg > 10) shippingCost = 0;   // Lion Cargo — admin konfirmasi nanti
-            else if (ci.is_dki) shippingCost = wKg * 10000;
-            else shippingCost = wKg * 20000;
+            else if (ci.zone !== 1 && wKg > 10) shippingCost = 0;   // Lion Cargo — admin konfirmasi nanti
+            else shippingCost = wKg * rateForZone(ci.zone || 3);
         }
 
         // Diskon (hanya product total, ongkir tidak kena diskon).
@@ -1894,9 +1891,8 @@ app.post('/api/orders', async (req, res) => {
         const weightKg = parseFloat(shipping_weight_kg || 0);
         let autoCourier = 'JNE / J&T Reguler';
         if (cityInfo) {
-            if (!cityInfo.is_dki && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
-            else if (cityInfo.is_dki) autoCourier = 'JNE / J&T Reguler';
-            else autoCourier = 'J&T Reguler / Lion Parcel';
+            if (cityInfo.zone !== 1 && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
+            else autoCourier = cityInfo.zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
         }
         const courier = (req_shipping_courier && req_shipping_courier.trim()) ? req_shipping_courier.trim() : autoCourier;
 
