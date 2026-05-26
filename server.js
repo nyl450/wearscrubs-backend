@@ -132,6 +132,10 @@ app.use('/uploads', express.static(uploadsDir));
 const SUPABASE_URL    = process.env.SUPABASE_URL    || null;
 const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY || null;
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'wearscrubs';
+// Bukti order/refund (bukti bayar, packing, refund) → bucket PRIVAT, diakses via signed URL.
+const SUPABASE_PRIVATE_BUCKET = process.env.SUPABASE_PRIVATE_BUCKET || 'wearscrubs-orders';
+// Folder yang isinya sensitif → wajib private bucket. Produk & logo bordir tetap public.
+const PRIVATE_FOLDERS = ['orders', 'refunds'];
 
 let supabaseClient = null;
 if (SUPABASE_URL && SUPABASE_KEY) {
@@ -153,12 +157,14 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 async function uploadToSupabase(buffer, originalname, folder = 'products') {
     const ext = path.extname(originalname).toLowerCase();
     const filename = `${folder}/ws_${Date.now()}_${Math.round(Math.random() * 9999)}${ext}`;
+    const isPrivate = PRIVATE_FOLDERS.includes(folder);
+    const bucket = isPrivate ? SUPABASE_PRIVATE_BUCKET : SUPABASE_BUCKET;
 
     if (supabaseClient) {
         // Upload ke Supabase Storage
-        const { data, error } = await supabaseClient
+        const { error } = await supabaseClient
             .storage
-            .from(SUPABASE_BUCKET)
+            .from(bucket)
             .upload(filename, buffer, {
                 contentType: ext === '.jpg' || ext === '.jpeg'
                     ? 'image/jpeg'
@@ -168,10 +174,12 @@ async function uploadToSupabase(buffer, originalname, folder = 'products') {
                 upsert: false
             });
         if (error) throw new Error(`Supabase upload error: ${error.message}`);
-        // Return URL publik permanen
+        // Private (bukti order/refund): simpan PATH saja → di-sign saat dibaca (lihat signedMediaUrl).
+        // Public (produk/logo): kembalikan URL publik permanen.
+        if (isPrivate) return filename;
         const { data: urlData } = supabaseClient
             .storage
-            .from(SUPABASE_BUCKET)
+            .from(bucket)
             .getPublicUrl(filename);
         return urlData.publicUrl;
     } else {
@@ -181,6 +189,21 @@ async function uploadToSupabase(buffer, originalname, folder = 'products') {
         fs.writeFileSync(localPath, buffer);
         return `/uploads/${localFilename}`;
     }
+}
+
+// Konversi nilai tersimpan jadi URL yang bisa dirender oleh admin.
+// - Path privat (mis. "orders/ws_123.jpg") → signed URL ber-expiry dari private bucket.
+// - URL publik lama (http…) atau file lokal (/uploads/…) → dikembalikan apa adanya.
+async function signedMediaUrl(value, expirySeconds = 3600) {
+    if (!value || typeof value !== 'string') return value;
+    if (value.startsWith('http') || value.startsWith('/uploads/')) return value;
+    if (!supabaseClient) return value;
+    const { data, error } = await supabaseClient
+        .storage
+        .from(SUPABASE_PRIVATE_BUCKET)
+        .createSignedUrl(value, expirySeconds);
+    if (error || !data) return value; // fail-safe: jangan crash render kalau sign gagal
+    return data.signedUrl;
 }
 
 // Parse a base64 data URL (data:image/png;base64,XXXX) into { buffer, ext }.
@@ -205,7 +228,7 @@ async function externalizeEmbroideryLogos(embDetails) {
             const parsed = dataUrlToBuffer(e.value);
             if (parsed) {
                 try {
-                    const url = await uploadToSupabase(parsed.buffer, `logo${parsed.ext}`, 'orders');
+                    const url = await uploadToSupabase(parsed.buffer, `logo${parsed.ext}`, 'logos');
                     out.push({ ...e, value: url });
                     continue;
                 } catch (err) {
@@ -2128,7 +2151,7 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
             } catch (waErr) { console.error('WA notify (payment confirmed) failed:', waErr?.message || waErr); }
         }
 
-        res.json({ message: 'Pembayaran dikonfirmasi', next_status: nextStatus, photo_url: photoUrl });
+        res.json({ message: 'Pembayaran dikonfirmasi', next_status: nextStatus, photo_url: await signedMediaUrl(photoUrl) });
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
@@ -2164,7 +2187,7 @@ app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.
             'bordir-done'
         );
 
-        res.json({ message: 'Bordir selesai, siap dikemas', photo_url: photoUrl });
+        res.json({ message: 'Bordir selesai, siap dikemas', photo_url: await signedMediaUrl(photoUrl) });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2208,7 +2231,7 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
             'pack'
         );
 
-        res.json({ message: 'Pesanan dikemas', photo_url: photoUrl });
+        res.json({ message: 'Pesanan dikemas', photo_url: await signedMediaUrl(photoUrl) });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2288,7 +2311,7 @@ app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single(
             'ship-admin'
         );
 
-        res.json({ message: 'Pesanan dikirim, resi tercatat', tracking_number: tracking, shipping_courier: finalCourier, photo_url: photoUrl });
+        res.json({ message: 'Pesanan dikirim, resi tercatat', tracking_number: tracking, shipping_courier: finalCourier, photo_url: await signedMediaUrl(photoUrl) });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2416,12 +2439,13 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
 });
 
 // GET /api/orders/:id/photos — get all proof photos for an order
-app.get('/api/orders/:id/photos', async (req, res) => {
+app.get('/api/orders/:id/photos', requireAuth(), async (req, res) => {
     try {
         const photos = await dbAll(
             `SELECT * FROM order_photos WHERE order_id = $1 ORDER BY created_at ASC`,
             [req.params.id]
         );
+        for (const p of photos) p.photo_url = await signedMediaUrl(p.photo_url);
         res.json(photos);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2677,6 +2701,7 @@ app.get('/api/refunds', requireAuth(), async (req, res) => {
                 r.created_at DESC`,
             []
         );
+        for (const r of rows) r.proof_url = await signedMediaUrl(r.proof_url);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2690,6 +2715,7 @@ app.get('/api/refunds/:id', requireAuth(), async (req, res) => {
             [req.params.id]
         );
         if (!row) return res.status(404).json({ error: 'Refund tidak ditemukan' });
+        row.proof_url = await signedMediaUrl(row.proof_url);
         res.json(row);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2785,7 +2811,7 @@ app.put('/api/refunds/:id/mark-transferred', requireAuth(['admin','manager']), u
             );
         }
 
-        res.json({ message: 'Refund ditandai sudah ditransfer', proof_url: proofUrl });
+        res.json({ message: 'Refund ditandai sudah ditransfer', proof_url: await signedMediaUrl(proofUrl) });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
