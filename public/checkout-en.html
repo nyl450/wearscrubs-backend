@@ -259,9 +259,11 @@ function isValidPhone(v) { const d = (v || '').replace(/\D/g, ''); return d.leng
 
 const BORDIR_NAMA_PRICE = 20000;
 const BORDIR_LOGO_PRICE = 30000;
+// Per-zone shipping rates (client fallback — server stays authoritative via /api/shipping-cost).
+const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 
 let cartItems = [];
-let selectedCity = null;   // { name, is_dki, courier, shipping_cost }
+let selectedCity = null;   // { name, is_dki, zone, courier, shipping_cost }
 let embroideryData = [];
 
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
@@ -406,27 +408,24 @@ async function selectCity(name) {
             if (res.ok) data = await res.json();
         } catch(e) {}
 
-        // Local fallback: same rules as server
-        //  DKI: JNE / J&T Reguler, Rp10,000/kg
-        //  Non-DKI ≤10kg: J&T Reguler / Lion Parcel, Rp20,000/kg
-        //  Non-DKI >10kg: Lion Cargo, shipping confirmed by admin
+        // Client fallback (if API is down): use the city's zone — same rules as server.
+        //  Zone 1 Jabodetabek 10k · 2 Banten/Jabar 12k · 3 C.Java/DIY/E.Java/Bali 20k
+        //  Zone 4 Sumatra/Kalimantan/NTB/NTT 28k · 5 Sulawesi/Maluku/Papua 31k (per kg)
+        //  >10kg outside Zone 1: Lion Cargo, shipping confirmed by admin
         if (!data || !data.city) {
             const cityData = allCities.find(c => c.name.toLowerCase() === name.toLowerCase());
-            const is_dki = cityData ? cityData.is_dki : false;
+            const zone = cityData ? (cityData.zone || 3) : 3;
             const weight_kg = Math.ceil(qty / 3) || 1;
             let courier, shipping_cost, needs_confirmation = false;
-            if (!is_dki && weight_kg > 10) {
+            if (zone !== 1 && weight_kg > 10) {
                 courier = 'Lion Cargo (shipping confirmed by admin via WhatsApp)';
                 shipping_cost = 0;
                 needs_confirmation = true;
-            } else if (is_dki) {
-                courier = 'JNE / J&T Reguler';
-                shipping_cost = weight_kg * 10000;
             } else {
-                courier = 'J&T Reguler / Lion Parcel';
-                shipping_cost = weight_kg * 20000;
+                shipping_cost = weight_kg * (ZONE_RATES[zone] || 20000);
+                courier = zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
             }
-            data = { city: name, is_dki, courier, shipping_cost, weight_kg, needs_confirmation,
+            data = { city: name, is_dki: cityData ? cityData.is_dki : false, zone, courier, shipping_cost, weight_kg, needs_confirmation,
                      shipping_cost_formatted: needs_confirmation ? 'Confirmed by admin' : fmt(shipping_cost) };
         }
 
@@ -738,23 +737,23 @@ async function submitOrder() {
 
         // Build WA message for user to send proof of payment
         const bordirNote = embroideryData.length > 0
-            ? `\n🧵 Embroidery:\n` + embroideryData.map(e => {
+            ? `\nEmbroidery:\n` + embroideryData.map(e => {
                 const posLbl = e.position === 'kanan' ? 'Right Chest' : 'Left Chest';
-                if (e.type === 'nama') return `• ✏️ Name: ${e.value}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
+                if (e.type === 'nama') return `- Name: ${e.value}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
                 // Don't put base64 logo in the wa.me URL (makes the link too long → fails on
                 // Android/desktop/WA Business). The logo is already saved with the order; short label only.
                 const logoLabel = (typeof e.value === 'string' && e.value.startsWith('data:')) ? '[Customer Logo]' : e.value;
-                return `• 🎨 Logo: ${logoLabel}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
+                return `- Logo: ${logoLabel}${e.color ? ' · thread '+e.color : ''} · ${posLbl}`;
               }).join('\n')
             : '';
         const waMsg = encodeURIComponent(
             `Hello Wearscrubs! I have made the transfer for my order.\n\n` +
-            `🧾 Invoice: *${data.order_code}*\n` +
-            `💰 Total: ${fmt(data.total_amount)}\n` +
-            `📦 Shipping (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
-            `🏙️ City: ${selectedCity?.name || ''}` +
+            `Invoice: *${data.order_code}*\n` +
+            `Total: ${fmt(data.total_amount)}\n` +
+            `Shipping (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
+            `City: ${selectedCity?.name || ''}` +
             bordirNote +
-            `\n\nPlease confirm. Thank you! 🙏`
+            `\n\nPlease confirm. Thank you!`
         );
 
         document.getElementById('order-code-display').textContent = data.order_code;

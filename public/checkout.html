@@ -256,9 +256,11 @@ function isValidPhone(v) { const d = (v || '').replace(/\D/g, ''); return d.leng
 
 const BORDIR_NAMA_PRICE = 20000;
 const BORDIR_LOGO_PRICE = 30000;
+// Tarif ongkir per zona (fallback klien — server tetap otoritatif via /api/shipping-cost).
+const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 
 let cartItems = [];
-let selectedCity = null;   // { name, is_dki, courier, shipping_cost }
+let selectedCity = null;   // { name, is_dki, zone, courier, shipping_cost }
 let embroideryData = [];
 
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
@@ -403,27 +405,24 @@ async function selectCity(name) {
             if (res.ok) data = await res.json();
         } catch(e) {}
 
-        // Local fallback: same rules as server
-        //  DKI: JNE / J&T Reguler, Rp10.000/kg
-        //  Non-DKI ≤10kg: J&T Reguler / Lion Parcel, Rp20.000/kg
-        //  Non-DKI >10kg: Lion Cargo, ongkir dikonfirmasi admin
+        // Fallback klien (kalau API down): pakai zona kota — sama aturannya dgn server.
+        //  Zona 1 Jabodetabek 10rb · 2 Banten/Jabar 12rb · 3 Jateng/DIY/Jatim/Bali 20rb
+        //  Zona 4 Sumatra/Kalimantan/NTB/NTT 28rb · 5 Sulawesi/Maluku/Papua 31rb (per kg)
+        //  >10kg di luar Zona 1: Lion Cargo, ongkir dikonfirmasi admin
         if (!data || !data.city) {
             const cityData = allCities.find(c => c.name.toLowerCase() === name.toLowerCase());
-            const is_dki = cityData ? cityData.is_dki : false;
+            const zone = cityData ? (cityData.zone || 3) : 3;
             const weight_kg = Math.ceil(qty / 3) || 1;
             let courier, shipping_cost, needs_confirmation = false;
-            if (!is_dki && weight_kg > 10) {
+            if (zone !== 1 && weight_kg > 10) {
                 courier = 'Lion Cargo (ongkir dikonfirmasi admin via WhatsApp)';
                 shipping_cost = 0;
                 needs_confirmation = true;
-            } else if (is_dki) {
-                courier = 'JNE / J&T Reguler';
-                shipping_cost = weight_kg * 10000;
             } else {
-                courier = 'J&T Reguler / Lion Parcel';
-                shipping_cost = weight_kg * 20000;
+                shipping_cost = weight_kg * (ZONE_RATES[zone] || 20000);
+                courier = zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
             }
-            data = { city: name, is_dki, courier, shipping_cost, weight_kg, needs_confirmation,
+            data = { city: name, is_dki: cityData ? cityData.is_dki : false, zone, courier, shipping_cost, weight_kg, needs_confirmation,
                      shipping_cost_formatted: needs_confirmation ? 'Dikonfirmasi admin' : fmt(shipping_cost) };
         }
 
@@ -735,23 +734,23 @@ async function submitOrder() {
 
         // Build WA message for user to send proof of payment
         const bordirNote = embroideryData.length > 0
-            ? `\n🧵 Bordir:\n` + embroideryData.map(e => {
+            ? `\nBordir:\n` + embroideryData.map(e => {
                 const posLbl = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
-                if (e.type === 'nama') return `• ✏️ Nama: ${e.value}${e.color ? ' · benang '+e.color : ''} · ${posLbl}`;
+                if (e.type === 'nama') return `- Nama: ${e.value}${e.color ? ' · benang '+e.color : ''} · ${posLbl}`;
                 // Jangan masukkan base64 logo ke URL wa.me (bikin link kepanjangan → gagal di
                 // Android/desktop/WA Business). Logo sudah ikut tersimpan di pesanan; cukup label singkat.
                 const logoLabel = (typeof e.value === 'string' && e.value.startsWith('data:')) ? '[Logo Customer]' : e.value;
-                return `• 🎨 Logo: ${logoLabel}${e.color ? ' · benang '+e.color : ''} · ${posLbl}`;
+                return `- Logo: ${logoLabel}${e.color ? ' · benang '+e.color : ''} · ${posLbl}`;
               }).join('\n')
             : '';
         const waMsg = encodeURIComponent(
             `Halo Wearscrubs! Saya sudah melakukan transfer untuk pesanan saya.\n\n` +
-            `🧾 Invoice: *${data.order_code}*\n` +
-            `💰 Total: ${fmt(data.total_amount)}\n` +
-            `📦 Ongkir (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
-            `🏙️ Kota: ${selectedCity?.name || ''}` +
+            `Invoice: *${data.order_code}*\n` +
+            `Total: ${fmt(data.total_amount)}\n` +
+            `Ongkir (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
+            `Kota: ${selectedCity?.name || ''}` +
             bordirNote +
-            `\n\nMohon dikonfirmasi. Terima kasih! 🙏`
+            `\n\nMohon dikonfirmasi. Terima kasih!`
         );
 
         document.getElementById('order-code-display').textContent = data.order_code;
