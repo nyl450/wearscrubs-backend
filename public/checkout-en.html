@@ -179,6 +179,40 @@
     </div>
 
     <!-- ═══ STEP 3: Payment ═══ -->
+    <!-- ─── STEP 3: SELECT PAYMENT METHOD ─────────────────────────────────────── -->
+    <div id="step-method" class="step hidden max-w-2xl mx-auto">
+        <div class="text-center mb-6">
+            <h2 class="text-2xl font-bold mb-2">Select Payment Method</h2>
+            <p class="text-sm text-gray-500 dark:text-white/50">Your order will be processed once payment is confirmed by admin.</p>
+        </div>
+        <div class="space-y-3 mb-6">
+            <button onclick="selectPaymentMethod('bank_transfer')" class="w-full p-5 rounded-2xl border-2 border-gray-200 dark:border-white/10 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all bg-white dark:bg-darkcard text-left group">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0"><i class="fa-solid fa-building-columns text-blue-600 dark:text-blue-400 text-xl"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-base text-gray-900 dark:text-white">Bank Transfer</div>
+                        <div class="text-xs text-gray-500 dark:text-white/50 mt-0.5">BCA · Upload transfer proof manually to admin</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-400 dark:text-white/30 group-hover:text-indigo-500 transition"></i>
+                </div>
+            </button>
+            <button onclick="selectPaymentMethod('qris')" class="w-full p-5 rounded-2xl border-2 border-gray-200 dark:border-white/10 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all bg-white dark:bg-darkcard text-left group">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center shrink-0"><i class="fa-solid fa-qrcode text-purple-600 dark:text-purple-400 text-xl"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-base text-gray-900 dark:text-white">QRIS</div>
+                        <div class="text-xs text-gray-500 dark:text-white/50 mt-0.5">Scan via m-banking / e-wallet (GoPay, OVO, DANA, ShopeePay, etc.)</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-400 dark:text-white/30 group-hover:text-indigo-500 transition"></i>
+                </div>
+            </button>
+        </div>
+        <button onclick="goToStep(cartHasBordir() ? 'bordir' : 'info')" class="w-full py-3 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Back
+        </button>
+    </div>
+
+    <!-- ─── STEP 4: PAYMENT INSTRUCTIONS ──────────────────────────────────────── -->
     <div id="step-payment" class="step hidden max-w-2xl mx-auto">
         <div class="text-center mb-8">
             <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -195,7 +229,7 @@
                 <i class="fa-solid fa-building-columns text-blue-500"></i>
                 Payment Instructions
             </h3>
-            <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-500/10 rounded-xl p-4 mb-4">
+            <div id="pay-panel-bank" class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-500/10 rounded-xl p-4 mb-4 hidden">
                 <p class="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-3">Transfer to BCA Account</p>
                 <div class="space-y-2">
                     <div class="flex justify-between items-center">
@@ -219,11 +253,15 @@
                     </div>
                 </div>
             </div>
-            <!-- Static QRIS (alternative to manual transfer) -->
-            <div class="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4 mb-4">
-                <p class="text-xs font-bold text-gray-600 dark:text-white/60 uppercase tracking-wider mb-3 text-center">or Pay via QRIS</p>
+            <!-- Static QRIS -->
+            <div id="pay-panel-qris" class="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4 mb-4 hidden">
+                <p class="text-xs font-bold text-gray-600 dark:text-white/60 uppercase tracking-wider mb-3 text-center">Pay via QRIS</p>
                 <img src="images/QRIS/QRIS%20WS.jpeg" alt="Wearscrubs QRIS" class="w-full max-w-[260px] mx-auto rounded-lg border border-gray-200 dark:border-white/10" loading="lazy" decoding="async" />
                 <p class="text-[11px] text-gray-400 dark:text-white/40 text-center mt-2">Scan with your m-banking / e-wallet app. Pay the exact amount shown above.</p>
+                <div class="flex justify-between items-center pt-3 mt-2 border-t border-gray-200 dark:border-white/10">
+                    <span class="text-sm font-bold text-gray-700 dark:text-white">Amount to Pay</span>
+                    <span id="payment-amount-qris" class="font-bold text-xl text-green-600 dark:text-green-400"></span>
+                </div>
             </div>
             <div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4 text-sm text-yellow-800 dark:text-yellow-300 space-y-2">
                 <p class="font-bold">⚠️ Important:</p>
@@ -265,6 +303,18 @@ const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 let cartItems = [];
 let selectedCity = null;   // { name, is_dki, zone, courier, shipping_cost }
 let embroideryData = [];
+let selectedPaymentMethod = null; // 'bank_transfer' | 'qris' — set at step-method
+
+// Cart has tops + bordir item? Used for step-method back button.
+function cartHasBordir() {
+    return cartItems.some(item => item.category === 'tops' && (item.bordir_nama || item.bordir_logo));
+}
+// Called when user clicks a method card at step-method → set state + submit order.
+async function selectPaymentMethod(m) {
+    if (m !== 'bank_transfer' && m !== 'qris') return;
+    selectedPaymentMethod = m;
+    await submitOrder();
+}
 
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
 
@@ -495,7 +545,7 @@ document.getElementById('checkout-form').addEventListener('submit', async (e) =>
         buildBordirForm();
         goToStep('bordir');
     } else {
-        await submitOrder();
+        goToStep('method');
     }
 });
 
@@ -669,7 +719,7 @@ async function submitBordirStep() {
         }
     }
     if (errors.length > 0) { alert('⚠️ Check embroidery details:\n\n' + errors.join('\n')); return; }
-    await submitOrder();
+    goToStep('method');
 }
 
 // ─── SUBMIT ORDER ─────────────────────────────────────────────────────────────
@@ -697,6 +747,7 @@ async function submitOrder() {
         notes: document.getElementById('f-notes').value,
         shipping_city: selectedCity?.name || '',
         shipping_cost: selectedCity?.shipping_cost || 0,
+        payment_method: selectedPaymentMethod || '',
         embroidery_details: embroideryData.length ? embroideryData : null,
         items: cartItems.map(item => ({
             product_id: Number(item.product_id),
@@ -747,7 +798,7 @@ async function submitOrder() {
               }).join('\n')
             : '';
         const waMsg = encodeURIComponent(
-            `Hello Wearscrubs! I have made the transfer for my order.\n\n` +
+            `Hello Wearscrubs! I have made the payment (${selectedPaymentMethod === 'qris' ? 'QRIS' : 'Bank Transfer'}) for my order.\n\n` +
             `Invoice: *${data.order_code}*\n` +
             `Total: ${fmt(data.total_amount)}\n` +
             `Shipping (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
@@ -758,7 +809,15 @@ async function submitOrder() {
 
         document.getElementById('order-code-display').textContent = data.order_code;
         document.getElementById('payment-amount').textContent = fmt(data.total_amount);
+        document.getElementById('payment-amount-qris').textContent = fmt(data.total_amount);
         document.getElementById('wa-confirm-btn').href = `https://wa.me/6287887172220?text=${waMsg}`;
+        // Show only the panel matching the chosen method (anti-overload UI).
+        const bankPanel = document.getElementById('pay-panel-bank');
+        const qrisPanel = document.getElementById('pay-panel-qris');
+        if (bankPanel && qrisPanel) {
+            bankPanel.classList.toggle('hidden', selectedPaymentMethod !== 'bank_transfer');
+            qrisPanel.classList.toggle('hidden', selectedPaymentMethod !== 'qris');
+        }
 
         goToStep('payment');
 

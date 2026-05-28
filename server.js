@@ -1908,7 +1908,9 @@ app.post('/api/orders', async (req, res) => {
         const safeOrderSource = (isAdmin && order_source === 'whatsapp') ? 'whatsapp' : 'website';
 
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
-        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Bonus/Free'];
+        // Public checkout kirim semantic value ('bank_transfer'/'qris'); admin form
+        // dashboard pakai value lama (BCA/Mandiri/QRIS/Bonus-Free) — keduanya diterima.
+        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Bonus/Free','bank_transfer','qris'];
         const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
 
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED

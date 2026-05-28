@@ -176,6 +176,40 @@
     </div>
 
     <!-- ═══ STEP 3: Pembayaran ═══ -->
+    <!-- ─── STEP 3: PILIH METODE PEMBAYARAN ─────────────────────────────────── -->
+    <div id="step-method" class="step hidden max-w-2xl mx-auto">
+        <div class="text-center mb-6">
+            <h2 class="text-2xl font-bold mb-2">Pilih Metode Pembayaran</h2>
+            <p class="text-sm text-gray-500 dark:text-white/50">Pesanan akan diproses setelah pembayaran dikonfirmasi admin.</p>
+        </div>
+        <div class="space-y-3 mb-6">
+            <button onclick="selectPaymentMethod('bank_transfer')" class="w-full p-5 rounded-2xl border-2 border-gray-200 dark:border-white/10 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all bg-white dark:bg-darkcard text-left group">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0"><i class="fa-solid fa-building-columns text-blue-600 dark:text-blue-400 text-xl"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-base text-gray-900 dark:text-white">Transfer Bank</div>
+                        <div class="text-xs text-gray-500 dark:text-white/50 mt-0.5">BCA · Manual upload bukti transfer ke admin</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-400 dark:text-white/30 group-hover:text-indigo-500 transition"></i>
+                </div>
+            </button>
+            <button onclick="selectPaymentMethod('qris')" class="w-full p-5 rounded-2xl border-2 border-gray-200 dark:border-white/10 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all bg-white dark:bg-darkcard text-left group">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center shrink-0"><i class="fa-solid fa-qrcode text-purple-600 dark:text-purple-400 text-xl"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-base text-gray-900 dark:text-white">QRIS</div>
+                        <div class="text-xs text-gray-500 dark:text-white/50 mt-0.5">Scan via m-banking / e-wallet (GoPay, OVO, DANA, ShopeePay, dll)</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-400 dark:text-white/30 group-hover:text-indigo-500 transition"></i>
+                </div>
+            </button>
+        </div>
+        <button onclick="goToStep(cartHasBordir() ? 'bordir' : 'info')" class="w-full py-3 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Kembali
+        </button>
+    </div>
+
+    <!-- ─── STEP 4: INSTRUKSI PEMBAYARAN ─────────────────────────────────────── -->
     <div id="step-payment" class="step hidden max-w-2xl mx-auto">
         <div class="text-center mb-8">
             <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -192,7 +226,7 @@
                 <i class="fa-solid fa-building-columns text-blue-500"></i>
                 Instruksi Pembayaran
             </h3>
-            <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-500/10 rounded-xl p-4 mb-4">
+            <div id="pay-panel-bank" class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-500/10 rounded-xl p-4 mb-4 hidden">
                 <p class="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-3">Transfer ke Rekening BCA</p>
                 <div class="space-y-2">
                     <div class="flex justify-between items-center">
@@ -216,11 +250,15 @@
                     </div>
                 </div>
             </div>
-            <!-- QRIS statis (alternatif transfer manual) -->
-            <div class="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4 mb-4">
-                <p class="text-xs font-bold text-gray-600 dark:text-white/60 uppercase tracking-wider mb-3 text-center">atau Bayar via QRIS</p>
+            <!-- QRIS statis -->
+            <div id="pay-panel-qris" class="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl p-4 mb-4 hidden">
+                <p class="text-xs font-bold text-gray-600 dark:text-white/60 uppercase tracking-wider mb-3 text-center">Bayar via QRIS</p>
                 <img src="images/QRIS/QRIS%20WS.jpeg" alt="QRIS Wearscrubs" class="w-full max-w-[260px] mx-auto rounded-lg border border-gray-200 dark:border-white/10" loading="lazy" decoding="async" />
-                <p class="text-[11px] text-gray-400 dark:text-white/40 text-center mt-2">Scan dengan aplikasi m-banking / e-wallet (GoPay, OVO, DANA, ShopeePay, dll). Bayar sesuai jumlah transfer di atas.</p>
+                <p class="text-[11px] text-gray-400 dark:text-white/40 text-center mt-2">Scan dengan aplikasi m-banking / e-wallet (GoPay, OVO, DANA, ShopeePay, dll). Bayar sesuai jumlah di atas.</p>
+                <div class="flex justify-between items-center pt-3 mt-2 border-t border-gray-200 dark:border-white/10">
+                    <span class="text-sm font-bold text-gray-700 dark:text-white">Jumlah Bayar</span>
+                    <span id="payment-amount-qris" class="font-bold text-xl text-green-600 dark:text-green-400"></span>
+                </div>
             </div>
             <div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4 text-sm text-yellow-800 dark:text-yellow-300 space-y-2">
                 <p class="font-bold">⚠️ Penting:</p>
@@ -236,7 +274,7 @@
         <a id="wa-confirm-btn" href="#" target="_blank"
             class="w-full flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white py-4 rounded-2xl font-bold text-sm transition-all mb-4">
             <i class="fa-brands fa-whatsapp text-xl"></i>
-            Kirim Bukti Transfer via WhatsApp
+            Kirim Bukti Pembayaran via WhatsApp
         </a>
         <a href="scrub-top.html" class="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-600 dark:text-white/60 hover:bg-gray-50 dark:hover:bg-white/5 transition">
             <i class="fa-solid fa-arrow-left"></i> Kembali Belanja
@@ -262,6 +300,18 @@ const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 let cartItems = [];
 let selectedCity = null;   // { name, is_dki, zone, courier, shipping_cost }
 let embroideryData = [];
+let selectedPaymentMethod = null; // 'bank_transfer' | 'qris' — di-set di step-method
+
+// Apakah cart punya item tops dengan bordir? Dipakai utk back button step-method.
+function cartHasBordir() {
+    return cartItems.some(item => item.category === 'tops' && (item.bordir_nama || item.bordir_logo));
+}
+// Dipanggil saat user klik kartu metode di step-method → set state + submit order.
+async function selectPaymentMethod(m) {
+    if (m !== 'bank_transfer' && m !== 'qris') return;
+    selectedPaymentMethod = m;
+    await submitOrder();
+}
 
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
 
@@ -492,7 +542,7 @@ document.getElementById('checkout-form').addEventListener('submit', async (e) =>
         buildBordirForm();
         goToStep('bordir');
     } else {
-        await submitOrder();
+        goToStep('method');
     }
 });
 
@@ -666,7 +716,7 @@ async function submitBordirStep() {
         }
     }
     if (errors.length > 0) { alert('⚠️ Cek detail bordir:\n\n' + errors.join('\n')); return; }
-    await submitOrder();
+    goToStep('method');
 }
 
 // ─── SUBMIT ORDER ─────────────────────────────────────────────────────────────
@@ -694,6 +744,7 @@ async function submitOrder() {
         notes: document.getElementById('f-notes').value,
         shipping_city: selectedCity?.name || '',
         shipping_cost: selectedCity?.shipping_cost || 0,
+        payment_method: selectedPaymentMethod || '',
         embroidery_details: embroideryData.length ? embroideryData : null,
         items: cartItems.map(item => ({
             product_id: Number(item.product_id),
@@ -744,7 +795,7 @@ async function submitOrder() {
               }).join('\n')
             : '';
         const waMsg = encodeURIComponent(
-            `Halo Wearscrubs! Saya sudah melakukan transfer untuk pesanan saya.\n\n` +
+            `Halo Wearscrubs! Saya sudah melakukan pembayaran (${selectedPaymentMethod === 'qris' ? 'QRIS' : 'Transfer Bank'}) untuk pesanan saya.\n\n` +
             `Invoice: *${data.order_code}*\n` +
             `Total: ${fmt(data.total_amount)}\n` +
             `Ongkir (${data.courier || ''}): ${fmt(data.shipping_cost || 0)}\n` +
@@ -755,7 +806,15 @@ async function submitOrder() {
 
         document.getElementById('order-code-display').textContent = data.order_code;
         document.getElementById('payment-amount').textContent = fmt(data.total_amount);
+        document.getElementById('payment-amount-qris').textContent = fmt(data.total_amount);
         document.getElementById('wa-confirm-btn').href = `https://wa.me/6287887172220?text=${waMsg}`;
+        // Tampilkan panel sesuai metode yang dipilih (BCA vs QRIS) — anti-overload UI.
+        const bankPanel = document.getElementById('pay-panel-bank');
+        const qrisPanel = document.getElementById('pay-panel-qris');
+        if (bankPanel && qrisPanel) {
+            bankPanel.classList.toggle('hidden', selectedPaymentMethod !== 'bank_transfer');
+            qrisPanel.classList.toggle('hidden', selectedPaymentMethod !== 'qris');
+        }
 
         goToStep('payment');
 
