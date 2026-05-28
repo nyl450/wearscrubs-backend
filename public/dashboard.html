@@ -6529,7 +6529,10 @@ async function waOnProductChange(idx) {
     try {
         const res = await fetch(API + `/api/inventory/${productId}`);
         const inv = await res.json();
-        waInventoryCache[idx] = (Array.isArray(inv) ? inv : []).filter(i => Number(i.stock) > 0);
+        // Simpan SEMUA baris (termasuk stok 0) — admin tetap bisa input order utk size
+        // yang sold-out, otomatis jadi Pre-Order via toggle waCheckPO saat qty > stock.
+        // Size yang stok 0 ditandai "— PO" di dropdown (lihat waOnVariantChange).
+        waInventoryCache[idx] = Array.isArray(inv) ? inv : [];
         const colors = [...new Set(waInventoryCache[idx].map(i => i.color))];
         colors.forEach(c => colorSel.innerHTML += `<option value="${c}">${c}</option>`);
         if (colors.length === 1) { colorSel.value = colors[0]; waOnColorChange(idx); return; }
@@ -6564,8 +6567,16 @@ function waOnVariantChange(idx) {
     const sizeSel = document.getElementById(`wa-size-${idx}`);
     sizeSel.innerHTML = '<option value="">--</option>';
     const inv = waInventoryCache[idx] || [];
-    const sizes = [...new Set(inv.filter(i => i.color === color && i.variant_type === variant).map(i => i.size))];
-    sizes.forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
+    const filtered = inv.filter(i => i.color === color && i.variant_type === variant);
+    const sizes = [...new Set(filtered.map(i => i.size))];
+    sizes.forEach(s => {
+        const row = filtered.find(i => i.size === s);
+        const stock = row ? Number(row.stock) : 0;
+        // Stok 0 → tetap dimunculkan, ditandai "— PO" supaya admin tahu ini akan jadi
+        // Pre-Order. Toggle PO otomatis muncul saat qty > stock (waCheckPO).
+        const suffix = stock === 0 ? ' — PO' : '';
+        sizeSel.innerHTML += `<option value="${s}">${s}${suffix}</option>`;
+    });
     // Off-catalog custom size (e.g. 4XL) — always available, skips stock entirely.
     sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;
     // Size was reset → hide stale custom panel + PO notice + stock info for this item.
