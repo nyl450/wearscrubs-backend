@@ -604,12 +604,23 @@
                     <i class="fa-solid fa-square-check"></i>
                     <span id="inv-bulk-label">Pilih Banyak</span>
                 </button>
+                <button id="inv-opname-btn" onclick="toggleOpnameMode()"
+                    class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition"
+                    title="Saat aktif: setiap perubahan stok dicatat dengan alasan 'Stock Opname Awal'">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <span>Mulai Stock Opname</span>
+                </button>
                 <button onclick="filterInventoryCritical()" id="inv-critical-btn"
                     class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-red-500/10 border border-red-400/20 text-red-400 hover:bg-red-500/20 transition">
                     <i class="fa-solid fa-triangle-exclamation"></i>
                     <span id="inv-critical-label">Stok Kritis</span>
                 </button>
             </div>
+        </div>
+        <!-- Opname mode banner -->
+        <div id="inv-opname-banner" class="hidden px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-200 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check"></i>
+            <span><strong>Mode Stock Opname aktif</strong> — setiap perubahan stok dicatat sebagai "Stock Opname Awal". Klik tombol "Selesai Opname" saat sudah selesai mencocokkan.</span>
         </div>
         <!-- Summary strip -->
         <div class="grid grid-cols-3 gap-3">
@@ -2759,6 +2770,115 @@ function applyBulk() {
     showBulkPreviewModal(op, value, cells, preview);
 }
 
+// ─── Stock Reason / Opname Mode ───────────────────────────────────────────────
+// Alasan perubahan stok manual — dikirim ke /api/inventory/single|bulk, disimpan
+// di stock_movements.note format "[Reason] free-text" → history audit jelas
+// (bukan generik "Update manual stok").
+const STOCK_REASONS = ['Stock Opname Awal','Koreksi Salah Input','Penyesuaian Stok Fisik','Barang Hilang/Rusak','Lainnya'];
+const STOCK_REASON_DEFAULT = 'Koreksi Salah Input';
+const STOCK_EXTREME_DIFF = 20;   // |new-current| > ini → popover wajib (anti typo besar)
+let opnameMode = false;
+function currentDefaultReason() { return opnameMode ? 'Stock Opname Awal' : STOCK_REASON_DEFAULT; }
+// Parse "[Reason] sisa..." → { reason, rest }; null kalau tak match.
+function extractReason(note) {
+    if (!note) return null;
+    const m = /^\[([^\]]+)\](?:\s+(.*))?$/.exec(note);
+    return m ? { reason: m[1], rest: (m[2] || '').trim() } : null;
+}
+function toggleOpnameMode(on) {
+    opnameMode = (typeof on === 'boolean') ? on : !opnameMode;
+    const btn = document.getElementById('inv-opname-btn');
+    const banner = document.getElementById('inv-opname-banner');
+    if (btn) {
+        btn.classList.toggle('bg-amber-500/20', opnameMode);
+        btn.classList.toggle('border-amber-400/40', opnameMode);
+        btn.classList.toggle('text-amber-200', opnameMode);
+        const span = btn.querySelector('span');
+        if (span) span.textContent = opnameMode ? 'Selesai Opname' : 'Mulai Stock Opname';
+    }
+    if (banner) banner.classList.toggle('hidden', !opnameMode);
+}
+
+// Popover konfirmasi & pilih alasan saat ubah stok.
+// ctx: { anchor: HTMLElement, current: number, newVal: number,
+//        onConfirm: (reason, customNote) => Promise<void>,
+//        onCancel?: () => void,
+//        forceExtreme?: boolean }
+function showStockReasonPopover(ctx) {
+    closeStockReasonPopover();
+    const diff = ctx.newVal - ctx.current;
+    const diffStr = (diff >= 0 ? '+' : '') + diff;
+    const isExtreme = ctx.forceExtreme || ctx.newVal === 0 || Math.abs(diff) > STOCK_EXTREME_DIFF;
+    const defaultReason = currentDefaultReason();
+    const pop = document.createElement('div');
+    pop.id = 'stock-reason-popover';
+    pop.className = 'fixed z-[1010] bg-darkcard border border-darkborder rounded-2xl shadow-2xl p-3 w-[280px]';
+    pop.innerHTML = `
+        ${isExtreme ? `<div class="mb-2 px-2 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-[10px] text-amber-200 font-medium">⚠ Perubahan besar — pastikan benar.</div>` : ''}
+        <div class="text-[10px] uppercase tracking-wider text-white/40 mb-1">Ubah Stok</div>
+        <div class="text-sm font-bold mb-2"><span class="text-white/50">${ctx.current}</span> <span class="text-white/30">→</span> <span class="text-white">${ctx.newVal}</span> <span class="text-[10px] text-white/40 ml-1">(${diffStr})</span></div>
+        <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Alasan</label>
+        <select id="srp-reason" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white/30 mb-2">
+            ${isExtreme ? '<option value="">— Pilih alasan —</option>' : ''}
+            ${STOCK_REASONS.map(r => `<option value="${r}" ${(!isExtreme && r===defaultReason)?'selected':''}>${r}</option>`).join('')}
+        </select>
+        <input id="srp-note" type="text" placeholder="Catatan tambahan (opsional)" maxlength="200" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/30 mb-3 hidden">
+        <div class="flex gap-2">
+            <button id="srp-cancel" class="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-medium hover:bg-white/10 transition">Batal</button>
+            <button id="srp-save" class="flex-1 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-white/90 transition">Simpan</button>
+        </div>
+    `;
+    document.body.appendChild(pop);
+    pop._ctx = ctx;
+    // Position near anchor (flip up if no room below)
+    const r = ctx.anchor.getBoundingClientRect();
+    const popW = 280, popH = pop.offsetHeight;
+    let left = r.left, top = r.bottom + 6;
+    if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+    if (top + popH > window.innerHeight - 8) top = r.top - popH - 6;
+    pop.style.left = Math.max(8, left) + 'px';
+    pop.style.top  = Math.max(8, top)  + 'px';
+    const noteInput = pop.querySelector('#srp-note');
+    pop.querySelector('#srp-reason').addEventListener('change', e => {
+        noteInput.classList.toggle('hidden', e.target.value !== 'Lainnya');
+        if (e.target.value === 'Lainnya') setTimeout(() => noteInput.focus(), 30);
+    });
+    pop.querySelector('#srp-cancel').addEventListener('click', () => {
+        if (typeof ctx.onCancel === 'function') ctx.onCancel();
+        closeStockReasonPopover();
+    });
+    pop.querySelector('#srp-save').addEventListener('click', async () => {
+        const reason = pop.querySelector('#srp-reason').value;
+        const customNote = noteInput.value.trim();
+        if (!reason) return toast('Pilih alasan dulu', true);
+        if (reason === 'Lainnya' && !customNote) return toast('Isi catatan untuk "Lainnya"', true);
+        const btn = pop.querySelector('#srp-save');
+        btn.disabled = true; btn.textContent = 'Menyimpan...';
+        try {
+            await ctx.onConfirm(reason, customNote);
+            closeStockReasonPopover();
+        } catch(e) {
+            btn.disabled = false; btn.textContent = 'Simpan';
+            toast('Gagal: ' + (e.message || e), true);
+        }
+    });
+    setTimeout(() => document.addEventListener('mousedown', _outsideSrpHandler, { once: true }), 0);
+}
+function _outsideSrpHandler(e) {
+    const pop = document.getElementById('stock-reason-popover');
+    if (!pop) return;
+    if (e.target.closest('#stock-reason-popover')) {
+        setTimeout(() => document.addEventListener('mousedown', _outsideSrpHandler, { once: true }), 0);
+        return;
+    }
+    if (pop._ctx && typeof pop._ctx.onCancel === 'function') pop._ctx.onCancel();
+    closeStockReasonPopover();
+}
+function closeStockReasonPopover() {
+    const pop = document.getElementById('stock-reason-popover');
+    if (pop) pop.remove();
+}
+
 function showBulkPreviewModal(op, value, cells, preview) {
     const opLabel = op === 'set' ? `Set ke ${value}` : op === 'add' ? `+ ${value}` : `− ${value}`;
     const changedCount = preview.filter(p => p.changed).length;
@@ -2805,11 +2925,27 @@ function showBulkPreviewModal(op, value, cells, preview) {
                     <tbody class="divide-y divide-white/5">${rows}</tbody>
                 </table>
             </div>
-            <div class="px-5 py-3 border-t border-white/5 flex gap-2 justify-end">
-                <button onclick="closeBulkPreview()" class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-medium hover:bg-white/10 transition">Batal</button>
-                <button id="bulk-confirm-btn" onclick="confirmBulkApply()" class="px-5 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-white/90 transition">
-                    Terapkan ke ${changedCount} cell
-                </button>
+            <div class="px-5 py-3 border-t border-white/5 space-y-2">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Alasan *</label>
+                        <select id="bulk-reason" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white/30">
+                            <option value="">— Pilih alasan —</option>
+                            ${STOCK_REASONS.map(r => `<option value="${r}" ${r===currentDefaultReason()?'selected':''}>${r}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Catatan (opsional)</label>
+                        <input id="bulk-note" type="text" placeholder="Mis. stock opname Mei 2026" maxlength="200"
+                            class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/30">
+                    </div>
+                </div>
+                <div class="flex gap-2 justify-end pt-1">
+                    <button onclick="closeBulkPreview()" class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-medium hover:bg-white/10 transition">Batal</button>
+                    <button id="bulk-confirm-btn" onclick="confirmBulkApply()" class="px-5 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-white/90 transition">
+                        Terapkan ke ${changedCount} cell
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -2825,13 +2961,16 @@ function closeBulkPreview() {
 async function confirmBulkApply() {
     const modal = document.getElementById('bulk-preview-modal');
     const { op, value, cells } = modal._payload;
+    const reason = document.getElementById('bulk-reason').value;
+    const note = document.getElementById('bulk-note').value.trim();
+    if (!STOCK_REASONS.includes(reason)) return toast('Pilih alasan dulu', true);
     const btn = document.getElementById('bulk-confirm-btn');
     btn.disabled = true; btn.textContent = 'Menyimpan...';
     try {
         const res = await apiFetch('/api/inventory/bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ operation: op, value, cells })
+            body: JSON.stringify({ operation: op, value, cells, reason, note })
         });
         toast(`✅ ${res.message}`);
         closeBulkPreview();
@@ -3124,27 +3263,43 @@ function gridCellInlineEdit(td, product_id, size, color, variant_type, current) 
     let savedOrCancelled = false;
     const cleanup = () => { td.classList.remove('editing'); };
 
+    const commitWith = async (reason, note) => {
+        input.disabled = true;
+        const newVal = parseInt(input.value);
+        try {
+            await apiFetch('/api/inventory/single', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal, reason, note })
+            });
+            const item = cachedInventoryAll.find(r =>
+                r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
+            if (item) item.stock = newVal;
+            toast(`Stok ${size}: ${current} → ${newVal}`);
+        } catch(e) {
+            toast('Gagal simpan: ' + e.message, true);
+        }
+        cleanup(); renderInventory();
+    };
     const save = async () => {
         if (savedOrCancelled) return; savedOrCancelled = true;
         const newVal = parseInt(input.value);
         if (isNaN(newVal) || newVal < 0 || newVal === current) {
             cleanup(); renderInventory(); return;
         }
-        input.disabled = true;
-        try {
-            await apiFetch('/api/inventory/single', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal })
+        const isExtreme = newVal === 0 || Math.abs(newVal - current) > STOCK_EXTREME_DIFF;
+        if (isExtreme) {
+            // Grid: spreadsheet feel dijaga utk edit kecil; popover dipanggil HANYA saat
+            // perubahan ekstrem (set 0 atau |diff| > STOCK_EXTREME_DIFF).
+            showStockReasonPopover({
+                anchor: input, current, newVal,
+                onConfirm: (reason, note) => commitWith(reason, note),
+                onCancel: () => { cleanup(); renderInventory(); }
             });
-            const item = cachedInventoryAll.find(r =>
-                r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
-            if (item) item.stock = newVal;
-            toast(`Stok ${size} ${size}: ${current} → ${newVal}`);
-        } catch(e) {
-            toast('Gagal simpan: ' + e.message, true);
+            return;
         }
-        cleanup(); renderInventory();
+        // Fast path — pakai default reason (atau Stock Opname Awal kalau mode aktif).
+        await commitWith(currentDefaultReason(), '');
     };
 
     input.addEventListener('blur', save);
@@ -3168,7 +3323,10 @@ function openGridEditModal(product_id, size, color, variant_type, current) {
             <div id="gem-subtitle" class="text-xs text-white/50 mb-4"></div>
             <label class="block text-xs font-semibold text-white/60 mb-2">Stok Baru</label>
             <input id="gem-qty" type="number" min="0" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-base font-semibold focus:outline-none focus:border-white/30 mb-2" />
-            <div id="gem-current" class="text-[11px] text-white/40 mb-4"></div>
+            <div id="gem-current" class="text-[11px] text-white/40 mb-3"></div>
+            <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Alasan</label>
+            <select id="gem-reason" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white/30 mb-2"></select>
+            <input id="gem-note" type="text" placeholder="Catatan tambahan (opsional)" maxlength="200" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/30 mb-4 hidden">
             <div class="flex gap-2">
                 <button onclick="closeGridEditModal()" class="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">Batal</button>
                 <button id="gem-save-btn" onclick="submitGridEditModal()" class="flex-1 py-3 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition">Simpan</button>
@@ -3182,6 +3340,18 @@ function openGridEditModal(product_id, size, color, variant_type, current) {
     document.getElementById('gem-current').textContent  = `Stok saat ini: ${current}`;
     const input = document.getElementById('gem-qty');
     input.value = current;
+    // Populate reason dropdown with default selected
+    const reasonSel = document.getElementById('gem-reason');
+    const noteIn = document.getElementById('gem-note');
+    if (reasonSel) {
+        reasonSel.innerHTML = STOCK_REASONS.map(r => `<option value="${r}" ${r===currentDefaultReason()?'selected':''}>${r}</option>`).join('');
+        noteIn.classList.add('hidden');
+        noteIn.value = '';
+        reasonSel.onchange = () => {
+            noteIn.classList.toggle('hidden', reasonSel.value !== 'Lainnya');
+            if (reasonSel.value === 'Lainnya') setTimeout(() => noteIn.focus(), 30);
+        };
+    }
     modal._ctx = { product_id, size, color, variant_type, current };
     modal.classList.remove('hidden'); modal.classList.add('flex');
     setTimeout(() => { input.focus(); input.select(); }, 50);
@@ -3198,13 +3368,17 @@ async function submitGridEditModal() {
     const newVal = parseInt(document.getElementById('gem-qty').value);
     if (isNaN(newVal) || newVal < 0) return toast('Nilai stok tidak valid', true);
     if (newVal === ctx.current) { closeGridEditModal(); return; }
+    const reason = document.getElementById('gem-reason').value;
+    const note = document.getElementById('gem-note').value.trim();
+    if (!STOCK_REASONS.includes(reason)) return toast('Pilih alasan dulu', true);
+    if (reason === 'Lainnya' && !note) return toast('Isi catatan untuk "Lainnya"', true);
     const btn = document.getElementById('gem-save-btn');
     btn.disabled = true; btn.textContent = 'Menyimpan...';
     try {
         await apiFetch('/api/inventory/single', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id: ctx.product_id, size: ctx.size, color: ctx.color, variant_type: ctx.variant_type, stock: newVal })
+            body: JSON.stringify({ product_id: ctx.product_id, size: ctx.size, color: ctx.color, variant_type: ctx.variant_type, stock: newVal, reason, note })
         });
         const item = cachedInventoryAll.find(r =>
             r.product_id == ctx.product_id && r.size === ctx.size && r.color === ctx.color && r.variant_type === ctx.variant_type);
@@ -3276,22 +3450,29 @@ async function invSaveOnBlur(input) {
     const size        = input.dataset.size;
     const color       = input.dataset.color;
     const variant_type = input.dataset.vtype;
-    const stock       = parseInt(input.value);
-    if (isNaN(stock) || stock < 0) return;
-    try {
-        await apiFetch('/api/inventory/single', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id, size, color, variant_type, stock })
-        });
-        // update cache
-        const item = cachedInventoryAll.find(r =>
-            r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
-        if (item) item.stock = stock;
-        toast('Stok diperbarui');
-        // refresh badges without full re-render
-        renderInventory();
-    } catch(e) { toast('Gagal simpan: ' + e.message, true); }
+    const newVal      = parseInt(input.value);
+    const item0 = cachedInventoryAll.find(r =>
+        r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
+    const current = item0 ? parseInt(item0.stock) : 0;
+    if (isNaN(newVal) || newVal < 0) { input.value = current; return; }
+    if (newVal === current) return; // no-op, no popover
+    // Card view = anti-typo: popover SELALU muncul utk konfirmasi + pilih alasan.
+    showStockReasonPopover({
+        anchor: input, current, newVal,
+        onConfirm: async (reason, note) => {
+            await apiFetch('/api/inventory/single', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal, reason, note })
+            });
+            const item = cachedInventoryAll.find(r =>
+                r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
+            if (item) item.stock = newVal;
+            toast(`Stok: ${current} → ${newVal}`);
+            renderInventory();
+        },
+        onCancel: () => { input.value = current; }
+    });
 }
 
 // ── Receive Stock Modal ────────────────────────────────────────────────────────
@@ -3499,16 +3680,22 @@ async function openVariantHistory(product_id, size, color, variant_type, product
                 const ml = movementLabel[m.movement_type] || { icon:'fa-circle-dot', color:'text-white/40', label: m.movement_type };
                 const sign = m.quantity_change > 0 ? '+' : '';
                 const ts = new Date(m.created_at).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                // Untuk manual_set: kalau note berformat "[Reason] free-text", pakai Reason
+                // sebagai label menonjol, sisa note ditaruh di baris detail (anti-generik
+                // "Set Manual"). Movement_type lain pakai label peta default.
+                const parsed = (m.movement_type === 'manual_set') ? extractReason(m.note) : null;
+                const labelText = parsed ? parsed.reason : ml.label;
+                const noteText  = parsed ? parsed.rest : (m.note || '');
                 return `<div class="flex items-start gap-3 bg-white/3 rounded-xl px-3 py-2.5">
                     <div class="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center shrink-0 mt-0.5">
                         <i class="fa-solid ${ml.icon} text-xs ${ml.color}"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between gap-2">
-                            <span class="text-xs font-bold ${ml.color}">${ml.label}</span>
+                            <span class="text-xs font-bold ${ml.color}">${labelText}</span>
                             <span class="text-xs font-bold ${m.quantity_change > 0 ? 'text-green-400' : 'text-red-400'}">${sign}${m.quantity_change}</span>
                         </div>
-                        <div class="text-[10px] text-white/30 mt-0.5">${m.quantity_before} → ${m.quantity_after}${m.note ? ` · ${m.note}` : ''}</div>
+                        <div class="text-[10px] text-white/30 mt-0.5">${m.quantity_before} → ${m.quantity_after}${noteText ? ` · ${noteText}` : ''}</div>
                         <div class="text-[9px] text-white/20 mt-0.5">${ts}${m.admin_user ? ' · ' + m.admin_user : ''}</div>
                     </div>
                 </div>`;

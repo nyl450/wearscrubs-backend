@@ -1532,12 +1532,28 @@ app.put('/api/inventory/reject-to-normal', requireAuth(['admin','manager']), asy
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
+// Whitelist alasan perubahan manual stok. Disertakan ke note (format "[Reason]" /
+// "[Reason] free-text") supaya history audit jelas, bukan generik "Update manual stok".
+const STOCK_REASONS = [
+    'Stock Opname Awal',
+    'Koreksi Salah Input',
+    'Penyesuaian Stok Fisik',
+    'Barang Hilang/Rusak',
+    'Lainnya'
+];
+function buildStockNote(reason, freeText, fallback = 'Koreksi Salah Input') {
+    const r = STOCK_REASONS.includes(reason) ? reason : fallback;
+    const ft = (typeof freeText === 'string' ? freeText.trim() : '').slice(0, 200);
+    return ft ? `[${r}] ${ft}` : `[${r}]`;
+}
+
 // PUT /api/inventory/single — update stok manual, log ke stock_movements
 app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, res) => {
     try {
-        const { product_id, size, color, variant_type, stock } = req.body;
+        const { product_id, size, color, variant_type, stock, reason, note } = req.body;
         const after = parseInt(stock);
         if (isNaN(after) || after < 0) return res.status(400).json({ error: 'Nilai stok tidak valid' });
+        const finalNote = buildStockNote(reason, note);
 
         // Atomic: lock row → read current → upsert → log movement (only if changed)
         const before = await withTransaction(async (client) => {
@@ -1557,8 +1573,8 @@ app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, r
                 await client.query(
                     `INSERT INTO stock_movements
                      (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, admin_user)
-                     VALUES ($1,$2,$3,$4,'manual_set',$5,$6,$7,'Update manual stok',$8)`,
-                    [product_id, size, color, variant_type, after - beforeVal, beforeVal, after, req.user.username]
+                     VALUES ($1,$2,$3,$4,'manual_set',$5,$6,$7,$8,$9)`,
+                    [product_id, size, color, variant_type, after - beforeVal, beforeVal, after, finalNote, req.user.username]
                 );
             }
             return beforeVal;
@@ -1574,16 +1590,18 @@ app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, r
 // per changed cell. Cell list capped at 200 for safety.
 app.post('/api/inventory/bulk', requireAuth(['admin','manager']), async (req, res) => {
     try {
-        const { operation, value, cells, note } = req.body;
+        const { operation, value, cells, reason, note } = req.body;
         if (!['set', 'add', 'subtract'].includes(operation))
             return res.status(400).json({ error: 'Operation harus set/add/subtract' });
         const num = parseInt(value);
         if (isNaN(num) || num < 0) return res.status(400).json({ error: 'Nilai tidak valid' });
         if (!Array.isArray(cells) || cells.length === 0) return res.status(400).json({ error: 'Pilih minimal 1 cell' });
         if (cells.length > 200) return res.status(400).json({ error: 'Maksimal 200 cell sekaligus' });
+        // Bulk WAJIB ada reason yg valid (sengaja strict — bulk = perubahan masif → audit penting)
+        if (!STOCK_REASONS.includes(reason)) return res.status(400).json({ error: 'Alasan perubahan stok wajib dipilih' });
 
         const opLabel = operation === 'set' ? `→ ${num}` : operation === 'add' ? `+${num}` : `−${num}`;
-        const noteFinal = `Bulk ${operation}: ${opLabel}${note ? ' · ' + note : ''}`;
+        const noteFinal = `[${reason}] Bulk ${operation}: ${opLabel}${note ? ' · ' + note : ''}`;
 
         const results = await withTransaction(async (client) => {
             const out = [];
