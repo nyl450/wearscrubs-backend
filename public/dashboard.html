@@ -6578,6 +6578,17 @@ function waSetCustomPanel(idx) {
     }
 }
 
+// Fill the size dropdown for a custom (off-catalog) item: category standard sizes +
+// the custom-size option. Sizes here are stock-independent.
+function waFillCustomSizes(idx) {
+    const sizeSel = document.getElementById(`wa-size-${idx}`);
+    if (!sizeSel) return;
+    sizeSel.innerHTML = '<option value="">--</option>';
+    const cat = document.getElementById(`wa-prod-${idx}`)?.selectedOptions?.[0]?.dataset?.cat || '';
+    (ALL_SIZES[cat] || ['S','M','L','XL','XXL']).forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
+    sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;
+}
+
 function waOnColorChange(idx) {
     const color = document.getElementById(`wa-color-${idx}`).value;
     const variantSel = document.getElementById(`wa-variant-${idx}`);
@@ -6585,13 +6596,18 @@ function waOnColorChange(idx) {
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
 
-    // Custom color: off-catalog. No inventory → variant "Standar", sizes from the category's
-    // standard list plus the custom-size option. The whole line becomes made-to-order.
+    // Custom color: off-catalog (no inventory for this color). The product's variant options
+    // still apply — for tops/gown that's the sleeve choice (pendek/panjang) — so derive them
+    // from the product's inventory across ALL colors. Sizes = category standard + custom.
     if (color === '__custom__') {
-        variantSel.innerHTML = '<option value="">Standar</option>';
-        const cat = document.getElementById(`wa-prod-${idx}`)?.selectedOptions?.[0]?.dataset?.cat || '';
-        (ALL_SIZES[cat] || ['S','M','L','XL','XXL']).forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
-        sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;
+        const inv = waInventoryCache[idx] || [];
+        const variants = [...new Set(inv.map(i => i.variant_type))];
+        variants.forEach(v => {
+            const label = (!v || v === 'null') ? 'Standar' : v;
+            variantSel.innerHTML += `<option value="${v}">${label}</option>`;
+        });
+        if (variants.length <= 1) variantSel.value = variants[0] ?? '';
+        waFillCustomSizes(idx);
         waSetCustomPanel(idx);
         waCheckPO(idx);
         waUpdateStockInfo(idx);
@@ -6616,6 +6632,15 @@ function waOnColorChange(idx) {
 
 function waOnVariantChange(idx) {
     const color = document.getElementById(`wa-color-${idx}`).value;
+    // Custom color: sizes are stock-independent (already filled by waFillCustomSizes).
+    // Changing the sleeve variant must NOT wipe the size list — just refresh state.
+    if (color === '__custom__') {
+        waSetCustomPanel(idx);
+        waCheckPO(idx);
+        waUpdateStockInfo(idx);
+        waUpdateTotal();
+        return;
+    }
     const variant = document.getElementById(`wa-variant-${idx}`).value;
     const sizeSel = document.getElementById(`wa-size-${idx}`);
     sizeSel.innerHTML = '<option value="">--</option>';
