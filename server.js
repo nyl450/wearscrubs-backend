@@ -2004,7 +2004,7 @@ app.post('/api/orders', async (req, res) => {
         // invalidate the order; just logs and the customer still gets success)
         const itemSummary = itemDetails.map(i => {
             let line = `• ${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) x${i.quantity}`;
-            if (i.is_custom_size) line += ` [Custom Size]`;
+            if (i.is_custom_size) line += ` [Custom]`;
             if (i.is_po) line += ` [PRE-ORDER]`;
             if (i.bordir_nama) line += ` [Bordir Nama]`;
             if (i.bordir_logo) line += ` [Bordir Logo]`;

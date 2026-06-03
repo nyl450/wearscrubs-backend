@@ -1061,6 +1061,7 @@
             </ol>
             <div class="bg-white/5 rounded-xl p-3 mt-2 space-y-1 text-white/60 text-[13px]">
                 <p>✏️ <b>Ukuran Custom</b> (mis. 4XL): di pilihan Ukuran pilih <b>"Custom Size…"</b>, isi label + harga. Barang dijahit dulu (lihat poin 4).</p>
+                <p>🎨 <b>Warna Custom</b> (di luar katalog): di pilihan Warna pilih <b>"Custom Warna…"</b>, isi label warna + harga, lalu pilih ukuran. Stok tidak dipotong, barang dijahit dulu.</p>
                 <p>📦 <b>Jumlah &gt; stok</b>: muncul tombol <b>Jadikan Pre-Order</b> (barang menyusul). Lihat poin 4.</p>
                 <p>🎁 <b>Bonus</b>: centang "Jadikan Bonus" kalau item gratis.</p>
             </div>
@@ -6304,11 +6305,15 @@ function waAddItem() {
             </div>
             <!-- Info ketersediaan stok varian terpilih -->
             <p id="wa-stock-info-${idx}" class="hidden text-[11px] font-semibold"></p>
-            <!-- Custom size: off-catalog (mis. 4XL). Stok tidak dicek; harga diisi manual. -->
+            <!-- Custom / off-catalog (warna ATAU ukuran di luar katalog). Stok tidak dicek; harga manual. -->
             <div id="wa-custom-fields-${idx}" class="hidden p-2.5 rounded-xl" style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);">
-                <p class="text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(125,211,252,0.85);">✏️ Custom Size — di luar katalog, stok tidak dikurangi</p>
+                <p class="text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(125,211,252,0.85);">✏️ Custom — di luar katalog, stok tidak dikurangi</p>
                 <div class="grid grid-cols-2 gap-2">
-                    <div>
+                    <div id="wa-custom-color-wrap-${idx}" class="hidden">
+                        <label class="wa-field-label">Label Warna <span style="color:#f87171">*</span></label>
+                        <input type="text" id="wa-custom-color-${idx}" placeholder="mis. Tosca" class="input-sm" oninput="waUpdateTotal()" />
+                    </div>
+                    <div id="wa-custom-size-wrap-${idx}" class="hidden">
                         <label class="wa-field-label">Label Ukuran <span style="color:#f87171">*</span></label>
                         <input type="text" id="wa-custom-size-${idx}" placeholder="mis. 4XL" class="input-sm" oninput="waUpdateTotal()" />
                     </div>
@@ -6525,6 +6530,9 @@ async function waOnProductChange(idx) {
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
     delete waInventoryCache[idx];
+    // Reset custom-panel inputs + visibility when the product changes (avoid stale state).
+    ['custom-color','custom-size','custom-price'].forEach(k => { const e = document.getElementById(`wa-${k}-${idx}`); if (e) e.value = ''; });
+    waSetCustomPanel(idx);
     // Bordir applies to tops & gown — enable/disable the pills for the chosen product.
     waSetBordirEnabled(idx);
     if (!productId) { waUpdateTotal(); return; }
@@ -6537,9 +6545,37 @@ async function waOnProductChange(idx) {
         waInventoryCache[idx] = Array.isArray(inv) ? inv : [];
         const colors = [...new Set(waInventoryCache[idx].map(i => i.color))];
         colors.forEach(c => colorSel.innerHTML += `<option value="${c}">${c}</option>`);
+        // Off-catalog custom color — always available, skips stock (made-to-order).
+        colorSel.innerHTML += `<option value="__custom__">✏️ Custom Warna…</option>`;
         if (colors.length === 1) { colorSel.value = colors[0]; waOnColorChange(idx); return; }
     } catch(e) {}
     waUpdateTotal();
+}
+
+// An item is "custom" (off-catalog: no stock, manual price, manual fulfill) when EITHER
+// the color or the size is set to the custom sentinel. Reuses the is_custom_size flag.
+function waIsCustomItem(idx) {
+    const c = document.getElementById(`wa-color-${idx}`)?.value;
+    const s = document.getElementById(`wa-size-${idx}`)?.value;
+    return c === '__custom__' || s === '__custom__';
+}
+
+// Show/hide the custom panel + its per-field rows based on what is custom. Prefills the
+// price with the catalog base price the first time a custom color is picked (convenience).
+function waSetCustomPanel(idx) {
+    const isCC = document.getElementById(`wa-color-${idx}`)?.value === '__custom__';
+    const isCS = document.getElementById(`wa-size-${idx}`)?.value === '__custom__';
+    const panel = document.getElementById(`wa-custom-fields-${idx}`);
+    const colorWrap = document.getElementById(`wa-custom-color-wrap-${idx}`);
+    const sizeWrap  = document.getElementById(`wa-custom-size-wrap-${idx}`);
+    if (colorWrap) colorWrap.classList.toggle('hidden', !isCC);
+    if (sizeWrap)  sizeWrap.classList.toggle('hidden', !isCS);
+    if (panel) panel.classList.toggle('hidden', !(isCC || isCS));
+    if (isCC) {
+        const priceEl = document.getElementById(`wa-custom-price-${idx}`);
+        const base = parseInt(document.getElementById(`wa-prod-${idx}`)?.selectedOptions?.[0]?.dataset?.price || 0);
+        if (priceEl && !priceEl.value && base) priceEl.value = base;
+    }
 }
 
 function waOnColorChange(idx) {
@@ -6548,6 +6584,21 @@ function waOnColorChange(idx) {
     const sizeSel = document.getElementById(`wa-size-${idx}`);
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
+
+    // Custom color: off-catalog. No inventory → variant "Standar", sizes from the category's
+    // standard list plus the custom-size option. The whole line becomes made-to-order.
+    if (color === '__custom__') {
+        variantSel.innerHTML = '<option value="">Standar</option>';
+        const cat = document.getElementById(`wa-prod-${idx}`)?.selectedOptions?.[0]?.dataset?.cat || '';
+        (ALL_SIZES[cat] || ['S','M','L','XL','XXL']).forEach(s => sizeSel.innerHTML += `<option value="${s}">${s}</option>`);
+        sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;
+        waSetCustomPanel(idx);
+        waCheckPO(idx);
+        waUpdateStockInfo(idx);
+        waUpdateTotal();
+        return;
+    }
+
     const inv = waInventoryCache[idx] || [];
     if (color) {
         const variants = [...new Set(inv.filter(i => i.color === color).map(i => i.variant_type))];
@@ -6558,7 +6609,7 @@ function waOnColorChange(idx) {
         if (variants.length === 1) { variantSel.value = variants[0]; waOnVariantChange(idx); return; }
     }
     // Size was reset → hide stale custom panel + PO notice for this item.
-    const cp = document.getElementById(`wa-custom-fields-${idx}`); if (cp) cp.classList.add('hidden');
+    waSetCustomPanel(idx);
     waCheckPO(idx);
     waUpdateTotal();
 }
@@ -6594,12 +6645,10 @@ function waOnSizeChange(idx) {
     const variant = document.getElementById(`wa-variant-${idx}`).value;
     const size    = document.getElementById(`wa-size-${idx}`).value;
     const qtyEl   = document.getElementById(`wa-qty-${idx}`);
-    const customPanel = document.getElementById(`wa-custom-fields-${idx}`);
-    const isCustom = size === '__custom__';
-    if (customPanel) customPanel.classList.toggle('hidden', !isCustom);
-    if (isCustom) {
-        // Off-catalog: no stock, so no qty cap and never a Pre-Order.
-        if (qtyEl) { qtyEl.removeAttribute('max'); qtyEl.title = 'Custom size — stok tidak dicek'; }
+    waSetCustomPanel(idx);
+    if (waIsCustomItem(idx)) {
+        // Off-catalog (custom color and/or size): no stock, so no qty cap and never Pre-Order.
+        if (qtyEl) { qtyEl.removeAttribute('max'); qtyEl.title = 'Custom — stok tidak dicek'; }
         waCheckPO(idx);   // hides the PO notice for custom
         waUpdateStockInfo(idx);
         waUpdateTotal();
@@ -6621,15 +6670,15 @@ function waOnSizeChange(idx) {
 function waUpdateStockInfo(idx) {
     const el = document.getElementById(`wa-stock-info-${idx}`);
     if (!el) return;
-    const sizeSel = document.getElementById(`wa-size-${idx}`);
-    const size = sizeSel?.value;
-    if (!size) { el.classList.add('hidden'); el.textContent = ''; return; }
-    if (size === '__custom__') {
+    if (waIsCustomItem(idx)) {
         el.className = 'text-[11px] font-semibold text-sky-300';
-        el.textContent = '✂️ Custom size — di luar katalog (stok tidak dicek)';
+        el.textContent = '✂️ Custom — di luar katalog (stok tidak dicek)';
         el.classList.remove('hidden');
         return;
     }
+    const sizeSel = document.getElementById(`wa-size-${idx}`);
+    const size = sizeSel?.value;
+    if (!size) { el.classList.add('hidden'); el.textContent = ''; return; }
     const color   = document.getElementById(`wa-color-${idx}`)?.value;
     const variant = document.getElementById(`wa-variant-${idx}`)?.value;
     const row = (waInventoryCache[idx] || []).find(i => i.color === color && i.variant_type === variant && i.size === size);
@@ -6654,7 +6703,7 @@ function waCheckPO(idx) {
     const pill    = document.getElementById(`wa-po-pill-${idx}`);
     if (!sizeSel || !notice) return;
     const resetPO = () => { notice.classList.add('hidden'); if (poInput) poInput.value = 'false'; if (pill) pill.classList.remove('active'); };
-    if (sizeSel.value === '__custom__' || !sizeSel.value) { resetPO(); return; }
+    if (waIsCustomItem(idx) || !sizeSel.value) { resetPO(); return; }
     const color   = document.getElementById(`wa-color-${idx}`)?.value;
     const variant = document.getElementById(`wa-variant-${idx}`)?.value;
     const row = (waInventoryCache[idx] || []).find(i => i.color === color && i.variant_type === variant && i.size === sizeSel.value);
@@ -6717,9 +6766,8 @@ function waUpdateTotal() {
         if (!prodEl || !prodEl.value) return;
         const isBonus = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
         if (isBonus) return; // bonus item: free, excluded from total
-        // Custom size: base price is the admin-entered custom price, not the catalog price.
-        const sizeVal = document.getElementById(`wa-size-${idx}`)?.value;
-        const price = sizeVal === '__custom__'
+        // Custom item (color and/or size): base price is the admin-entered custom price.
+        const price = waIsCustomItem(idx)
             ? (parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value) || 0)
             : parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0);
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
@@ -6802,23 +6850,32 @@ async function waSubmitOrder() {
         if (variantEl && variantEl.options.length > 1 && !variantEl.value) { posErrors.push(`${pName}: pilih variant dulu.`); continue; }
         if (!sizeEl?.value) { posErrors.push(`${pName}: pilih ukuran dulu.`); continue; }
 
-        // Custom size: resolve the real size label + admin-entered price; skip stock.
-        const isCustomSize = sizeEl.value === '__custom__';
-        let finalSize = sizeEl.value;
+        // Custom item (off-catalog color and/or size): resolve labels + admin price; skip stock.
+        const isCustomSize  = sizeEl.value === '__custom__';
+        const isCustomColor = colorEl.value === '__custom__';
+        const isCustom      = isCustomSize || isCustomColor;
+        let finalSize  = sizeEl.value;
+        let finalColor = colorEl.value;
         let customPrice = null;
-        if (isCustomSize) {
-            finalSize = document.getElementById(`wa-custom-size-${idx}`)?.value.trim() || '';
+        if (isCustom) {
+            if (isCustomColor) {
+                finalColor = document.getElementById(`wa-custom-color-${idx}`)?.value.trim() || '';
+                if (!finalColor) { posErrors.push(`${pName}: isi label warna custom (mis. Tosca).`); continue; }
+            }
+            if (isCustomSize) {
+                finalSize = document.getElementById(`wa-custom-size-${idx}`)?.value.trim() || '';
+                if (!finalSize) { posErrors.push(`${pName}: isi label ukuran custom (mis. 4XL).`); continue; }
+            }
             customPrice = parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value);
-            if (!finalSize) { posErrors.push(`${pName}: isi label ukuran custom (mis. 4XL).`); continue; }
-            if (!Number.isInteger(customPrice) || customPrice < 0) { posErrors.push(`${pName}: isi harga satuan custom size.`); continue; }
+            if (!Number.isInteger(customPrice) || customPrice < 0) { posErrors.push(`${pName}: isi harga satuan custom.`); continue; }
         }
 
         // Pre-Order: a line whose qty exceeds available stock. Read the toggle (custom
         // sizes are never PO). An over-stock line MUST be PO or custom, else the server
         // would reject it — surface that here for a clear message.
         const qtyVal = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
-        const isPO = !isCustomSize && document.getElementById(`wa-po-${idx}`)?.value === 'true';
-        if (!isCustomSize) {
+        const isPO = !isCustom && document.getElementById(`wa-po-${idx}`)?.value === 'true';
+        if (!isCustom) {
             const cSel = document.getElementById(`wa-color-${idx}`)?.value;
             const vSel = document.getElementById(`wa-variant-${idx}`)?.value;
             const stockRow = (waInventoryCache[idx] || []).find(i => i.color === cSel && i.variant_type === vSel && i.size === finalSize);
@@ -6835,7 +6892,7 @@ async function waSubmitOrder() {
 
         items.push({
             product_id:   parseInt(productId),
-            color:        document.getElementById(`wa-color-${idx}`)?.value,
+            color:        finalColor,
             variant_type: document.getElementById(`wa-variant-${idx}`)?.value || 'null',
             size:         finalSize,
             quantity:     qtyVal,
@@ -6844,7 +6901,7 @@ async function waSubmitOrder() {
             bordir_nama_price: parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000,
             bordir_logo_price: parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000,
             is_bonus:     isBonus,
-            is_custom_size: isCustomSize,
+            is_custom_size: isCustom,
             custom_price: customPrice,
             is_po:        isPO,
         });
@@ -6852,7 +6909,7 @@ async function waSubmitOrder() {
         if (bordirNama || bordirLogo) {
             const prodEl    = document.getElementById(`wa-prod-${idx}`);
             const prodName  = prodEl?.options[prodEl.selectedIndex]?.text || 'Produk';
-            const color     = document.getElementById(`wa-color-${idx}`)?.value || '';
+            const color     = finalColor || '';
             const size      = finalSize || '';
             const itemLabel = `${prodName} (${color}, ${size})`;
 
@@ -6932,7 +6989,7 @@ function buildOrderWaMessage(o) {
     const itemLines = items.map(it => {
         const lineTotal = it.is_bonus ? 0 : (Number(it.price) || 0) * (it.quantity || 1);
         let line = `- ${it.product_name || 'Produk'} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS' : rp(lineTotal)}`;
-        if (it.is_custom_size) line += ' [Custom Size]';
+        if (it.is_custom_size) line += ' [Custom]';
         if (it.is_po) line += ' [Pre-Order]';
         if (it.bordir_nama) line += ' [Bordir Nama]';
         if (it.bordir_logo) line += ' [Bordir Logo]';

@@ -66,6 +66,12 @@ Saat dokter pesan via WA, catat di sini.
 - Isi **Label Ukuran** (mis. `4XL`) dan **Harga Satuan** (harga khusus ukuran itu).
 - Barang custom **dijahit dulu** — lihat bagian **7** soal menandai siap.
 
+### 4a-bis. Warna Custom (di luar katalog)
+- Di pilihan **Warna**, pilih **"✏️ Custom Warna…"**.
+- Isi **Label Warna** (mis. `Tosca`) dan **Harga Satuan** (harga sudah terisi otomatis dari harga produk, boleh diubah).
+- Pilih **Ukuran** seperti biasa (atau **Custom Size…** kalau ukurannya juga di luar daftar).
+- Sama seperti ukuran custom: **stok tidak dipotong**, barang **dijahit dulu** (lihat bagian **7**).
+
 ### 4b. Jumlah Melebihi Stok (Pre-Order)
 - Kalau jumlah yang dipesan **lebih banyak dari stok**, muncul peringatan + tombol **Jadikan Pre-Order**.
 - Klik kalau pelanggan tetap mau pesan (barang menyusul). Lihat bagian **7**.
