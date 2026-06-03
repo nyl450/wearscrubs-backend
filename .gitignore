@@ -7,3 +7,4 @@ uploads/
 Thumbs.db
 backups/
 *.dump
+graphify-out/
