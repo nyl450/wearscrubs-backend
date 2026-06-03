@@ -252,7 +252,7 @@
     .wa-bordir-pill.active { border-color: rgba(74,222,128,0.35); background: rgba(74,222,128,0.07); }
     /* Submit button locked (silver) after a successful save, until "Order Baru" */
     #wa-submit-btn.wa-submit-locked { background: #6b7280 !important; cursor: not-allowed !important; opacity: 0.85; }
-    /* Bordir only applies to tops (atasan); disabled for other categories */
+    /* Bordir applies to tops (atasan) & gown; disabled for other categories */
     .wa-bordir-pill.wa-disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
     .wa-bordir-box { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.2); background: transparent; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, background 0.15s; }
     .wa-bordir-pill.active .wa-bordir-box { border-color: #4ade80; background: #4ade80; }
@@ -1053,7 +1053,7 @@
             <ol class="list-decimal pl-5 space-y-1 text-white/70">
                 <li>Isi <b>Data Pelanggan</b> (nama, no WA, kota, alamat, berat, ekspedisi, ongkir, metode bayar). Pilih ekspedisi <b>"Free Ongkir"</b>/<b>"Kirim sendiri"</b> → ongkir otomatis 0.</li>
                 <li>Pilih <b>Produk → Warna → Variant → Ukuran → Jumlah</b>. Muncul info stok (hijau aman / kuning menipis / merah habis).</li>
-                <li><b>Bordir</b> (hanya Atasan): klik kotak <b>Nama</b>/<b>Logo</b> lalu isi detailnya. Celana/Cap/Gown otomatis tidak bisa bordir.</li>
+                <li><b>Bordir</b> (Atasan & Gown): klik kotak <b>Nama</b>/<b>Logo</b> lalu isi detailnya. Celana/Cap otomatis tidak bisa bordir.</li>
                 <li>Mau tambah produk → <b>Tambah Produk</b>. Diskon opsional (5% / 30%).</li>
                 <li>Klik <b>Simpan &amp; Generate Invoice WA</b> → tombol jadi abu-abu "Tersimpan".</li>
                 <li>Klik <b>Kirim ke WA Customer</b> → WhatsApp terbuka berisi pesan + instruksi bayar. Kirim.</li>
@@ -1120,7 +1120,7 @@
             <ol class="list-decimal pl-5 space-y-1 text-white/80">
                 <li>Produk <b>tidak pernah refund uang</b> — hanya tukar size.</li>
                 <li>Refund uang <b>hanya untuk bordir yang ditolak</b>.</li>
-                <li><b>Bordir hanya untuk Atasan</b> (bukan celana/cap/gown).</li>
+                <li><b>Bordir untuk Atasan & Gown</b> (bukan celana/cap).</li>
                 <li>Pelanggan wajib bayar maksimal <b>2×24 jam</b>.</li>
                 <li><b>Custom &amp; Pre-Order</b> harus siap dulu sebelum dikemas.</li>
                 <li>Selalu <b>kirim WA konfirmasi</b> setelah catat order, dan <b>kirim resi</b> setelah dikirim.</li>
@@ -6324,7 +6324,7 @@ function waAddItem() {
                     <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waOnQtyInput(${idx})" />
                 </div>
                 <div>
-                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya untuk Atasan)</span></label>
+                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya Atasan & Gown)</span></label>
                     <div class="grid grid-cols-2 gap-1.5 mt-0.5">
                         <div class="wa-bordir-pill" id="wa-bordir-nama-pill-${idx}" onclick="waToggleBordir(${idx},'nama')">
                             <span class="wa-bordir-box" id="wa-bordir-nama-box-${idx}"></span>
@@ -6441,12 +6441,12 @@ function waToggleBonus(idx) {
     waUpdateTotal();
 }
 
-// Bordir only applies to tops (atasan). Disable both pills + reset any active bordir
-// when the selected product isn't a top.
+// Bordir applies to tops (atasan) and gown. Disable both pills + reset any active
+// bordir when the selected product is a different category (pants/caps).
 function waSetBordirEnabled(idx) {
     const prodEl = document.getElementById(`wa-prod-${idx}`);
     const cat = prodEl?.selectedOptions?.[0]?.dataset?.cat || '';
-    const enabled = cat === 'tops';
+    const enabled = cat === 'tops' || cat === 'gown';
     const hint = document.getElementById(`wa-bordir-hint-${idx}`);
     if (hint) hint.classList.toggle('hidden', enabled || !cat); // show hint only when a non-top product is chosen
     ['nama','logo'].forEach(type => {
@@ -6473,7 +6473,7 @@ function waToggleBordir(idx, type) {
     const hidden = document.getElementById(`wa-bordir-${type}-${idx}`);
     const fields = document.getElementById(`wa-bordir-${type}-fields-${idx}`);
     if (!pill || !hidden) return;
-    if (pill.classList.contains('wa-disabled')) return; // bordir only for tops
+    if (pill.classList.contains('wa-disabled')) return; // bordir only for tops & gown
     const nowActive = !pill.classList.contains('active');
     pill.classList.toggle('active', nowActive);
     hidden.value = nowActive ? 'true' : 'false';
@@ -6525,7 +6525,7 @@ async function waOnProductChange(idx) {
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
     delete waInventoryCache[idx];
-    // Bordir only applies to tops — enable/disable the pills for the chosen product.
+    // Bordir applies to tops & gown — enable/disable the pills for the chosen product.
     waSetBordirEnabled(idx);
     if (!productId) { waUpdateTotal(); return; }
     try {

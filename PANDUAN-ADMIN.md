@@ -51,9 +51,9 @@ Saat dokter pesan via WA, catat di sini.
 3. **Produk Dipesan** → Item #1:
    - Pilih **Produk → Warna → Variant → Ukuran → Jumlah**.
    - Setelah pilih ukuran, muncul info **stok tersedia** (hijau = aman, kuning = menipis, merah = habis).
-4. **Bordir** (hanya untuk produk **Atasan**):
+4. **Bordir** (untuk produk **Atasan** & **Gown**):
    - Klik kotak **Nama** dan/atau **Logo** → isi detail (nama yang dibordir / posisi / warna benang).
-   - Untuk Celana/Cap/Gown, bordir otomatis tidak aktif (memang tidak melayani bordir).
+   - Untuk Celana/Cap, bordir otomatis tidak aktif (memang tidak melayani bordir).
 5. **Tambah produk lain** → klik **Tambah Produk**.
 6. **Diskon** (opsional) — pilih 5% atau Consignment 30%.
 7. Klik **Simpan & Generate Invoice WA**.
@@ -176,7 +176,7 @@ Saat barang baru datang:
 ## ⭐ Aturan Penting (hafalkan ini)
 1. **Produk tidak pernah refund uang** — hanya **tukar size**.
 2. **Refund uang hanya untuk bordir yang ditolak.**
-3. **Bordir hanya untuk Atasan** (bukan celana/cap/gown).
+3. **Bordir untuk Atasan & Gown** (bukan celana/cap).
 4. Pelanggan wajib bayar maksimal **2×24 jam**.
 5. **Custom & Pre-Order** harus **siap dulu** sebelum bisa dikemas.
 6. Selalu **kirim pesan WA konfirmasi** ke pelanggan setelah mencatat order, dan **kirim resi** setelah dikirim.
