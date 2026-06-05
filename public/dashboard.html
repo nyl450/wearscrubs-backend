@@ -801,6 +801,14 @@
                   <option value="Bonus/Free">Bonus / Free</option>
                 </select>
               </div>
+              <div>
+                <label class="wa-field-label">Sumber Order</label>
+                <select id="wa-order-source">
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="event_offline">Event Offline (Bazar/Pameran)</option>
+                  <option value="offline">Offline (Walk-in Toko)</option>
+                </select>
+              </div>
               <div class="sm:col-span-2">
                 <label class="wa-field-label">Catatan <span class="wa-optional">(opsional)</span></label>
                 <textarea id="wa-notes" rows="2" placeholder="Misal: minta packing bubble wrap extra"></textarea>
@@ -6970,7 +6978,7 @@ async function waSubmitOrder() {
         const res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
-            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: 'whatsapp', payment_method: paymentMethod, discount_percent: waSelectedDiscount, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: (document.getElementById('wa-order-source')?.value || 'whatsapp'), payment_method: paymentMethod, discount_percent: waSelectedDiscount, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');

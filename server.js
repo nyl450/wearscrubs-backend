@@ -464,6 +464,18 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_status_check`).catch(() => {});
     await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_status_check CHECK(order_status IN ('waiting_payment','confirmed','bordir','packed','shipped','done','cancelled'))`).catch(() => {});
 
+    // ── Migrate: expand order_source (add offline channels for POS-ready reports) ──
+    // website = toko online, whatsapp = order manual via WA, event_offline = bazar/
+    // pameran (consignment), offline = walk-in toko. Drop inline CHECK, recreate wider.
+    await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_source_check`).catch(() => {});
+    await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_source_check CHECK(order_source IN ('website','whatsapp','event_offline','offline'))`).catch(() => {});
+
+    // ── Migrate: paid_at timestamp (basis tanggal untuk laporan sales) ────────────
+    // Diisi NOW() saat confirm-payment. Backfill order paid LAMA dari updated_at
+    // (aproksimasi — updated_at di-set saat pembayaran dikonfirmasi).
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ DEFAULT NULL`);
+    await dbRun(`UPDATE orders SET paid_at = updated_at WHERE payment_status = 'paid' AND paid_at IS NULL`).catch(() => {});
+
     // ── Migrate: tracking_number for shipment ─────────────────────────────────
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`).catch(() => {});
     // ── Migrate: track which admin performed each order photo step ─────────────
@@ -1903,9 +1915,14 @@ app.post('/api/orders', async (req, res) => {
             productTotal += unitPrice * item.quantity;
         }
 
-        // order_source: only admin may mark 'whatsapp'. Public is always 'website' —
-        // prevents a public caller from suppressing the admin "new order" WA notification.
-        const safeOrderSource = (isAdmin && order_source === 'whatsapp') ? 'whatsapp' : 'website';
+        // order_source: only admin may set a non-website channel. Public is always
+        // 'website' — prevents a public caller from suppressing the admin "new order"
+        // WA notification or faking an offline/event sale.
+        const ADMIN_SOURCES = ['whatsapp', 'event_offline', 'offline'];
+        const safeOrderSource = isAdmin
+            ? (order_source === 'website' ? 'website'
+               : ADMIN_SOURCES.includes(order_source) ? order_source : 'whatsapp')
+            : 'website';
 
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
         // Public checkout kirim semantic value ('bank_transfer'/'qris'); admin form
@@ -2048,7 +2065,7 @@ app.post('/api/orders', async (req, res) => {
         // Skip WA notification to admin for manually-input WA orders (admin already knows)
         // Wrap in try/catch — Fonnte API failure must NOT fail the order response,
         // since the order is already committed at this point.
-        if (safeOrderSource !== 'whatsapp') {
+        if (safeOrderSource === 'website') {
             try { await sendWANotification(waMsg); }
             catch (waErr) { console.error('WA notify (new order) failed:', waErr?.message || waErr); }
         }
@@ -2167,7 +2184,7 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
             // Determine next status based on whether order has bordir
             const ns = order.has_bordir_logo || order.has_bordir_nama ? 'bordir' : 'confirmed';
             await client.query(
-                `UPDATE orders SET payment_status = 'paid', order_status = $1, updated_at = NOW() WHERE id = $2`,
+                `UPDATE orders SET payment_status = 'paid', order_status = $1, paid_at = NOW(), updated_at = NOW() WHERE id = $2`,
                 [ns, order.id]
             );
 
