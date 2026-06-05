@@ -478,6 +478,13 @@
                 <span id="exchange-sidebar-badge" class="hidden ml-auto bg-cyan-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
             </button>
         </div>
+
+        <p class="sidebar-group-label">Laporan</p>
+        <div class="space-y-0.5">
+            <button onclick="showModule('report')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="report">
+                <i class="fa-solid fa-chart-pie w-4 text-xs"></i> Report
+            </button>
+        </div>
     </nav>
     <!-- Bantuan (semua role) -->
     <div class="p-3 border-t border-darkborder">
@@ -1032,6 +1039,106 @@
         </div>
         <div id="preorder-list" class="space-y-2.5"></div>
         <div id="preorder-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada Pre-Order menunggu. 🎉</div>
+    </div>
+
+    <!-- ═══ REPORT ═════════════════════════════════════════════════════════ -->
+    <div id="module-report" class="hidden p-4 md:p-6 space-y-4">
+        <style>
+            .report-preset, .report-tab { font-size:.78rem; font-weight:700; padding:.45rem .9rem; border-radius:.75rem; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); color:rgba(255,255,255,.6); transition:all .15s; cursor:pointer; }
+            .report-preset:hover, .report-tab:hover { background:rgba(255,255,255,.1); color:#fff; }
+            .report-preset-active, .report-tab-active { background:rgba(34,211,238,.15); border-color:rgba(34,211,238,.4); color:#a5f3fc; }
+        </style>
+        <div>
+            <h2 class="text-xl font-bold">📊 Report</h2>
+            <p class="text-xs text-white/40 mt-0.5">Penjualan order yang sudah <b>dibayar</b> (basis tanggal bayar), tidak termasuk ongkir. Order batal tidak dihitung.</p>
+        </div>
+
+        <!-- Filter periode -->
+        <div class="bg-darkcard border border-white/10 rounded-2xl p-3 space-y-3">
+            <div class="flex flex-wrap gap-1.5">
+                <button data-preset="today" onclick="reportPreset('today')" class="report-preset">Hari ini</button>
+                <button data-preset="week" onclick="reportPreset('week')" class="report-preset">Minggu ini</button>
+                <button data-preset="month" onclick="reportPreset('month')" class="report-preset">Bulan ini</button>
+                <button data-preset="year" onclick="reportPreset('year')" class="report-preset">Tahun ini</button>
+            </div>
+            <div class="flex flex-wrap items-end gap-2">
+                <div>
+                    <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Dari</label>
+                    <input type="date" id="report-from" class="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Sampai</label>
+                    <input type="date" id="report-to" class="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                </div>
+                <button onclick="loadReport()" class="px-4 py-2 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition text-sm font-bold">Terapkan</button>
+                <span id="report-range-label" class="text-xs text-white/40 ml-auto self-center"></span>
+            </div>
+        </div>
+
+        <!-- Tab -->
+        <div class="flex flex-wrap gap-1.5">
+            <button data-rtab="sales" onclick="reportTab('sales')" class="report-tab">Sales</button>
+            <button data-rtab="type" onclick="reportTab('type')" class="report-tab">Sales Type</button>
+            <button data-rtab="items" onclick="reportTab('items')" class="report-tab">Items Sales</button>
+        </div>
+
+        <!-- Tab: Sales -->
+        <div id="rtab-sales" class="report-panel space-y-3">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Gross Sales</div>
+                    <div id="rep-gross" class="text-lg lg:text-xl font-bold text-white mt-1">—</div>
+                </div>
+                <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Discount</div>
+                    <div id="rep-discount" class="text-lg lg:text-xl font-bold text-orange-300 mt-1">—</div>
+                </div>
+                <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Refunds</div>
+                    <div id="rep-refunds" class="text-lg lg:text-xl font-bold text-red-300 mt-1">—</div>
+                </div>
+                <div class="bg-darkcard border border-cyan-400/30 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Net Sales</div>
+                    <div id="rep-net" class="text-lg lg:text-xl font-bold text-green-400 mt-1">—</div>
+                </div>
+            </div>
+            <p class="text-xs text-white/40"><span id="rep-orders" class="font-bold text-white/60">0</span> order dibayar dalam periode. Net = Gross − Discount − Refunds.</p>
+        </div>
+
+        <!-- Tab: Sales Type -->
+        <div id="rtab-type" class="report-panel hidden">
+            <div class="bg-darkcard border border-white/10 rounded-2xl overflow-x-auto">
+                <table class="w-full text-sm min-w-[560px]">
+                    <thead class="text-white/40 text-[11px] uppercase tracking-wider"><tr>
+                        <th class="text-left p-3">Channel</th>
+                        <th class="text-right p-3">Order</th>
+                        <th class="text-right p-3">Gross</th>
+                        <th class="text-right p-3">Discount</th>
+                        <th class="text-right p-3">Refunds</th>
+                        <th class="text-right p-3">Net</th>
+                    </tr></thead>
+                    <tbody id="rep-type-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab: Items Sales -->
+        <div id="rtab-items" class="report-panel hidden">
+            <div class="bg-darkcard border border-white/10 rounded-2xl overflow-x-auto">
+                <table class="w-full text-sm min-w-[640px]">
+                    <thead class="text-white/40 text-[11px] uppercase tracking-wider"><tr>
+                        <th class="text-left p-3">Nama</th>
+                        <th class="text-left p-3">SKU</th>
+                        <th class="text-left p-3">Kategori</th>
+                        <th class="text-right p-3">Qty</th>
+                        <th class="text-right p-3">Harga</th>
+                        <th class="text-right p-3">Total Sales</th>
+                    </tr></thead>
+                    <tbody id="rep-items-body"></tbody>
+                </table>
+            </div>
+            <div id="rep-items-empty" class="hidden text-center py-8 text-white/30 text-sm">Tidak ada barang terjual di periode ini.</div>
+        </div>
     </div>
 
     <!-- ═══ PANDUAN (Bantuan) ══════════════════════════════════════════════ -->
@@ -1978,6 +2085,86 @@ function showModule(name) {
     if (name === 'refund')        loadRefunds();
     if (name === 'exchange')      loadExchanges();
     if (name === 'preorder')      loadPreOrders();
+    if (name === 'report')        reportInit();
+}
+
+// ─── REPORT ──────────────────────────────────────────────────────────────────
+let reportCurrentTab = 'sales';
+function repRp(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+function repSourceLabel(s) {
+    return ({ website: 'Website', whatsapp: 'WhatsApp', event_offline: 'Event Offline', offline: 'Offline (Walk-in)' })[s] || s;
+}
+function reportInit() {
+    reportTab(reportCurrentTab || 'sales');
+    if (!document.getElementById('report-from')?.value) reportPreset('month'); // default range + loads
+    else loadReport();
+}
+function reportPreset(p) {
+    const now = new Date();
+    const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    let from = new Date(now);
+    const to = new Date(now);
+    if (p === 'today')      from = new Date(now);
+    else if (p === 'week')  { const dow = (now.getDay() + 6) % 7; from = new Date(now); from.setDate(now.getDate() - dow); } // Senin = awal minggu
+    else if (p === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (p === 'year')  from = new Date(now.getFullYear(), 0, 1);
+    document.getElementById('report-from').value = toISO(from);
+    document.getElementById('report-to').value = toISO(to);
+    document.querySelectorAll('.report-preset').forEach(b => b.classList.toggle('report-preset-active', b.dataset.preset === p));
+    loadReport();
+}
+function reportTab(t) {
+    reportCurrentTab = t;
+    document.querySelectorAll('.report-panel').forEach(el => el.classList.add('hidden'));
+    document.getElementById('rtab-' + t)?.classList.remove('hidden');
+    document.querySelectorAll('.report-tab').forEach(b => b.classList.toggle('report-tab-active', b.dataset.rtab === t));
+}
+async function loadReport() {
+    const from = document.getElementById('report-from')?.value;
+    const to   = document.getElementById('report-to')?.value;
+    if (!from || !to) return;
+    const lbl = document.getElementById('report-range-label');
+    if (lbl) lbl.textContent = `${from} → ${to}`;
+    const qs = `?from=${from}&to=${to}`;
+    try {
+        const s = await apiFetch('/api/reports/sales' + qs);
+        document.getElementById('rep-gross').textContent    = repRp(s.gross);
+        document.getElementById('rep-discount').textContent = s.discount ? '−' + repRp(s.discount) : repRp(0);
+        document.getElementById('rep-refunds').textContent  = s.refunds ? '−' + repRp(s.refunds) : repRp(0);
+        document.getElementById('rep-net').textContent      = repRp(s.net);
+        document.getElementById('rep-orders').textContent   = s.orders || 0;
+
+        const types = await apiFetch('/api/reports/sales-type' + qs);
+        document.getElementById('rep-type-body').innerHTML = (types || []).map(t => `
+            <tr class="border-t border-white/5">
+                <td class="p-3 font-medium">${repSourceLabel(t.source)}</td>
+                <td class="p-3 text-right text-white/70">${t.orders}</td>
+                <td class="p-3 text-right">${repRp(t.gross)}</td>
+                <td class="p-3 text-right text-orange-300">${t.discount ? '−' + repRp(t.discount) : '—'}</td>
+                <td class="p-3 text-right text-red-300">${t.refunds ? '−' + repRp(t.refunds) : '—'}</td>
+                <td class="p-3 text-right font-bold text-green-400">${repRp(t.net)}</td>
+            </tr>`).join('');
+
+        const items = await apiFetch('/api/reports/items' + qs);
+        const body = document.getElementById('rep-items-body');
+        const empty = document.getElementById('rep-items-empty');
+        if (!items || !items.length) { body.innerHTML = ''; empty?.classList.remove('hidden'); }
+        else {
+            empty?.classList.add('hidden');
+            body.innerHTML = items.map(it => `
+                <tr class="border-t border-white/5">
+                    <td class="p-3 font-medium">${esc(it.name || '')}</td>
+                    <td class="p-3 text-white/50 font-mono text-xs">${esc(it.sku || '')}</td>
+                    <td class="p-3 text-white/60">${esc(it.category || '')}</td>
+                    <td class="p-3 text-right text-white/70">${it.qty}</td>
+                    <td class="p-3 text-right text-white/60">${repRp(it.unit_price)}</td>
+                    <td class="p-3 text-right font-bold">${repRp(it.total_sales)}</td>
+                </tr>`).join('');
+        }
+    } catch (e) {
+        console.error('loadReport failed', e);
+        alert('Gagal memuat report: ' + (e?.message || e));
+    }
 }
 
 // ─── PRE-ORDER LIST ──────────────────────────────────────────────────────────

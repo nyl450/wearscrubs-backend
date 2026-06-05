@@ -573,6 +573,7 @@ async function initDB() {
     await createIdx('CREATE INDEX IF NOT EXISTS idx_orders_status      ON orders(order_status)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_orders_payment     ON orders(payment_status)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_orders_created     ON orders(created_at DESC)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_orders_paid_at     ON orders(paid_at)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_order_items_order  ON order_items(order_id)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_order_items_prod   ON order_items(product_id)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_product         ON stock_movements(product_id)');
@@ -1708,6 +1709,105 @@ app.get('/api/orders/stats', requireAuth(), async (req, res) => {
             paid_orders: paidOrders.count,
             total_revenue: totalRevenue.total || 0
         });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── REPORTS ──────────────────────────────────────────────────────────────────
+// Semua laporan: hanya order PAID & non-cancelled, basis tanggal = paid_at.
+// gross = nilai barang (qty x harga, sudah termasuk bordir) SEBELUM diskon, TANPA
+// ongkir = total_amount - shipping_cost + discount_amount. net = gross - discount
+// - refunds. Refund dihitung by created_at (tanggal refund terjadi), non-cancelled.
+function reportRange(req) {
+    const { from, to } = req.query;
+    const ok = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    if (!ok(from) || !ok(to)) return null;
+    return { from, to };
+}
+
+// GET /api/reports/sales?from=YYYY-MM-DD&to=YYYY-MM-DD
+app.get('/api/reports/sales', requireAuth(['admin']), async (req, res) => {
+    try {
+        const r = reportRange(req);
+        if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
+        const sales = await dbGet(
+            `SELECT COALESCE(SUM(total_amount - shipping_cost + discount_amount),0)::bigint AS gross,
+                    COALESCE(SUM(discount_amount),0)::bigint AS discount,
+                    COUNT(*)::int AS orders
+               FROM orders
+              WHERE payment_status='paid' AND order_status<>'cancelled'
+                AND paid_at >= $1::date AND paid_at < ($2::date + 1)`,
+            [r.from, r.to]
+        );
+        const ref = await dbGet(
+            `SELECT COALESCE(SUM(amount),0)::bigint AS refunds
+               FROM refunds
+              WHERE status<>'cancelled'
+                AND created_at >= $1::date AND created_at < ($2::date + 1)`,
+            [r.from, r.to]
+        );
+        const gross = Number(sales.gross), discount = Number(sales.discount), refunds = Number(ref.refunds);
+        res.json({ from: r.from, to: r.to, gross, discount, refunds, net: gross - discount - refunds, orders: sales.orders });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/sales-type — breakdown per channel (website/whatsapp/event_offline/offline)
+app.get('/api/reports/sales-type', requireAuth(['admin']), async (req, res) => {
+    try {
+        const r = reportRange(req);
+        if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
+        const rows = await dbAll(
+            `SELECT order_source AS source,
+                    COUNT(*)::int AS orders,
+                    COALESCE(SUM(total_amount - shipping_cost + discount_amount),0)::bigint AS gross,
+                    COALESCE(SUM(discount_amount),0)::bigint AS discount
+               FROM orders
+              WHERE payment_status='paid' AND order_status<>'cancelled'
+                AND paid_at >= $1::date AND paid_at < ($2::date + 1)
+              GROUP BY order_source`,
+            [r.from, r.to]
+        );
+        // Refunds per channel (join ke order untuk dapat source), by refund date.
+        const refRows = await dbAll(
+            `SELECT o.order_source AS source, COALESCE(SUM(r.amount),0)::bigint AS refunds
+               FROM refunds r JOIN orders o ON o.id = r.order_id
+              WHERE r.status<>'cancelled'
+                AND r.created_at >= $1::date AND r.created_at < ($2::date + 1)
+              GROUP BY o.order_source`,
+            [r.from, r.to]
+        );
+        const refMap = Object.fromEntries(refRows.map(x => [x.source, Number(x.refunds)]));
+        const all = ['website', 'whatsapp', 'event_offline', 'offline'];
+        const byKey = Object.fromEntries(rows.map(x => [x.source, x]));
+        const out = all.map(src => {
+            const row = byKey[src] || { orders: 0, gross: 0, discount: 0 };
+            const gross = Number(row.gross), discount = Number(row.discount), refunds = refMap[src] || 0;
+            return { source: src, orders: row.orders || 0, gross, discount, refunds, net: gross - discount - refunds };
+        });
+        res.json(out);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/items — barang terjual (exclude bonus/gift) dalam periode
+app.get('/api/reports/items', requireAuth(['admin']), async (req, res) => {
+    try {
+        const r = reportRange(req);
+        if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
+        const rows = await dbAll(
+            `SELECT p.name, p.sku, p.category,
+                    SUM(oi.quantity)::int AS qty,
+                    p.price::bigint AS unit_price,
+                    COALESCE(SUM(oi.price * oi.quantity),0)::bigint AS total_sales
+               FROM order_items oi
+               JOIN orders o ON o.id = oi.order_id
+               JOIN products p ON p.id = oi.product_id
+              WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+                AND oi.is_bonus = FALSE
+                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+              GROUP BY p.id, p.name, p.sku, p.category, p.price
+              ORDER BY total_sales DESC`,
+            [r.from, r.to]
+        );
+        res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
