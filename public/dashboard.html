@@ -4888,26 +4888,65 @@ async function viewOrder(id) {
 
         // ── Bordir details ────────────────────────────────────────────────────
         const waLink = `https://wa.me/${normalizeWAPhone(o.customer_phone)}`;
-        // Logo provided if value is an actual image — base64 (legacy) or Storage URL (new).
-        const logoAlreadyUploaded = bordirDetails.some(e => e.type === 'logo' && e.value && (e.value.startsWith('data:image/') || e.value.startsWith('http')));
-        const bordirHTML = bordirDetails.length ? `
+
+        // ── P2: Logo status per-item (bukan global lagi) ──────────────────────
+        // Sebelumnya: 1 logo dari N upload = badge hijau "Logo Sudah Diupload" global.
+        // Sekarang: counter "X/Y diterima" + identifikasi item yang masih missing supaya
+        // admin tahu BAJU MANA yang perlu di-WA ulang.
+        const logoEntries = bordirDetails.filter(e => e.type === 'logo');
+        const isLogoVal = (v) => v && typeof v === 'string' && (v.startsWith('data:image/') || v.startsWith('http'));
+        const logoUploaded = logoEntries.filter(e => isLogoVal(e.value));
+        const logoTotal = logoEntries.length;
+        const logoUploadedCount = logoUploaded.length;
+        const logoMissingItems = logoEntries.filter(e => !isLogoVal(e.value)).map(e => e.item_label || '(item)');
+        const allLogoUploaded = logoTotal > 0 && logoUploadedCount === logoTotal;
+        const someLogoMissing = logoTotal > 0 && logoUploadedCount < logoTotal;
+
+        // P2: Header badge — counter-style (X/Y) dgn 3 kondisi visual.
+        const logoBadgeHTML = (() => {
+            if (!o.has_bordir_logo) return '';
+            // Edge case: flag true tapi tak ada entri logo di detail → handled di P1 warning.
+            if (logoTotal === 0) return '';
+            if (allLogoUploaded) {
+                return logoTotal === 1
+                    ? `<span class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 bg-green-500/10 text-green-300 border border-green-500/20"><i class="fa-solid fa-check"></i> Logo diterima</span>`
+                    : `<span class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 bg-green-500/10 text-green-300 border border-green-500/20"><i class="fa-solid fa-check"></i> Semua logo diterima (${logoUploadedCount}/${logoTotal})</span>`;
+            }
+            // someLogoMissing → tombol WA + counter + daftar item missing di tooltip
+            const missingList = logoMissingItems.join(', ');
+            const waText = logoTotal === 1
+                ? `Halo ${o.customer_name}, pesanan #${o.order_code} Anda memiliki bordir logo. Mohon kirimkan file logo bordir Anda ke kami ya. Terima kasih! 🙏`
+                : `Halo ${o.customer_name}, pesanan #${o.order_code} Anda memiliki bordir logo. File logo masih kurang untuk: ${missingList}. Mohon kirimkan ke kami ya. Terima kasih! 🙏`;
+            const reqColor = o.bordir_logo_requested ? 'bg-green-500/10 text-green-300 border-green-500/20' : 'bg-orange-500/20 text-orange-300 border-orange-500/30 animate-pulse hover:bg-orange-500/30';
+            const reqIcon = o.bordir_logo_requested ? '<i class="fa-brands fa-whatsapp"></i> ✓ Sudah Diminta' : '<i class="fa-brands fa-whatsapp"></i> ⚠️ Minta Logo';
+            return `<a href="${waLink}?text=${encodeURIComponent(waText)}" target="_blank" onclick="markLogoRequested(${o.id})"
+                       title="Logo belum: ${esc(missingList)}"
+                       class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 border ${reqColor}">
+                       ${reqIcon} <span class="font-mono">(${logoUploadedCount}/${logoTotal})</span>
+                    </a>`;
+        })();
+
+        // ── P1: Defensive — tampilkan panel walaupun embroidery_details kosong ───
+        // 0 kasus aktual di DB sekarang, tapi data lama / corrupt / manual SQL bisa
+        // bikin has_bordir_*=true tanpa detail. Tanpa fix ini, panel + tombol Review
+        // tak muncul → admin terjebak.
+        const hasAnyBordirFlag = !!(o.has_bordir_logo || o.has_bordir_nama);
+        const showBordirPanel = hasAnyBordirFlag || bordirDetails.length > 0;
+        const detailsMissingWarning = hasAnyBordirFlag && bordirDetails.length === 0
+            ? `<div class="bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2.5 text-[11px] text-amber-200 mb-3">
+                   <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                   <strong>Detail bordir tidak ditemukan.</strong> Order ini tercatat memiliki bordir
+                   (${o.has_bordir_nama ? 'nama' : ''}${o.has_bordir_nama && o.has_bordir_logo ? ' + ' : ''}${o.has_bordir_logo ? 'logo' : ''}),
+                   tapi detailnya tak tersimpan. Hubungi James / cek data manual.
+               </div>` : '';
+
+        const bordirHTML = showBordirPanel ? `
         <div class="bg-purple-900/20 border border-purple-500/20 rounded-xl p-4">
             <div class="flex items-center justify-between mb-3">
                 <p class="text-xs font-bold text-purple-300 uppercase tracking-wider">🧵 Detail Bordir</p>
-                ${o.has_bordir_logo ? (logoAlreadyUploaded
-                    ? `<span class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 bg-green-500/10 text-green-300 border border-green-500/20">
-                           <i class="fa-solid fa-check"></i> Logo Sudah Diupload (via Website)
-                       </span>`
-                    : `<a href="${waLink}?text=${encodeURIComponent(`Halo ${o.customer_name}, pesanan #${o.order_code} Anda memiliki bordir logo. Mohon kirimkan file logo bordir Anda ke kami ya. Terima kasih! 🙏`)}"
-                       target="_blank" onclick="markLogoRequested(${o.id})"
-                       class="text-[10px] px-2.5 py-1.5 rounded-lg flex items-center gap-1.5
-                       ${o.bordir_logo_requested
-                           ? 'bg-green-500/10 text-green-300 border border-green-500/20'
-                           : 'bg-orange-500/20 text-orange-300 border border-orange-500/30 animate-pulse hover:bg-orange-500/30'}">
-                        <i class="fa-brands fa-whatsapp"></i>
-                        ${o.bordir_logo_requested ? '✓ Logo Sudah Diminta' : '⚠️ Minta Logo ke Customer'}
-                    </a>`) : ''}
+                ${logoBadgeHTML}
             </div>
+            ${detailsMissingWarning}
             ${bordirDetails.map((e, idx) => {
                 const posLbl = e.position === 'kanan' ? 'Kanan Dada' : e.position === 'kiri' ? 'Kiri Dada' : '';
                 const isLogoUploaded = e.type === 'logo' && e.value && (e.value.startsWith('data:image/') || e.value.startsWith('http'));
@@ -4946,7 +4985,14 @@ async function viewOrder(id) {
                                    </button>
                                </div>
                            </div>`
-                        : `<p class="text-sm font-semibold">${esc(e.value||'')}</p>`
+                        : (e.type === 'logo'
+                            ? `<div class="flex items-center gap-2 mt-1 flex-wrap">
+                                   <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-300 border border-orange-400/25">
+                                       <i class="fa-solid fa-clock"></i> Belum diupload
+                                   </span>
+                                   <span class="text-xs text-white/50">${esc(e.value || 'Menunggu file logo')}</span>
+                               </div>`
+                            : `<p class="text-sm font-semibold">${esc(e.value||'')}</p>`)
                     }
                     <div class="flex flex-wrap gap-x-3 mt-1">
                         ${e.color ? `<p class="text-[11px] text-white/40">🎨 Benang: <span class="text-white/60">${esc(e.color)}</span></p>` : ''}
