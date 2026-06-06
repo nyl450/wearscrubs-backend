@@ -2619,7 +2619,12 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         if (order.order_status === 'shipped')
             return res.status(400).json({ error: 'Pesanan sudah dikirim — tidak bisa dibatalkan. Jika barang kembali (retur), tangani via stok manual / Tukar Size.' });
 
-        const { cancel_reason } = req.body;
+        const { cancel_reason, set_bordir_status } = req.body;
+        // Audit hook: caller (mis. flow "Tolak Bordir") boleh sekalian set bordir_status
+        // jadi 'rejected' supaya alasan struktural pembatalan terekam di kolom yg tepat.
+        // Restrict ke nilai valid; kalau dikirim sampah, abaikan (anti-injection).
+        const safeBordirStatus = (set_bordir_status === 'rejected' || set_bordir_status === 'pending')
+            ? set_bordir_status : null;
         // Optional context attachment (mis. screenshot percakapan dengan customer).
         // NOT a "refund proof" — refund flow is separate via the Refund module.
         // For paid orders, a refund record is auto-created with status='pending' so
@@ -2671,8 +2676,11 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             }
 
             await client.query(
-                `UPDATE orders SET order_status = 'cancelled', cancel_reason = $1, cancelled_by = $2, updated_at = NOW() WHERE id = $3`,
-                [cancel_reason || '', user.username, order.id]
+                `UPDATE orders SET order_status = 'cancelled', cancel_reason = $1, cancelled_by = $2,
+                                   bordir_status = COALESCE($3::text, bordir_status),
+                                   updated_at = NOW()
+                 WHERE id = $4`,
+                [cancel_reason || '', user.username, safeBordirStatus, order.id]
             );
 
             // Auto-create refund entry if order was paid — only if not already exists
