@@ -2103,7 +2103,15 @@ app.post('/api/orders', async (req, res) => {
             // ADMIN-ONLY (anti-tamper). When custom, the base price comes from custom_price
             // instead of the catalog product.price; falls back to product.price if missing.
             const isCustomSize = isAdmin && item.is_custom_size === true;
-            const customBase = (isCustomSize && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : product.price;
+            // Catalog base price: tops/gown bisa punya harga berbeda per variant
+            // (mis. Lengan Pendek vs Panjang di price_by_type). product.price hanya
+            // menyimpan harga TERMURAH (min), jadi resolve per variant_type dulu;
+            // fallback ke product.price untuk produk harga-tunggal / variant tak dikenal.
+            const priceByType = safeJSON(product.price_by_type, null);
+            const catalogPrice = (priceByType && item.variant_type && priceByType[item.variant_type] != null)
+                ? Number(priceByType[item.variant_type])
+                : Number(product.price);
+            const customBase = (isCustomSize && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : catalogPrice;
             // Pre-Order (qty > stock): whole line is deferred, stock allocated later at
             // receive (FIFO, paid-only). ADMIN-ONLY. Custom size takes precedence — a
             // custom (off-catalog) line is never a PO since it has no inventory to wait for.
@@ -2132,7 +2140,7 @@ app.post('/api/orders', async (req, res) => {
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
         // Public checkout kirim semantic value ('bank_transfer'/'qris'); admin form
         // dashboard pakai value lama (BCA/Mandiri/QRIS/Bonus-Free) — keduanya diterima.
-        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Bonus/Free','bank_transfer','qris'];
+        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Bonus/Free','bank_transfer','qris'];
         const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
 
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED

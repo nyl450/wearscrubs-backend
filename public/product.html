@@ -825,12 +825,18 @@
         try {
             const bordirNama = currentProduct.category === 'tops' && document.getElementById('bordir-nama-cb').checked;
             const bordirLogo = currentProduct.category === 'tops' && document.getElementById('bordir-logo-cb').checked;
+            // Harga per variant (Lengan Pendek vs Panjang beda harga di price_by_type).
+            // currentProduct.price = harga termurah (min) → JANGAN dipakai langsung, nanti
+            // cart/checkout tampil lebih murah dari yang ditagih server. Resolve per tipe.
+            const variantPrice = (currentProduct.price_by_type && currentProduct.price_by_type[selectedType] != null)
+                ? Number(currentProduct.price_by_type[selectedType])
+                : Number(currentProduct.price);
             const item = {
                 product_id: currentProduct.id,
                 name: currentProduct.name,
                 category: currentProduct.category,
-                price: currentProduct.price,
-                price_formatted: currentProduct.price_formatted,
+                price: variantPrice,
+                price_formatted: 'Rp ' + Number(variantPrice).toLocaleString('id-ID'),
                 color: selectedColor,
                 type: selectedType,
                 size: selectedSize,
