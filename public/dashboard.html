@@ -1065,24 +1065,31 @@
         </div>
 
         <!-- Filter periode -->
-        <div class="bg-darkcard border border-white/10 rounded-2xl p-3 space-y-3">
+        <!-- overflow-hidden: safety net agar native iOS date input tak jebol keluar card -->
+        <div class="bg-darkcard border border-white/10 rounded-2xl p-3 sm:p-4 space-y-3 overflow-hidden">
+            <!-- Preset chips: wrap di semua viewport, lebih compact di mobile -->
             <div class="flex flex-wrap gap-1.5">
                 <button data-preset="today" onclick="reportPreset('today')" class="report-preset">Hari ini</button>
                 <button data-preset="week" onclick="reportPreset('week')" class="report-preset">Minggu ini</button>
                 <button data-preset="month" onclick="reportPreset('month')" class="report-preset">Bulan ini</button>
                 <button data-preset="year" onclick="reportPreset('year')" class="report-preset">Tahun ini</button>
             </div>
-            <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2">
-                <div class="flex-1 min-w-0">
+            <!-- Date range: side-by-side 50/50 di mobile (hemat vertikal + visual seimbang),
+                 inline dgn tombol & range label di desktop. min-w-0 di grid items WAJIB
+                 supaya native input tak memaksa kolom melebar di atas 50%. -->
+            <div class="grid grid-cols-2 gap-2 items-end sm:grid-cols-[1fr_1fr_auto_1fr]">
+                <div class="min-w-0">
                     <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Dari</label>
-                    <input type="date" id="report-from" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                    <input type="date" id="report-from" class="block w-full max-w-full" style="box-sizing:border-box" />
                 </div>
-                <div class="flex-1 min-w-0">
+                <div class="min-w-0">
                     <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Sampai</label>
-                    <input type="date" id="report-to" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                    <input type="date" id="report-to" class="block w-full max-w-full" style="box-sizing:border-box" />
                 </div>
-                <button onclick="loadReport()" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition text-sm font-bold">Terapkan</button>
-                <span id="report-range-label" class="text-xs text-white/40 sm:ml-auto self-center"></span>
+                <!-- Tombol: full-width col-span-2 di mobile (di bawah dua tanggal), auto di desktop -->
+                <button onclick="loadReport()" class="col-span-2 sm:col-span-1 w-full px-4 py-2 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition text-sm font-bold">Terapkan</button>
+                <!-- Range label: caption centered di mobile, kanan di desktop -->
+                <span id="report-range-label" class="col-span-2 sm:col-span-1 text-[11px] text-white/40 text-center sm:text-right self-center truncate"></span>
             </div>
         </div>
 
