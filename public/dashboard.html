@@ -6575,7 +6575,7 @@ function waAddItem() {
                 <label class="wa-field-label">Produk</label>
                 <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})">
                     <option value="">-- Pilih Produk --</option>
-                    ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-cat="${p.category||''}">${p.name} — Rp ${Number(p.price).toLocaleString('id-ID')}</option>`).join('')}
+                    ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-cat="${p.category||''}">${p.name} — ${waProductPriceLabel(p)}</option>`).join('')}
                 </select>
             </div>
             <div class="grid grid-cols-3 gap-2">
@@ -7073,6 +7073,19 @@ function waRenderDiscountUI() {
     if (lbl) lbl.classList.add(`border-${color}-500/40`, `bg-${color}-500/5`);
     if (dot) dot.classList.remove('hidden');
     if (radio) radio.classList.add(`border-${color}-400`);
+}
+
+// Label harga di dropdown produk:
+// - Produk variant tunggal (caps/pants/tops 1-variant): "Rp 245.000"
+// - Produk multi-variant (tops dgn lengan pendek+panjang): "Rp 245.000 / Rp 260.000"
+//   supaya admin lihat range langsung tanpa harus pilih variant dulu.
+function waProductPriceLabel(p) {
+    if (p && p.price_by_type && typeof p.price_by_type === 'object') {
+        const vals = Object.values(p.price_by_type).map(Number).filter(n => n > 0);
+        const unique = [...new Set(vals)].sort((a, b) => a - b);
+        if (unique.length > 1) return unique.map(v => 'Rp ' + v.toLocaleString('id-ID')).join(' / ');
+    }
+    return 'Rp ' + Number(p && p.price || 0).toLocaleString('id-ID');
 }
 
 // Harga satuan katalog untuk item non-custom. Tops/gown bisa beda harga per variant

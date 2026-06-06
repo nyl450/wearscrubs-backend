@@ -1882,7 +1882,7 @@ app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res
             [r.from, r.to]
         );
         const refMap = Object.fromEntries(refRows.map(x => [x.source, Number(x.refunds)]));
-        const all = ['website', 'whatsapp', 'event_offline', 'offline'];
+        const all = ['website', 'whatsapp', 'event_offline', 'offline', 'collaboration_event'];
         const byKey = Object.fromEntries(rows.map(x => [x.source, x]));
         const out = all.map(src => {
             const row = byKey[src] || { orders: 0, gross: 0, discount: 0 };
