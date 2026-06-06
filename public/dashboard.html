@@ -463,7 +463,7 @@
                 <span id="orders-badge" class="hidden ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
             </button>
             <button onclick="showModule('manual-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="manual-order">
-                <i class="fa-brands fa-whatsapp w-4 text-xs"></i> Input Order WA
+                <i class="fa-solid fa-cash-register w-4 text-xs"></i> Kasir
             </button>
             <button onclick="showModule('preorder')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="preorder">
                 <i class="fa-solid fa-clock w-4 text-xs"></i> Pre-Order
@@ -744,11 +744,11 @@
         <!-- Page Header -->
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0">
-            <i class="fa-brands fa-whatsapp text-green-400 text-lg"></i>
+            <i class="fa-solid fa-cash-register text-green-400 text-lg"></i>
           </div>
           <div>
-            <h2 class="text-base font-bold text-white">Input Order WhatsApp</h2>
-            <p class="text-xs text-white/40 mt-0.5">Catat pesanan dari dokter yang order via WA</p>
+            <h2 class="text-base font-bold text-white">Kasir</h2>
+            <p class="text-xs text-white/40 mt-0.5">Catat pesanan apa pun: walk-in toko, event/bazar, atau order via WhatsApp</p>
           </div>
         </div>
 
@@ -1166,8 +1166,8 @@
         </div>
 
         <div class="bg-darkcard border border-darkborder rounded-2xl p-5 space-y-2 text-sm">
-            <h3 class="font-bold text-base">2. Mencatat Order dari WhatsApp</h3>
-            <p class="text-white/70">Menu <b>Input Order WA</b>:</p>
+            <h3 class="font-bold text-base">2. Mencatat Pesanan (Kasir)</h3>
+            <p class="text-white/70">Menu <b>Kasir</b> (walk-in toko, event/bazar, atau order via WhatsApp):</p>
             <ol class="list-decimal pl-5 space-y-1 text-white/70">
                 <li>Isi <b>Data Pelanggan</b> (nama, no WA, kota, alamat, berat, ekspedisi, ongkir, metode bayar). Pilih ekspedisi <b>"Free Ongkir"</b>/<b>"Kirim sendiri"</b> → ongkir otomatis 0.</li>
                 <li>Pilih <b>Produk → Warna → Variant → Ukuran → Jumlah</b>. Muncul info stok (hijau aman / kuning menipis / merah habis).</li>
@@ -6173,7 +6173,7 @@ const MENU_DEFS = [
     { key: 'inventory',    label: 'Inventori',      icon: 'fa-warehouse',    editable: true },
     { key: 'popular',      label: 'Popular',        icon: 'fa-star',         editable: true },
     { key: 'orders',       label: 'Pesanan',        icon: 'fa-bag-shopping', editable: true },
-    { key: 'manual-order', label: 'Input Order WA', icon: 'fa-cart-plus',    editable: true },
+    { key: 'manual-order', label: 'Kasir', icon: 'fa-cash-register',    editable: true },
     { key: 'preorder',     label: 'Pre-Order',      icon: 'fa-clock',        editable: false },
     { key: 'refund',       label: 'Refund',         icon: 'fa-rotate-left',  editable: true },
     { key: 'exchange',     label: 'Tukar Size',     icon: 'fa-right-left',   editable: true },

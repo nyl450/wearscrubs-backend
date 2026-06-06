@@ -22,7 +22,7 @@ Tidak perlu paham teknologi — ikuti saja urutannya. Kalau bingung, hubungi Jam
 - **Inventori** — stok per ukuran/warna + **Terima Stok**.
 - **Popular** — atur produk "Terlaris" di website.
 - **Pesanan** — semua order + proses dari bayar sampai kirim.
-- **Input Order WA** — catat pesanan yang masuk lewat WhatsApp.
+- **Kasir** — catat pesanan apa pun: walk-in toko, event/bazar, atau order via WhatsApp.
 - **Pre-Order** — antrian pesanan yang menunggu stok / sedang dijahit.
 - **Refund** — pengembalian uang (khusus bordir yang ditolak).
 - **Tukar Size** — penukaran ukuran.
@@ -40,10 +40,10 @@ Stok **otomatis berkurang** saat Anda konfirmasi pembayaran. Anda tinggal mengik
 
 ---
 
-## 4. Mencatat Order dari WhatsApp (Input Order WA)
-Saat dokter pesan via WA, catat di sini.
+## 4. Mencatat Pesanan — Kasir
+Catat pesanan apa pun di sini: pelanggan datang langsung ke toko (walk-in), penjualan di event/bazar, atau order yang masuk lewat WhatsApp.
 
-1. Klik menu **Input Order WA**.
+1. Klik menu **Kasir**.
 2. **Data Pelanggan** — isi:
    - Nama Dokter/Pelanggan, Nomor WhatsApp, Kota Pengiriman, Alamat Lengkap.
    - Berat Paket (kg), Ekspedisi, Ongkos Kirim, Metode Pembayaran. (Catatan opsional.)
