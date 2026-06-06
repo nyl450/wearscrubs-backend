@@ -109,6 +109,66 @@ function requireAuth(roles = []) {
     };
 }
 
+// ─── Per-menu permissions (admin = full; staff = map {menu: 'view'|'edit'}) ─────
+// Canonical menu keys. EDITABLE = menus that have write actions (can be 'edit').
+const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','preorder','refund','exchange','report'];
+const EDITABLE_MENUS = ['products','inventory','popular','orders','manual-order','refund','exchange'];
+
+// Normalize a user's stored permission into a map {menu:'view'|'edit'}.
+// Returns null for admin (full access sentinel). Legacy formats degrade to least
+// privilege (view) so an old token can never silently gain edit, and a legacy
+// "null = all" token still navigates (view) instead of being locked out.
+function permMap(user) {
+    if (!user || user.role === 'admin') return null;          // admin → full
+    const am = user.allowed_menus;
+    if (am == null) return Object.fromEntries(MENU_KEYS.map(m => [m, 'view'])); // legacy null → all view
+    if (Array.isArray(am)) return Object.fromEntries(am.map(m => [m, 'view']));  // legacy array → view
+    if (typeof am === 'object') return am;                    // new map
+    return {};
+}
+function hasMenu(user, menu, level = 'view') {
+    const pm = permMap(user);
+    if (pm === null) return true;                             // admin
+    const lv = pm[menu];
+    if (!lv) return false;
+    return level === 'view' ? true : lv === 'edit';
+}
+// Validate/clean a permission map coming from the client (admin user mgmt form).
+// Keeps only known menus + valid levels; non-editable menus clamped to 'view'.
+function sanitizePermsInput(allowed_menus) {
+    const out = {};
+    if (allowed_menus && typeof allowed_menus === 'object' && !Array.isArray(allowed_menus)) {
+        for (const [k, v] of Object.entries(allowed_menus)) {
+            if (!MENU_KEYS.includes(k)) continue;
+            let lv = v === 'edit' ? 'edit' : v === 'view' ? 'view' : null;
+            if (!lv) continue;
+            if (lv === 'edit' && !EDITABLE_MENUS.includes(k)) lv = 'view';
+            out[k] = lv;
+        }
+    }
+    return out;
+}
+// Middleware: gate endpoint behind a menu + level (verifies token like requireAuth).
+function requireMenu(menu, level = 'view') {
+    return (req, res, next) => {
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        if (!token) return res.status(401).json({ error: 'Autentikasi diperlukan.' });
+        try {
+            const user = jwt.verify(token, JWT_SECRET);
+            req.user = user;
+            if (!hasMenu(user, menu, level)) {
+                return res.status(403).json({ error: level === 'edit'
+                    ? 'Akses ditolak. Anda hanya punya akses lihat (view-only) untuk menu ini.'
+                    : 'Akses ditolak. Anda tidak punya akses ke menu ini.' });
+            }
+            next();
+        } catch {
+            res.status(401).json({ error: 'Token tidak valid atau sudah kadaluarsa.' });
+        }
+    };
+}
+
 // Optional auth — decode user if a valid token is present, else null.
 // Used by public endpoints that grant extra capability to logged-in admins.
 function getOptionalUser(req) {
@@ -476,6 +536,35 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ DEFAULT NULL`);
     await dbRun(`UPDATE orders SET paid_at = updated_at WHERE payment_status = 'paid' AND paid_at IS NULL`).catch(() => {});
 
+    // ── Migrate: per-menu permission model (role manager/viewer → staff + map) ─────
+    // Permission lama = role global (manager edit / viewer view) + allowed_menus (list
+    // visibility). Baru = admin (full) atau staff dengan peta {menu:'view'|'edit'}.
+    // Konversi otomatis biar akses efektif TIDAK berubah (anti-lockout):
+    //   manager → semua menu / menu yang diizinkan jadi 'edit'; viewer → 'view'.
+    await dbRun(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`).catch(() => {});
+    await dbRun(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK(role IN ('admin','staff','manager','viewer'))`).catch(() => {});
+    try {
+        const legacyUsers = await dbAll("SELECT id, role, allowed_menus FROM users WHERE role IN ('manager','viewer')");
+        for (const u of legacyUsers) {
+            const level = u.role === 'viewer' ? 'view' : 'edit';
+            let parsed = null;
+            try { parsed = u.allowed_menus ? JSON.parse(u.allowed_menus) : null; } catch { parsed = null; }
+            let map;
+            if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+                map = parsed; // already a map (idempotent safety)
+            } else {
+                const menus = Array.isArray(parsed) ? parsed : MENU_KEYS; // null (all) → all menus
+                map = Object.fromEntries(menus.map(m => [m, level]));
+            }
+            // Non-editable menus can never be 'edit' → clamp to 'view'.
+            for (const k of Object.keys(map)) {
+                if (!EDITABLE_MENUS.includes(k) && map[k] === 'edit') map[k] = 'view';
+            }
+            await dbRun("UPDATE users SET role = 'staff', allowed_menus = $1 WHERE id = $2", [JSON.stringify(map), u.id]);
+        }
+        if (legacyUsers.length) console.log(`[migrate] converted ${legacyUsers.length} user(s) manager/viewer → staff (per-menu permissions)`);
+    } catch (e) { console.error('[migrate] permission conversion failed:', e?.message || e); }
+
     // ── Migrate: tracking_number for shipment ─────────────────────────────────
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`).catch(() => {});
     // ── Migrate: track which admin performed each order photo step ─────────────
@@ -836,20 +925,19 @@ app.post('/api/admin/users', requireAuth(['admin']), async (req, res) => {
     try {
         const { username, password, role, allowed_menus } = req.body;
         if (!username || !password || !role) return res.status(400).json({ error: 'Semua field wajib diisi.' });
-        if (!['admin', 'manager', 'viewer'].includes(role)) return res.status(400).json({ error: 'Role tidak valid.' });
+        if (!['admin', 'staff'].includes(role)) return res.status(400).json({ error: 'Role tidak valid (admin / staff).' });
         if (password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter.' });
 
         const hash = await bcrypt.hash(password, 10);
-        const allowedMenusStr = (Array.isArray(allowed_menus) && allowed_menus.length > 0)
-            ? JSON.stringify(allowed_menus) : null;
+        // admin = full (allowed_menus null). staff = explicit per-menu map.
+        const allowedMenusStr = role === 'admin' ? null : JSON.stringify(sanitizePermsInput(allowed_menus));
 
-        // GANTI: ? → $1,$2,$3,$4 | tambah RETURNING id
         const result = await dbRun(
             'INSERT INTO users (username, password_hash, role, allowed_menus) VALUES ($1, $2, $3, $4) RETURNING id',
             [username.trim(), hash, role, allowedMenusStr]
         );
-        const newId = result.rows[0].id; // GANTI: result.lastID → result.rows[0].id
-        res.json({ id: newId, username, role, allowed_menus: allowed_menus || null });
+        const newId = result.rows[0].id;
+        res.json({ id: newId, username, role, allowed_menus: allowedMenusStr ? JSON.parse(allowedMenusStr) : null });
     } catch (err) {
         if (err.message.includes('unique') || err.message.includes('UNIQUE'))
             return res.status(409).json({ error: 'Username sudah digunakan.' });
@@ -863,10 +951,19 @@ app.patch('/api/admin/users/:id', requireAuth(['admin']), async (req, res) => {
         const { id } = req.params;
         const { role, password, is_active, allowed_menus } = req.body;
 
-        // GANTI: ? → $1, $2
+        // Anti-lockout: jangan sampai sistem kehilangan admin aktif terakhir.
+        const target = await dbGet('SELECT role FROM users WHERE id = $1', [id]);
+        if (!target) return res.status(404).json({ error: 'User tidak ditemukan.' });
+        const adminCount = (await dbGet("SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND is_active = 1")).n;
+        const demotingLastAdmin = target.role === 'admin' && role && role !== 'admin' && adminCount <= 1;
+        const deactivatingLastAdmin = target.role === 'admin' && (is_active === false || is_active === 0) && adminCount <= 1;
+        if (demotingLastAdmin || deactivatingLastAdmin)
+            return res.status(400).json({ error: 'Tidak bisa menurunkan/menonaktifkan admin terakhir.' });
+
         if (role) {
-            if (!['admin', 'manager', 'viewer'].includes(role)) return res.status(400).json({ error: 'Role tidak valid.' });
+            if (!['admin', 'staff'].includes(role)) return res.status(400).json({ error: 'Role tidak valid (admin / staff).' });
             await dbRun('UPDATE users SET role = $1 WHERE id = $2', [role, id]);
+            if (role === 'admin') await dbRun('UPDATE users SET allowed_menus = NULL WHERE id = $1', [id]); // admin = full
         }
         if (password) {
             if (password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter.' });
@@ -877,9 +974,9 @@ app.patch('/api/admin/users/:id', requireAuth(['admin']), async (req, res) => {
             await dbRun('UPDATE users SET is_active = $1 WHERE id = $2', [is_active ? 1 : 0, id]);
         }
         if (allowed_menus !== undefined) {
-            const allowedMenusStr = (Array.isArray(allowed_menus) && allowed_menus.length > 0)
-                ? JSON.stringify(allowed_menus) : null;
-            await dbRun('UPDATE users SET allowed_menus = $1 WHERE id = $2', [allowedMenusStr, id]);
+            const effRole = role || target.role;
+            const str = effRole === 'admin' ? null : JSON.stringify(sanitizePermsInput(allowed_menus));
+            await dbRun('UPDATE users SET allowed_menus = $1 WHERE id = $2', [str, id]);
         }
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -909,7 +1006,12 @@ app.delete('/api/admin/users/:id', requireAuth(['admin']), async (req, res) => {
     try {
         const { id } = req.params;
         if (parseInt(id) === req.user.id) return res.status(400).json({ error: 'Tidak bisa menghapus akun sendiri.' });
-        // GANTI: ? → $1
+        // Anti-lockout: jangan hapus admin aktif terakhir.
+        const target = await dbGet('SELECT role FROM users WHERE id = $1', [id]);
+        if (target && target.role === 'admin') {
+            const adminCount = (await dbGet("SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND is_active = 1")).n;
+            if (adminCount <= 1) return res.status(400).json({ error: 'Tidak bisa menghapus admin terakhir.' });
+        }
         await dbRun('DELETE FROM users WHERE id = $1', [id]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -963,7 +1065,7 @@ app.get('/api/products/popular', async (req, res) => {
 });
 
 // PUT /api/products/popular
-app.put('/api/products/popular', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/products/popular', requireMenu('popular','edit'), async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length > 4)
@@ -1006,7 +1108,7 @@ app.get('/api/products/:id', async (req, res) => {
 });
 
 // POST /api/products
-app.post('/api/products', requireAuth(['admin','manager']), upload.any(), async (req, res) => {
+app.post('/api/products', requireMenu('products','edit'), upload.any(), async (req, res) => {
     try {
         const { sku, name, category, price, short_description, long_description,
             short_description_en, long_description_en,
@@ -1105,7 +1207,7 @@ app.post('/api/products', requireAuth(['admin','manager']), upload.any(), async 
 });
 
 // PUT /api/products/:id
-app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), async (req, res) => {
+app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async (req, res) => {
     try {
         const { name, category, price, short_description, long_description,
             short_description_en, long_description_en,
@@ -1236,7 +1338,7 @@ app.put('/api/products/:id', requireAuth(['admin','manager']), upload.any(), asy
 
 
 // DELETE /api/products/:id (soft delete — preserves order history)
-app.delete('/api/products/:id', requireAuth(['admin','manager']), async (req, res) => {
+app.delete('/api/products/:id', requireMenu('products','edit'), async (req, res) => {
     try {
         await dbRun('UPDATE products SET is_active = FALSE WHERE id = $1', [req.params.id]);
         invalidateCache('products');
@@ -1401,7 +1503,7 @@ app.get('/api/inventory/:product_id/check', async (req, res) => {
 });
 
 // POST /api/inventory/receive — terima stok dari penjahit, support normal & reject
-app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req, res) => {
+app.post('/api/inventory/receive', requireMenu('inventory','edit'), async (req, res) => {
     try {
         const { product_id, size, color, variant_type, quantity, note, stock_type } = req.body;
         if (!product_id || !size || !color || !variant_type)
@@ -1502,7 +1604,7 @@ app.post('/api/inventory/receive', requireAuth(['admin','manager']), async (req,
 });
 
 // PUT /api/inventory/reject-to-normal — ubah stok reject menjadi stok normal
-app.put('/api/inventory/reject-to-normal', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/inventory/reject-to-normal', requireMenu('inventory','edit'), async (req, res) => {
     try {
         const { product_id, size, color, variant_type, quantity } = req.body;
         if (!product_id || !size || !color || !variant_type)
@@ -1561,7 +1663,7 @@ function buildStockNote(reason, freeText, fallback = 'Koreksi Salah Input') {
 }
 
 // PUT /api/inventory/single — update stok manual, log ke stock_movements
-app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/inventory/single', requireMenu('inventory','edit'), async (req, res) => {
     try {
         const { product_id, size, color, variant_type, stock, reason, note } = req.body;
         const after = parseInt(stock);
@@ -1601,7 +1703,7 @@ app.put('/api/inventory/single', requireAuth(['admin','manager']), async (req, r
 // POST /api/inventory/bulk — apply same operation (set/add/subtract) to multiple
 // variants at once. All in one transaction, all-or-nothing. Logs one movement
 // per changed cell. Cell list capped at 200 for safety.
-app.post('/api/inventory/bulk', requireAuth(['admin','manager']), async (req, res) => {
+app.post('/api/inventory/bulk', requireMenu('inventory','edit'), async (req, res) => {
     try {
         const { operation, value, cells, reason, note } = req.body;
         if (!['set', 'add', 'subtract'].includes(operation))
@@ -1725,7 +1827,7 @@ function reportRange(req) {
 }
 
 // GET /api/reports/sales?from=YYYY-MM-DD&to=YYYY-MM-DD
-app.get('/api/reports/sales', requireAuth(['admin']), async (req, res) => {
+app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => {
     try {
         const r = reportRange(req);
         if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
@@ -1751,7 +1853,7 @@ app.get('/api/reports/sales', requireAuth(['admin']), async (req, res) => {
 });
 
 // GET /api/reports/sales-type — breakdown per channel (website/whatsapp/event_offline/offline)
-app.get('/api/reports/sales-type', requireAuth(['admin']), async (req, res) => {
+app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res) => {
     try {
         const r = reportRange(req);
         if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
@@ -1788,7 +1890,7 @@ app.get('/api/reports/sales-type', requireAuth(['admin']), async (req, res) => {
 });
 
 // GET /api/reports/items — barang terjual (exclude bonus/gift) dalam periode
-app.get('/api/reports/items', requireAuth(['admin']), async (req, res) => {
+app.get('/api/reports/items', requireMenu('report','view'), async (req, res) => {
     try {
         const r = reportRange(req);
         if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
@@ -1934,7 +2036,10 @@ app.post('/api/orders', async (req, res) => {
         // Computed up-front because it gates is_bonus (free items) and discount below —
         // a public caller must never be able to zero out prices.
         const authUser = getOptionalUser(req);
-        const isAdmin = authUser && ['admin','manager'].includes(authUser.role);
+        // "Admin powers" (custom price, bonus, discount, non-website source) require the
+        // manual-order EDIT permission (or a full admin). A logged-in staff without it is
+        // treated as a public caller — cannot tamper prices or fake offline sales.
+        const isAdmin = !!authUser && (authUser.role === 'admin' || hasMenu(authUser, 'manual-order', 'edit'));
 
         // Validate every line qty is a positive integer BEFORE any stock/price math.
         // Without this, a negative/zero/non-integer qty would pass the stock check
@@ -2201,7 +2306,7 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // PUT /api/orders/:id/confirm-payment  (multipart: payment_proof photo)
-app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upload.single('payment_proof'), async (req, res) => {
+app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.single('payment_proof'), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -2320,7 +2425,7 @@ app.put('/api/orders/:id/confirm-payment', requireAuth(['admin','manager']), upl
 });
 
 // PUT /api/orders/:id/bordir-done  (multipart: bordir_proof photo)
-app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.single('bordir_proof'), async (req, res) => {
+app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.single('bordir_proof'), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -2356,7 +2461,7 @@ app.put('/api/orders/:id/bordir-done', requireAuth(['admin','manager']), upload.
 });
 
 // PUT /api/orders/:id/pack  (multipart: pack_proof photo)
-app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single('pack_proof'), async (req, res) => {
+app.put('/api/orders/:id/pack', requireMenu('orders','edit'), upload.single('pack_proof'), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -2402,7 +2507,7 @@ app.put('/api/orders/:id/pack', requireAuth(['admin','manager']), upload.single(
 // PUT /api/orders/:id/ship  (multipart: tracking_number wajib + ship_proof opsional)
 // Status transition: packed → shipped. Records tracking number and (optionally)
 // a delivery photo. Sends WA notification to the customer with the resi.
-app.put('/api/orders/:id/ship', requireAuth(['admin','manager']), upload.single('ship_proof'), async (req, res) => {
+app.put('/api/orders/:id/ship', requireMenu('orders','edit'), upload.single('ship_proof'), async (req, res) => {
     try {
         const tracking = (req.body.tracking_number || '').trim();
         const courierOverride = (req.body.shipping_courier_final || '').trim();
@@ -2639,7 +2744,7 @@ const STATUS_FORWARD = {
     cancelled:       [],
 };
 
-app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/orders/:id/status', requireMenu('orders','edit'), async (req, res) => {
     try {
         const { order_status } = req.body;
         const valid = ['waiting_payment', 'confirmed', 'packed', 'shipped', 'done', 'cancelled', 'bordir'];
@@ -2679,7 +2784,7 @@ app.put('/api/orders/:id/status', requireAuth(['admin','manager']), async (req, 
 // Per-type rejection lets admin reject only the logo while approving the name
 // (or vice versa). Auto-creates refund records for each rejected type with the
 // matching per-item embroidery cost.
-app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+app.put('/api/orders/:id/bordir-review', requireMenu('orders','edit'), upload.none(), async (req, res) => {
     try {
         const { action, reason, reject_types } = req.body;
         if (!['approve','reject'].includes(action))
@@ -2816,7 +2921,7 @@ app.put('/api/orders/:id/bordir-review', requireAuth(['admin','manager']), uploa
 });
 
 // PUT /api/orders/:id/request-logo — mark logo requested + send WA to customer
-app.put('/api/orders/:id/request-logo', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+app.put('/api/orders/:id/request-logo', requireMenu('orders','edit'), upload.none(), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -2889,7 +2994,7 @@ app.get('/api/refunds/:id', requireAuth(), async (req, res) => {
 //   - transferred → only `note` (locked: amount/bank/reason since transfer proof
 //                    & WA already sent to customer with those values)
 //   - completed / cancelled → nothing editable
-app.put('/api/refunds/:id', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/refunds/:id', requireMenu('refund','edit'), async (req, res) => {
     try {
         const refund = await dbGet('SELECT status FROM refunds WHERE id = $1', [req.params.id]);
         if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
@@ -2939,7 +3044,7 @@ app.put('/api/refunds/:id', requireAuth(['admin','manager']), async (req, res) =
 // Refund must be in 'pending' state. Re-upload to overwrite a wrong proof is
 // blocked — admin must cancel the refund record and create a manual one
 // (preserves audit trail of what was originally uploaded + when).
-app.put('/api/refunds/:id/mark-transferred', requireAuth(['admin','manager']), upload.single('proof'), async (req, res) => {
+app.put('/api/refunds/:id/mark-transferred', requireMenu('refund','edit'), upload.single('proof'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Foto bukti transfer wajib diupload' });
         const refund = await dbGet('SELECT * FROM refunds WHERE id = $1', [req.params.id]);
@@ -2980,7 +3085,7 @@ app.put('/api/refunds/:id/mark-transferred', requireAuth(['admin','manager']), u
 });
 
 // PUT /api/refunds/:id/mark-completed — customer sudah confirm terima
-app.put('/api/refunds/:id/mark-completed', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/refunds/:id/mark-completed', requireMenu('refund','edit'), async (req, res) => {
     try {
         const refund = await dbGet('SELECT status FROM refunds WHERE id = $1', [req.params.id]);
         if (!refund) return res.status(404).json({ error: 'Refund tidak ditemukan' });
@@ -3106,7 +3211,7 @@ app.get('/api/orders/:id/exchanges', requireAuth(), async (req, res) => {
 
 // POST /api/orders/:id/exchanges — create exchange request (status=pending, no stock move yet)
 // Body: { order_item_id, to_size, quantity, reason ('size_mismatch'|'defect'), note?, shipping_fee? }
-app.post('/api/orders/:id/exchanges', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+app.post('/api/orders/:id/exchanges', requireMenu('exchange','edit'), upload.none(), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -3151,7 +3256,7 @@ app.post('/api/orders/:id/exchanges', requireAuth(['admin','manager']), upload.n
 });
 
 // PUT /api/exchanges/:id/approve — reserve replacement stock (to_size -1). status=approved.
-app.put('/api/exchanges/:id/approve', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/exchanges/:id/approve', requireMenu('exchange','edit'), async (req, res) => {
     try {
         const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
         if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
@@ -3192,7 +3297,7 @@ app.put('/api/exchanges/:id/approve', requireAuth(['admin','manager']), async (r
 
 // PUT /api/exchanges/:id/receive-return — old item physically returned.
 // size_mismatch → stok jual +qty; defect → stock_reject +qty.
-app.put('/api/exchanges/:id/receive-return', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/exchanges/:id/receive-return', requireMenu('exchange','edit'), async (req, res) => {
     try {
         const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
         if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
@@ -3240,7 +3345,7 @@ app.put('/api/exchanges/:id/receive-return', requireAuth(['admin','manager']), a
 });
 
 // PUT /api/exchanges/:id/complete — replacement shipped + cycle done. Requires return received.
-app.put('/api/exchanges/:id/complete', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/exchanges/:id/complete', requireMenu('exchange','edit'), async (req, res) => {
     try {
         const ex = await dbGet('SELECT * FROM exchanges WHERE id = $1', [req.params.id]);
         if (!ex) return res.status(404).json({ error: 'Exchange tidak ditemukan' });
@@ -3327,7 +3432,7 @@ app.put('/api/exchanges/:id/cancel', requireAuth(['admin']), upload.none(), asyn
 // Body: { to_size }. Stock-aware: if order already paid, stock was deducted at
 // confirm-payment, so we restore old size (+qty) and deduct new size (-qty).
 // If still pending, no stock movement (deduction happens later at confirm-payment).
-app.put('/api/orders/:id/items/:itemId/size', requireAuth(['admin','manager']), upload.none(), async (req, res) => {
+app.put('/api/orders/:id/items/:itemId/size', requireMenu('orders','edit'), upload.none(), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
@@ -3410,7 +3515,7 @@ app.put('/api/orders/:id/items/:itemId/size', requireAuth(['admin','manager']), 
 // admin marks it ready manually once the garment is sewn. Catalog PO is NOT handled here —
 // it's fulfilled automatically (FIFO) at stock receive; allowing a manual flip would skip
 // the stock deduction and desync inventory. No stock mutation here (custom has none).
-app.put('/api/orders/:id/items/:itemId/fulfill-po', requireAuth(['admin','manager']), async (req, res) => {
+app.put('/api/orders/:id/items/:itemId/fulfill-po', requireMenu('orders','edit'), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
