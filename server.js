@@ -526,9 +526,13 @@ async function initDB() {
 
     // ── Migrate: expand order_source (add offline channels for POS-ready reports) ──
     // website = toko online, whatsapp = order manual via WA, event_offline = bazar/
-    // pameran (consignment), offline = walk-in toko. Drop inline CHECK, recreate wider.
+    // pameran (jualan langsung), offline = walk-in toko, collaboration_event =
+    // kerjasama pihak ke-2 (pembeli bayar ke partner, invoice ditagih ke partner
+    // dengan consignment 30%). Drop inline CHECK, recreate wider.
     await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_source_check`).catch(() => {});
-    await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_source_check CHECK(order_source IN ('website','whatsapp','event_offline','offline'))`).catch(() => {});
+    await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_source_check CHECK(order_source IN ('website','whatsapp','event_offline','offline','collaboration_event'))`).catch(() => {});
+    // billing_to = nama pihak yang ditagih (partner) untuk order collaboration_event.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_to TEXT DEFAULT NULL`);
 
     // ── Migrate: paid_at timestamp (basis tanggal untuk laporan sales) ────────────
     // Diisi NOW() saat confirm-payment. Backfill order paid LAMA dari updated_at
@@ -2028,7 +2032,8 @@ app.post('/api/orders', async (req, res) => {
             shipping_weight_kg,
             order_source,    // 'website' atau 'whatsapp', default 'website'
             payment_method,  // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
-            discount_percent // 0, 5, atau 30 — hanya untuk WA order
+            discount_percent,// 0, 5, atau 30 — hanya untuk WA order
+            billing_to       // nama partner yang ditagih (collaboration_event), admin-only
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
@@ -2131,7 +2136,7 @@ app.post('/api/orders', async (req, res) => {
         // order_source: only admin may set a non-website channel. Public is always
         // 'website' — prevents a public caller from suppressing the admin "new order"
         // WA notification or faking an offline/event sale.
-        const ADMIN_SOURCES = ['whatsapp', 'event_offline', 'offline'];
+        const ADMIN_SOURCES = ['whatsapp', 'event_offline', 'offline', 'collaboration_event'];
         const safeOrderSource = isAdmin
             ? (order_source === 'website' ? 'website'
                : ADMIN_SOURCES.includes(order_source) ? order_source : 'whatsapp')
@@ -2142,6 +2147,13 @@ app.post('/api/orders', async (req, res) => {
         // dashboard pakai value lama (BCA/Mandiri/QRIS/Bonus-Free) — keduanya diterima.
         const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Bonus/Free','bank_transfer','qris'];
         const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
+
+        // billing_to: nama partner yang ditagih. Admin-only & hanya relevan untuk
+        // collaboration_event; selain itu dipaksa null. Batasi panjang (anti-abuse).
+        const safeBillingTo = (isAdmin && safeOrderSource === 'collaboration_event'
+            && typeof billing_to === 'string' && billing_to.trim())
+            ? billing_to.trim().slice(0, 120)
+            : null;
 
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED
         // server-side from city + qty (same rule as /api/shipping-cost) so the client
@@ -2200,8 +2212,8 @@ app.post('/api/orders', async (req, res) => {
                 `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
-                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
+                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
@@ -2213,7 +2225,8 @@ app.post('/api/orders', async (req, res) => {
                  safeDiscountPct,
                  discountAmount,
                  discountLabel,
-                 logoAlreadyProvided]
+                 logoAlreadyProvided,
+                 safeBillingTo]
             );
             const newOrderId = orderResult.rows[0].id;
 

@@ -811,11 +811,17 @@
               </div>
               <div>
                 <label class="wa-field-label">Sumber Order</label>
-                <select id="wa-order-source">
+                <select id="wa-order-source" onchange="waOnSourceChange()">
                   <option value="whatsapp">WhatsApp</option>
                   <option value="event_offline">Event Offline (Bazar/Pameran)</option>
                   <option value="offline">Offline (Walk-in Toko)</option>
+                  <option value="collaboration_event">Collaboration Event (Consignment)</option>
                 </select>
+              </div>
+              <div id="wa-billing-to-wrap" class="hidden sm:col-span-2">
+                <label class="wa-field-label">Ditagihkan Ke / Bill To (Partner) <span class="text-red-400">*</span></label>
+                <input type="text" id="wa-billing-to" placeholder="Nama pihak ke-2 / partner yang ditagih" />
+                <p class="text-[11px] text-amber-300/70 mt-1">Pembeli bayar ke partner & ambil barang langsung. Invoice ditagihkan ke partner ini (consignment 30%). Jangan lupa pilih diskon Consignment 30%.</p>
               </div>
               <div class="sm:col-span-2">
                 <label class="wa-field-label">Catatan <span class="wa-optional">(opsional)</span></label>
@@ -914,12 +920,14 @@
             <p class="text-[10px] text-white/40 mb-1 uppercase tracking-widest">Kode Invoice</p>
             <p id="wa-result-code" class="text-xl font-bold text-white tracking-wider"></p>
           </div>
-          <div class="bg-green-950/30 border border-green-500/10 rounded-xl p-4">
+          <!-- Instruksi pembayaran adaptif (diisi JS berdasarkan sumber + metode) -->
+          <div id="wa-result-instruction"></div>
+          <div id="wa-result-wa-block" class="bg-green-950/30 border border-green-500/10 rounded-xl p-4">
             <p class="text-[10px] text-white/40 mb-2 font-bold uppercase tracking-widest">Pesan WA Siap Kirim</p>
             <pre id="wa-result-message" class="text-sm text-white/80 whitespace-pre-wrap font-mono leading-relaxed"></pre>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button onclick="waSendToCustomer()" class="py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-brands fa-whatsapp"></i> Kirim ke WA Customer</button>
+            <button id="wa-result-send-btn" onclick="waSendToCustomer()" class="py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"><i class="fa-brands fa-whatsapp"></i> Kirim ke WA Customer</button>
             <button onclick="openInvoiceModal(window.waLastOrderId, waProductPhotoBase64s, waBordirRefBase64)" class="py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">📄 Print Invoice</button>
             <button onclick="waResetForm()" class="py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/70 font-medium text-sm transition-all">Order Baru</button>
           </div>
@@ -1064,17 +1072,17 @@
                 <button data-preset="month" onclick="reportPreset('month')" class="report-preset">Bulan ini</button>
                 <button data-preset="year" onclick="reportPreset('year')" class="report-preset">Tahun ini</button>
             </div>
-            <div class="flex flex-wrap items-end gap-2">
-                <div>
+            <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2">
+                <div class="flex-1 min-w-0">
                     <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Dari</label>
-                    <input type="date" id="report-from" class="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                    <input type="date" id="report-from" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
                 </div>
-                <div>
+                <div class="flex-1 min-w-0">
                     <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1">Sampai</label>
-                    <input type="date" id="report-to" class="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                    <input type="date" id="report-to" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
                 </div>
-                <button onclick="loadReport()" class="px-4 py-2 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition text-sm font-bold">Terapkan</button>
-                <span id="report-range-label" class="text-xs text-white/40 ml-auto self-center"></span>
+                <button onclick="loadReport()" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition text-sm font-bold">Terapkan</button>
+                <span id="report-range-label" class="text-xs text-white/40 sm:ml-auto self-center"></span>
             </div>
         </div>
 
@@ -2113,7 +2121,7 @@ function markViewOnly(name) {
 let reportCurrentTab = 'sales';
 function repRp(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
 function repSourceLabel(s) {
-    return ({ website: 'Website', whatsapp: 'WhatsApp', event_offline: 'Event Offline', offline: 'Offline (Walk-in)' })[s] || s;
+    return ({ website: 'Website', whatsapp: 'WhatsApp', event_offline: 'Event Offline', offline: 'Offline (Walk-in)', collaboration_event: 'Collaboration Event' })[s] || s;
 }
 // Badge sumber order — dipakai konsisten di daftar pesanan, detail, & riwayat pembeli.
 // Sebelumnya cuma bedakan whatsapp vs "Web", jadi event_offline/offline keliru tampil Web.
@@ -2123,6 +2131,7 @@ function orderSourceBadge(s) {
         whatsapp:      { icon: 'fa-brands fa-whatsapp',     label: 'WA',            cls: 'bg-green-500/15 text-green-400 border-green-500/20' },
         event_offline: { icon: 'fa-solid fa-store',         label: 'Event Offline', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/20' },
         offline:       { icon: 'fa-solid fa-shop',          label: 'Walk-in',       cls: 'bg-purple-500/15 text-purple-300 border-purple-500/20' },
+        collaboration_event: { icon: 'fa-solid fa-handshake', label: 'Collab',      cls: 'bg-pink-500/15 text-pink-300 border-pink-500/20' },
     };
     const m = map[s] || { icon: 'fa-solid fa-tag', label: esc(s || '—'), cls: 'bg-white/10 text-white/40 border-white/10' };
     return `<span class="status-badge border ${m.cls}"><i class="${m.icon} mr-1"></i>${m.label}</span>`;
@@ -5058,6 +5067,7 @@ async function viewOrder(id) {
                 </div>
                 ${isAdmin && waResiLink ? `<a href="${waResiLink}" target="_blank" class="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold transition shrink-0"><i class="fa-brands fa-whatsapp"></i> Kirim Resi ke Customer</a>` : ''}
             </div>` : ''}
+            ${o.billing_to ? `<div class="col-span-2 bg-pink-500/10 border border-pink-400/20 rounded-xl p-3"><p class="text-pink-300/70 text-xs mb-1"><i class="fa-solid fa-handshake"></i> Ditagihkan ke (Partner) · Consignment</p><p class="font-bold">${esc(o.billing_to)}</p></div>` : ''}
             ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${esc(o.notes)}</p></div>` : ''}
         </div>
 
@@ -7058,6 +7068,14 @@ function waCatalogUnitPrice(idx) {
     return parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0) || 0;
 }
 
+// Sumber order berubah → tampilkan box "Bill To (Partner)" hanya untuk
+// collaboration_event. Diskon TIDAK auto-set (admin pilih manual sesuai keputusan).
+function waOnSourceChange() {
+    const src = document.getElementById('wa-order-source')?.value;
+    const wrap = document.getElementById('wa-billing-to-wrap');
+    if (wrap) wrap.classList.toggle('hidden', src !== 'collaboration_event');
+}
+
 // Label opsi variant di dropdown: nama enak dibaca + harga per variant (kalau ada),
 // supaya admin lihat beda harga Lengan Pendek vs Panjang langsung di pilihan.
 function waVariantOptionLabel(idx, v) {
@@ -7138,9 +7156,14 @@ async function waSubmitOrder() {
     const shippingWeight  = parseFloat(document.getElementById('wa-shipping-weight')?.value || 1);
     const paymentMethod   = document.getElementById('wa-payment-method').value;
     const notes           = document.getElementById('wa-notes').value.trim();
+    const orderSource     = document.getElementById('wa-order-source')?.value || 'whatsapp';
+    const billingTo       = document.getElementById('wa-billing-to')?.value.trim() || '';
 
     if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
         alert('Lengkapi data pelanggan terlebih dahulu.'); return;
+    }
+    if (orderSource === 'collaboration_event' && !billingTo) {
+        alert('Collaboration Event: isi dulu "Ditagihkan Ke / Bill To (Partner)".'); return;
     }
 
     const container = document.getElementById('wa-items-container');
@@ -7258,7 +7281,7 @@ async function waSubmitOrder() {
         const res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
-            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: (document.getElementById('wa-order-source')?.value || 'whatsapp'), payment_method: paymentMethod, discount_percent: waSelectedDiscount, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: orderSource, payment_method: paymentMethod, discount_percent: waSelectedDiscount, billing_to: billingTo, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
@@ -7277,6 +7300,7 @@ async function waSubmitOrder() {
 
         document.getElementById('wa-result-code').textContent = data.order_code;
         document.getElementById('wa-result-message').textContent = waMsg;
+        waRenderResultInstruction(orderSource, paymentMethod, billingTo);
         document.getElementById('wa-result-panel').classList.remove('hidden');
         document.getElementById('wa-result-panel').scrollIntoView({ behavior: 'smooth' });
         // Lock the submit button (silver, disabled) after a successful save so it can't be
@@ -7347,6 +7371,63 @@ function buildOrderWaMessage(o) {
               `Terima kasih sudah berbelanja di Wearscrubs!`);
 }
 
+// Instruksi pembayaran di panel hasil (post-save), adaptif per sumber + metode.
+// - whatsapp: pakai pesan WA + tombol kirim seperti biasa.
+// - event_offline/offline (di tempat): tampil QRIS / rekening / "Pastikan Cash cukup" / free.
+// - collaboration_event: catatan consignment (uang ke partner) — TIDAK tampil QRIS/rek kita
+//   supaya pembeli tidak salah bayar ke Wearscrubs.
+function waRenderResultInstruction(source, method, billingTo) {
+    const box = document.getElementById('wa-result-instruction');
+    const waBlock = document.getElementById('wa-result-wa-block');
+    const sendBtn = document.getElementById('wa-result-send-btn');
+    const showWA = (vis) => { if (waBlock) waBlock.classList.toggle('hidden', !vis); if (sendBtn) sendBtn.classList.toggle('hidden', !vis); };
+    if (!box) return;
+    box.innerHTML = '';
+
+    if (source === 'whatsapp') { showWA(true); return; }
+    showWA(false); // sumber lain = pembeli di tempat / partner, tak perlu kirim WA transfer
+
+    if (source === 'collaboration_event') {
+        const partner = esc(billingTo || 'partner');
+        box.innerHTML = `
+        <div class="bg-pink-500/10 border border-pink-400/25 rounded-xl p-4 text-sm space-y-1.5">
+            <p class="font-bold text-pink-300 flex items-center gap-2"><i class="fa-solid fa-handshake"></i> Collaboration Event (Consignment)</p>
+            <p class="text-white/70">Produk diambil langsung pembeli. Pembayaran masuk ke <b>${partner}</b>.</p>
+            <p class="text-white/70">Invoice ditagihkan ke <b>${partner}</b> dengan <b>Consignment 30%</b>.</p>
+            ${method ? `<p class="text-white/50 text-xs">Metode bayar tercatat: ${esc(method)}</p>` : ''}
+            <p class="text-amber-300/70 text-xs mt-1">Pastikan diskon Consignment 30% sudah dipilih sebelum simpan.</p>
+        </div>`;
+        return;
+    }
+
+    // event_offline / offline (walk-in): instruksi bayar di tempat sesuai metode.
+    const m = (method || '').toLowerCase();
+    if (m.includes('qris')) {
+        box.innerHTML = `
+        <div class="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+            <p class="text-[10px] text-white/40 mb-2 font-bold uppercase tracking-widest">Scan QRIS untuk Bayar</p>
+            <img src="images/QRIS/QRIS%20WS.jpeg" alt="QRIS Wearscrubs" class="mx-auto max-w-[240px] w-full rounded-lg border border-white/10" onerror="this.style.display='none'">
+        </div>`;
+    } else if (m.includes('transfer') || m.includes('bca') || m.includes('mandiri') || m.includes('bank')) {
+        box.innerHTML = `
+        <div class="bg-white/5 border border-white/10 rounded-xl p-4 text-sm space-y-1">
+            <p class="text-[10px] text-white/40 mb-2 font-bold uppercase tracking-widest">Transfer ke Rekening</p>
+            <p class="text-white/80"><b>BCA</b> 8780269791 a/n Priscilla Lavine</p>
+            <p class="text-white/80"><b>Mandiri</b> 1220010735721 a/n Priscilla Lavine</p>
+        </div>`;
+    } else if (m.includes('cash')) {
+        box.innerHTML = `
+        <div class="bg-amber-500/10 border border-amber-400/25 rounded-xl p-4 text-center">
+            <p class="text-amber-300 font-bold text-sm"><i class="fa-solid fa-money-bill-wave"></i> Pastikan Cash Cukup</p>
+            <p class="text-white/60 text-xs mt-1">Terima pembayaran tunai sesuai total order.</p>
+        </div>`;
+    } else if (m.includes('bonus') || m.includes('free')) {
+        box.innerHTML = `<div class="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-sm text-white/60">Order gratis / bonus — tidak ada pembayaran.</div>`;
+    } else {
+        box.innerHTML = `<div class="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-sm text-white/50">Pilih metode pembayaran untuk menampilkan instruksi.</div>`;
+    }
+}
+
 // Open WhatsApp to the customer with the message pre-filled (post-save result panel).
 function waSendToCustomer() {
     const msg = document.getElementById('wa-result-message')?.textContent || window.waLastWaMsg || '';
@@ -7397,6 +7478,13 @@ function waResetForm() {
         const wWeightEl = document.getElementById('wa-shipping-weight'); if (wWeightEl) wWeightEl.value = '1';
         ['wa-photo-previews','wa-bordir-ref-preview'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
         ['wa-product-photos','wa-bordir-ref-photo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        // Reset sumber order → default WhatsApp + sembunyikan/clear box Bill To partner.
+        const srcEl = document.getElementById('wa-order-source'); if (srcEl) srcEl.value = 'whatsapp';
+        const billEl = document.getElementById('wa-billing-to'); if (billEl) billEl.value = '';
+        if (typeof waOnSourceChange === 'function') waOnSourceChange();
+        // Reset blok hasil ke kondisi default (pesan WA + tombol kirim tampil lagi).
+        const instr = document.getElementById('wa-result-instruction'); if (instr) instr.innerHTML = '';
+        ['wa-result-wa-block','wa-result-send-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); });
         if (typeof waRenderDiscountUI === 'function') waRenderDiscountUI();
     } catch (e) { console.warn('waResetForm cleanup skipped:', e); }
 
@@ -7622,6 +7710,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 <p><strong>Invoice Date:</strong> ${fmtDate(order.created_at)}</p>
                 ${order.order_source ? `<p><strong>Sumber Order:</strong> ${esc(repSourceLabel(order.order_source))}</p>` : ''}
                 ${order.payment_method ? `<p><strong>Metode Bayar:</strong> ${esc(order.payment_method)}</p>` : ''}
+                ${order.billing_to ? `<p><strong>Ditagihkan ke (Partner):</strong> ${esc(order.billing_to)}</p>` : ''}
             </div>
         </div>
         <div class="invoice-table-wrap">
