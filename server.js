@@ -2828,7 +2828,8 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
         const {
             customer_name, customer_phone, customer_address,
             shipping_city, shipping_courier, shipping_weight_kg,
-            shipping_cost, payment_method
+            shipping_cost, payment_method,
+            order_source, billing_to, notes
         } = req.body;
 
         const setClauses = [];
@@ -2888,6 +2889,40 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             setClauses.push(`shipping_cost = $${idx++}`); params.push(c);
             const newTotal = Number(order.total_amount) - Number(order.shipping_cost) + c;
             setClauses.push(`total_amount = $${idx++}`); params.push(newTotal);
+        }
+
+        // Order source — whitelist same as POST (admin-only sources). 'website' tetap allowed
+        // sbg fallback walaupun secara normal cuma diset utk order publik via checkout — admin
+        // boleh re-tag manual kalau perlu. Kalau ganti AWAY dari collaboration_event, billing_to
+        // diset NULL otomatis utk konsistensi (kolom itu cuma relevan utk collab).
+        let sourceChangedAwayFromCollab = false;
+        if (order_source !== undefined) {
+            const ALLOWED_SOURCES = ['website','whatsapp','event_offline','offline','collaboration_event'];
+            if (!ALLOWED_SOURCES.includes(order_source))
+                return res.status(400).json({ error: 'Sumber order tidak valid' });
+            setClauses.push(`order_source = $${idx++}`); params.push(order_source);
+            if (order.order_source === 'collaboration_event' && order_source !== 'collaboration_event')
+                sourceChangedAwayFromCollab = true;
+        }
+        // billing_to — relevan hanya kalau order_source effektif = collaboration_event.
+        // Effective source = nilai baru kalau dikirim, else nilai lama.
+        const effectiveSource = order_source !== undefined ? order_source : order.order_source;
+        if (billing_to !== undefined) {
+            if (effectiveSource === 'collaboration_event') {
+                const v = String(billing_to).trim();
+                if (!v) return res.status(400).json({ error: 'Bill To (Partner) wajib diisi untuk Collaboration Event' });
+                setClauses.push(`billing_to = $${idx++}`); params.push(v.slice(0, 120));
+            } else {
+                // Source bukan collab tapi admin coba isi billing_to → tolak biar konsisten.
+                setClauses.push(`billing_to = $${idx++}`); params.push(null);
+            }
+        } else if (sourceChangedAwayFromCollab) {
+            // Source di-switch keluar dari collab tanpa kirim billing_to → bersihkan otomatis.
+            setClauses.push(`billing_to = $${idx++}`); params.push(null);
+        }
+        // Notes — bebas teks, batasi panjang anti-abuse.
+        if (notes !== undefined) {
+            setClauses.push(`notes = $${idx++}`); params.push(String(notes).slice(0, 1000));
         }
 
         if (setClauses.length === 0)

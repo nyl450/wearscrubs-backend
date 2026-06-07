@@ -1691,15 +1691,36 @@
           <input type="number" id="edit-shipping-cost" min="0" />
         </div>
       </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">Metode Pembayaran</label>
+          <select id="edit-payment-method">
+            <option value="">-- Pilih --</option>
+            <option value="Transfer BCA / Mandiri">Transfer BCA / Mandiri</option>
+            <option value="QRIS">QRIS</option>
+            <option value="Cash">Cash (Tunai)</option>
+            <option value="Bonus/Free">Bonus / Free</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">Sumber Order</label>
+          <select id="edit-order-source" onchange="editOnSourceChange()">
+            <option value="website">Website</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="event_offline">Event Offline (Bazar/Pameran)</option>
+            <option value="offline">Offline (Walk-in Toko)</option>
+            <option value="collaboration_event">Collaboration Event (Consignment)</option>
+          </select>
+        </div>
+      </div>
+      <div id="edit-billing-to-wrap" class="hidden">
+        <label class="text-[11px] text-white/60 mb-1 block">Ditagihkan Ke / Bill To (Partner) <span class="text-red-400">*</span></label>
+        <input type="text" id="edit-billing-to" placeholder="Nama pihak ke-2 / partner yang ditagih" />
+        <p class="text-[11px] text-amber-300/70 mt-1">Wajib diisi untuk Collaboration Event. Tampil di invoice & detail.</p>
+      </div>
       <div>
-        <label class="text-[11px] text-white/60 mb-1 block">Metode Pembayaran</label>
-        <select id="edit-payment-method">
-          <option value="">-- Pilih --</option>
-          <option value="Transfer BCA / Mandiri">Transfer BCA / Mandiri</option>
-          <option value="QRIS">QRIS</option>
-          <option value="Cash">Cash (Tunai)</option>
-          <option value="Bonus/Free">Bonus / Free</option>
-        </select>
+        <label class="text-[11px] text-white/60 mb-1 block">Catatan <span class="text-white/30">(opsional)</span></label>
+        <textarea id="edit-notes" rows="2" placeholder="Mis. minta packing extra, request khusus, dll"></textarea>
       </div>
       <div id="edit-total-preview" class="hidden bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2.5 text-[11px] text-amber-200">
         <i class="fa-solid fa-info-circle"></i> Ongkir berubah → total order akan disesuaikan dari <span id="edit-total-old"></span> jadi <strong id="edit-total-new"></strong>.
@@ -5481,6 +5502,10 @@ function openEditOrderModal() {
     document.getElementById('edit-shipping-weight').value = o.shipping_weight_kg || 1;
     document.getElementById('edit-shipping-cost').value = o.shipping_cost || 0;
     document.getElementById('edit-payment-method').value = o.payment_method || '';
+    document.getElementById('edit-order-source').value = o.order_source || 'whatsapp';
+    document.getElementById('edit-billing-to').value = o.billing_to || '';
+    document.getElementById('edit-notes').value = o.notes || '';
+    editOnSourceChange(); // toggle box Bill To sesuai sumber awal
     // Live total preview: kalau admin ubah ongkir, tampilkan delta total
     const updatePreview = () => {
         const newOngkir = parseInt(document.getElementById('edit-shipping-cost').value || 0);
@@ -5501,6 +5526,13 @@ function openEditOrderModal() {
     const modal = document.getElementById('edit-order-modal');
     modal.classList.remove('hidden'); modal.classList.add('flex');
 }
+// Toggle visibility box "Bill To (Partner)" — relevan hanya utk collaboration_event.
+function editOnSourceChange() {
+    const src = document.getElementById('edit-order-source')?.value;
+    const wrap = document.getElementById('edit-billing-to-wrap');
+    if (wrap) wrap.classList.toggle('hidden', src !== 'collaboration_event');
+}
+
 function closeEditOrderModal() {
     const modal = document.getElementById('edit-order-modal');
     modal.classList.add('hidden'); modal.classList.remove('flex');
@@ -5511,6 +5543,14 @@ async function submitEditOrder() {
     const btn = document.getElementById('edit-order-save-btn');
     btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...';
     try {
+        const orderSource = document.getElementById('edit-order-source').value;
+        const billingTo   = document.getElementById('edit-billing-to').value.trim();
+        // Validate client-side biar gak perlu round-trip server: collab WAJIB billing_to.
+        if (orderSource === 'collaboration_event' && !billingTo) {
+            toast('Collaboration Event: isi Bill To (Partner) dulu', true);
+            btn.disabled = false; btn.innerHTML = 'Simpan Perubahan';
+            return;
+        }
         const payload = {
             customer_name:       document.getElementById('edit-customer-name').value.trim(),
             customer_phone:      document.getElementById('edit-customer-phone').value.trim(),
@@ -5520,6 +5560,9 @@ async function submitEditOrder() {
             shipping_weight_kg:  parseFloat(document.getElementById('edit-shipping-weight').value || 0),
             shipping_cost:       parseInt(document.getElementById('edit-shipping-cost').value || 0),
             payment_method:      document.getElementById('edit-payment-method').value,
+            order_source:        orderSource,
+            billing_to:          billingTo,
+            notes:               document.getElementById('edit-notes').value.trim(),
         };
         await apiFetch(`/api/orders/${o.id}/edit`, {
             method: 'PUT',
