@@ -806,7 +806,7 @@
                       <option value="Sentral Cargo">Sentral Cargo</option>
                       <option value="Gojek / Grab Instant">Gojek / Grab Instant</option>
                       <option value="Gojek / Grab Sameday">Gojek / Grab Sameday</option>
-                      <option value="Diambil di Event">Diambil di Event</option>
+                      <option value="Diambil di event / walkin">Diambil di event / walkin</option>
                       <option value="Free Ongkir">Free Ongkir</option>
                       <option value="Kirim sendiri">Kirim sendiri</option>
                   </select>
@@ -1679,7 +1679,7 @@
             <option value="Sentral Cargo">Sentral Cargo</option>
             <option value="Gojek / Grab Instant">Gojek / Grab Instant</option>
             <option value="Gojek / Grab Sameday">Gojek / Grab Sameday</option>
-            <option value="Diambil di Event">Diambil di Event</option>
+            <option value="Diambil di event / walkin">Diambil di event / walkin</option>
             <option value="Free Ongkir">Free Ongkir</option>
             <option value="Kirim sendiri">Kirim sendiri</option>
           </select>
@@ -1761,7 +1761,7 @@
           <div>
             <label class="text-[11px] text-white/60 mb-1 block">Kurir</label>
             <select id="split-courier" onchange="splitOnCourierChange()">
-              <option value="Diambil di Event">Diambil di Event</option>
+              <option value="Diambil di event / walkin">Diambil di event / walkin</option>
               <option value="J&T">J&T</option>
               <option value="JNE">JNE</option>
               <option value="Lion Parcel">Lion Parcel</option>
@@ -4525,7 +4525,14 @@ function renderOrders() {
                         : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>`
                 ) : ''}
                 ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Tandai Bordir Selesai</button>` : ''}
-                ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas Barang</button>` : ''}
+                ${o.order_status==='confirmed' ? (
+                    // Pickup courier: skip Kemas/Kirim → tombol langsung tandai diterima.
+                    // (Untuk order pickup baru, status auto-skip ke 'done' di confirm-payment;
+                    // ini fallback utk order LAMA / edge case yg masih 'confirmed'.)
+                    o.shipping_courier === 'Diambil di event / walkin'
+                        ? `<button onclick="markPickupDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Tandai Diambil &amp; Selesai</button>`
+                        : `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas Barang</button>`
+                ) : ''}
                 ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Input Resi / Kirim</button>` : ''}
                 ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Tandai Diterima</button>` : ''}
                 ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="event.stopPropagation();openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 ml-auto sm:ml-6" title="Batalkan pesanan ini">❌ Batalkan</button>` : ''}
@@ -5310,7 +5317,11 @@ async function viewOrder(id) {
                     : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-circle"></i> Konfirmasi Bayar</button>`
             ) : ''}
             ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Tandai Bordir Selesai</button>` : ''}
-            ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas Barang</button>` : ''}
+            ${o.order_status==='confirmed' ? (
+                o.shipping_courier === 'Diambil di event / walkin'
+                    ? `<button onclick="markPickupDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diambil &amp; Selesai</button>`
+                    : `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas Barang</button>`
+            ) : ''}
             ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Input Resi / Kirim</button>` : ''}
             ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
             ${o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
@@ -5688,7 +5699,7 @@ function openSplitOrderModal() {
     }).join('');
 
     // Reset detail order baru
-    document.getElementById('split-courier').value = 'Diambil di Event';
+    document.getElementById('split-courier').value = 'Diambil di event / walkin';
     document.getElementById('split-shipping-cost').value = 0;
     document.getElementById('split-weight').value = 0;
     splitOnCourierChange();
@@ -5701,12 +5712,12 @@ function closeSplitOrderModal() {
     document.getElementById('split-order-modal').classList.add('hidden');
     document.getElementById('split-order-modal').classList.remove('flex');
 }
-// Kalau pilih "Diambil di Event"/Free/Kirim-sendiri → ongkir 0 + lock field
+// Kalau pilih "Diambil di event / walkin"/Free/Kirim-sendiri → ongkir 0 + lock field
 function splitOnCourierChange() {
     const courier = document.getElementById('split-courier')?.value || '';
     const costEl  = document.getElementById('split-shipping-cost');
     if (!costEl) return;
-    if (['Diambil di Event','Free Ongkir','Kirim sendiri'].includes(courier)) {
+    if (['Diambil di event / walkin','Free Ongkir','Kirim sendiri'].includes(courier)) {
         costEl.value = 0;
         costEl.readOnly = true;
         costEl.style.opacity = '0.5';
@@ -6101,6 +6112,16 @@ function confirmMarkDone(orderId) {
     const order = cachedOrders.find(o => o.id === orderId);
     const code = order?.order_code || 'order';
     if (!confirm(`Tandai ${code} sebagai SELESAI?\n\nPastikan paket sudah diterima customer dengan baik.`)) return;
+    updateOrderStatus(orderId, 'done');
+}
+
+// Pickup courier: dari state 'confirmed' (mis. setelah bordir done utk order lama yg
+// belum auto-skip) langsung ke 'done'. Copy paste mark-done tapi konfirmasi konteks
+// "diambil", bukan "diterima paket".
+function markPickupDone(orderId) {
+    const order = cachedOrders.find(o => o.id === orderId);
+    const code = order?.order_code || 'order';
+    if (!confirm(`Tandai ${code} sebagai SELESAI?\n\nPastikan barang sudah diambil customer di event/toko.`)) return;
     updateOrderStatus(orderId, 'done');
 }
 
@@ -7675,7 +7696,7 @@ function waOnCourierChange() {
     const courier = document.getElementById('wa-shipping-courier')?.value || '';
     const costEl  = document.getElementById('wa-shipping-cost');
     if (!costEl) return;
-    if (courier === 'Free Ongkir' || courier === 'Kirim sendiri' || courier === 'Diambil di Event') {
+    if (courier === 'Free Ongkir' || courier === 'Kirim sendiri' || courier === 'Diambil di event / walkin') {
         costEl.value = 0;
         costEl.readOnly = true;
         costEl.style.opacity = '0.5';

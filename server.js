@@ -804,6 +804,12 @@ function safeJSON(str, fallback = []) {
     try { return JSON.parse(str); } catch { return fallback; }
 }
 
+// Kurir 'ambil langsung' utk event/walk-in. Order dgn courier ini auto-skip
+// Kemas+Kirim — di confirm-payment / bordir-done langsung jadi 'done' karena
+// barang udah diambil customer di tempat. Single source of truth — selalu
+// import dari sini, jangan hardcode string di banyak titik (anti-typo).
+const PICKUP_COURIER = 'Diambil di event / walkin';
+
 const COLOR_HEX = {
     // Scrub colors
     'black': '#000000',
@@ -2407,12 +2413,26 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                 );
             }
 
-            // Determine next status based on whether order has bordir
-            const ns = order.has_bordir_logo || order.has_bordir_nama ? 'bordir' : 'confirmed';
+            // Determine next status:
+            // - bordir → 'bordir' (perlu proses 1 minggu)
+            // - pickup di tempat + no bordir → langsung 'done' (barang sudah diambil
+            //   customer di event/walk-in — tak perlu Kemas/Kirim). Audit step 'done'
+            //   dicatat utk timeline.
+            // - else → 'confirmed' (siap dikemas)
+            const hasBordir = order.has_bordir_logo || order.has_bordir_nama;
+            const isPickup = (order.shipping_courier || '').trim() === PICKUP_COURIER;
+            const ns = hasBordir ? 'bordir' : (isPickup ? 'done' : 'confirmed');
             await client.query(
                 `UPDATE orders SET payment_status = 'paid', order_status = $1, paid_at = NOW(), updated_at = NOW() WHERE id = $2`,
                 [ns, order.id]
             );
+            // Audit record utk timeline kalau langsung done (skip Kemas/Kirim).
+            if (ns === 'done') {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'done',NULL,$2,$3)`,
+                    [order.id, 'Diambil langsung di event/walk-in', req.user.username]
+                );
+            }
 
             // Mark bordir_logo_requested if applicable (inside TX so it's consistent
             // with the status change)
@@ -2456,16 +2476,26 @@ app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.sing
         // (who + when + note) is still logged for audit — only the image is skipped.
         const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders') : null;
 
-        // Atomic: photo record + status transition
+        // Pickup courier: skip Kemas/Kirim → langsung 'done' (mirip flow walk-in).
+        const isPickup = (order.shipping_courier || '').trim() === PICKUP_COURIER;
+        const nextStatus = isPickup ? 'done' : 'confirmed';
+
+        // Atomic: photo record + status transition (+ audit done kalau langsung selesai)
         await withTransaction(async (client) => {
             await client.query(
                 `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
                 [order.id, 'bordir', photoUrl, req.body.note || '', req.user.username]
             );
             await client.query(
-                `UPDATE orders SET order_status = 'confirmed', updated_at = NOW() WHERE id = $1`,
-                [order.id]
+                `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
+                [nextStatus, order.id]
             );
+            if (nextStatus === 'done') {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'done',NULL,$2,$3)`,
+                    [order.id, 'Bordir selesai → diambil langsung di event/walk-in', req.user.username]
+                );
+            }
         });
 
         // After commit — WA failure must not fail the response
