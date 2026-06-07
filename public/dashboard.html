@@ -2068,6 +2068,18 @@ function toast(msg, isErr = false) {
     setTimeout(() => el.classList.add('hidden'), 3500);
 }
 function fmt(n) { return Number(n||0).toLocaleString('id-ID'); }
+// Format tanggal+jam compact utk list: "7 Jun 2026, 16:19" (drop detik, colon bukan dot).
+// toLocaleString id-ID render jam pakai dot ("16.19") yg kurang familiar di mata Indonesia
+// modern — bangun manual utk konsisten.
+function fmtDateShort(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    if (isNaN(dt)) return '';
+    const datePart = dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    const hh = String(dt.getHours()).padStart(2, '0');
+    const mm = String(dt.getMinutes()).padStart(2, '0');
+    return `${datePart}, ${hh}:${mm}`;
+}
 // Escape customer-controlled text before injecting into innerHTML templates (anti stored-XSS).
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4288,6 +4300,19 @@ function renderOrders() {
         const hasBordir = o.has_bordir_logo || o.has_bordir_nama;
         const bordirBadge = hasBordir ? `<span class="status-badge border bg-purple-500/10 text-purple-300 border-purple-500/20">${o.has_bordir_logo ? '🎨' : ''}${o.has_bordir_nama ? '✏️' : ''} Bordir</span>` : '';
         const logoBadge = o.has_bordir_logo && !o.bordir_logo_requested ? `<span class="status-badge border bg-red-500/10 text-red-400 border-red-500/20 animate-pulse">⚠️ Minta Logo</span>` : '';
+        // PO / Custom badge: scan items utk indikator siap-tidaknya. Admin tahu sejak list
+        // bahwa order ini punya item PO yg menunggu stok atau custom yg menunggu jahit.
+        const items = o.items || [];
+        const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
+        const poFulfilled   = items.filter(i => i.is_po && i.po_fulfilled).length;
+        const customUnfulfilled = items.filter(i => i.is_custom_size && !i.po_fulfilled).length;
+        const customFulfilled   = items.filter(i => i.is_custom_size && i.po_fulfilled).length;
+        const poBadge = poUnfulfilled > 0
+            ? `<span class="status-badge border bg-orange-500/15 text-orange-300 border-orange-500/25" title="Pre-Order menunggu stok masuk">📦 PO ${poUnfulfilled}${poFulfilled ? `/${poUnfulfilled+poFulfilled}` : ''}</span>`
+            : (poFulfilled > 0 ? `<span class="status-badge border bg-green-500/10 text-green-300 border-green-500/20" title="Semua PO sudah siap">📦 PO siap</span>` : '');
+        const customBadge = customUnfulfilled > 0
+            ? `<span class="status-badge border bg-sky-500/15 text-sky-300 border-sky-500/25" title="Custom menunggu jahit">✂️ Custom ${customUnfulfilled}${customFulfilled ? `/${customUnfulfilled+customFulfilled}` : ''}</span>`
+            : (customFulfilled > 0 ? `<span class="status-badge border bg-green-500/10 text-green-300 border-green-500/20" title="Semua custom sudah siap">✂️ Custom siap</span>` : '');
 
         const isBulkSelected = orderBulkMode && orderBulkSelection.has(o.id);
         return `
@@ -4299,7 +4324,7 @@ function renderOrders() {
                         ${isBulkSelected ? '<i class="fa-solid fa-check text-white text-[10px]"></i>' : ''}
                     </span>
                     <div>
-                        <p class="font-mono text-xs text-white/40 mb-1">${esc(o.order_code)}</p>
+                        <p class="font-mono text-[11px] text-white/60 mb-1 tracking-wide">${esc(o.order_code)}</p>
                         <h4 class="font-bold">${esc(o.customer_name)}</h4>
                         <p class="text-sm text-white/50">${esc(o.customer_phone)}</p>
                         ${o.shipping_city ? `<p class="text-xs text-white/30 mt-0.5">📍 ${esc(o.shipping_city)} · ${esc(o.shipping_courier||'')}</p>` : ''}
@@ -4307,31 +4332,31 @@ function renderOrders() {
                 </div>
                 <div class="text-right">
                     <p class="text-green-400 font-bold text-lg">Rp ${fmt(o.total_amount)}</p>
-                    <p class="text-[10px] text-white/30">${new Date(o.created_at).toLocaleString('id-ID')}</p>
+                    <p class="text-[11px] text-white/45 mt-0.5">${fmtDateShort(o.created_at)}</p>
                 </div>
             </div>
             <div class="flex flex-wrap gap-2 mt-3">
                 ${statusBadge(o.order_status)}
                 ${o.payment_status==='pending' ? '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">⏳ Belum Bayar</span>' : ''}
                 ${o.payment_status==='paid'    ? '<span class="status-badge border bg-green-500/10 text-green-400 border-green-500/20">✅ Lunas</span>' : ''}
-                ${bordirBadge}${logoBadge}
+                ${bordirBadge}${logoBadge}${poBadge}${customBadge}
                 ${orderSourceBadge(o.order_source)}
             </div>
             <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-darkborder ${orderBulkMode ? 'hidden' : ''}">
                 <button onclick="event.stopPropagation();viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">📋 Detail</button>
-                <button onclick="openInvoiceModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20">📄 Invoice</button>
+                ${o.order_status !== 'cancelled' ? `<button onclick="openInvoiceModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20">📄 Invoice</button>` : ''}
                 ${o.payment_status==='pending' && o.order_status!='cancelled' ? (
-                    // Gate review-bordir-dulu juga di card list — klik = buka detail
-                    // utk review, biar admin tahu harus ke mana.
-                    ((o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status !== 'approved')
+                    // Gate hanya untuk order non-website (admin input via Kasir, bayar belakangan).
+                    // Website orders: customer bayar duluan, gate skip.
+                    ((o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status !== 'approved' && o.order_source !== 'website')
                         ? `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Review bordir dulu sebelum konfirmasi pembayaran" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">🔍 Review Bordir Dulu</button>`
                         : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>`
                 ) : ''}
-                ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Bordir Selesai</button>` : ''}
-                ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas</button>` : ''}
-                ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Kirim</button>` : ''}
-                ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Selesai</button>` : ''}
-                ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="event.stopPropagation();openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20">❌ Batalkan</button>` : ''}
+                ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Tandai Bordir Selesai</button>` : ''}
+                ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas Barang</button>` : ''}
+                ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Input Resi / Kirim</button>` : ''}
+                ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Tandai Diterima</button>` : ''}
+                ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="event.stopPropagation();openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 ml-auto sm:ml-6" title="Batalkan pesanan ini">❌ Batalkan</button>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -5095,18 +5120,21 @@ async function viewOrder(id) {
         const actionBtns = o.order_status === 'cancelled' ? '' : `
         <div class="flex flex-wrap gap-2 pt-4 border-t border-darkborder">
             ${o.payment_status==='pending' ? (
-                // Hard gate: kalau ada bordir & belum di-approve, blok Konfirmasi Bayar.
-                // Istri WAJIB review bordir dulu (sesuai workflow pre-payment Wearscrubs).
-                (hasBordir && o.bordir_status !== 'approved')
+                // Gate review-bordir-dulu HANYA untuk order yg dibuat via Kasir (admin input,
+                // bayar belakangan): whatsapp/offline/event_offline/collaboration_event. Untuk
+                // order website (customer bayar duluan), gate OFF — admin konfirmasi bayar
+                // dulu setelah cek bukti transfer, review bordir setelahnya. Kalau bordir
+                // ditolak post-payment, cancel order auto-create refund full.
+                (hasBordir && o.bordir_status !== 'approved' && o.order_source !== 'website')
                     ? `<button onclick="scrollToBordirReview()" title="Review bordir dulu sebelum konfirmasi pembayaran" class="text-xs px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-1.5 hover:bg-amber-500/25 transition"><i class="fa-solid fa-magnifying-glass"></i> Review Bordir Dulu</button>`
                     : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-circle"></i> Konfirmasi Bayar</button>`
             ) : ''}
-            ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Bordir Selesai</button>` : ''}
-            ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas</button>` : ''}
-            ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Kirim</button>` : ''}
-            ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Selesai</button>` : ''}
+            ${o.order_status==='bordir' ? `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Tandai Bordir Selesai</button>` : ''}
+            ${o.order_status==='confirmed' ? `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas Barang</button>` : ''}
+            ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Input Resi / Kirim</button>` : ''}
+            ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
             ${o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
-            ${isAdmin && o.order_status !== 'done' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
+            ${isAdmin && o.order_status !== 'done' && o.order_status !== 'cancelled' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto sm:ml-6" title="Batalkan pesanan ini"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
         // ── WA resi confirmation link (admin only) ────────────────────────────
