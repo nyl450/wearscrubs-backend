@@ -2813,6 +2813,95 @@ app.put('/api/orders/:id/status', requireMenu('orders','edit'), async (req, res)
 // Per-type rejection lets admin reject only the logo while approving the name
 // (or vice versa). Auto-creates refund records for each rejected type with the
 // matching per-item embroidery cost.
+// PUT /api/orders/:id/edit — admin update data customer & shipping & payment.
+// Whitelist: customer_name, customer_phone, customer_address, shipping_city,
+// shipping_courier, shipping_weight_kg, shipping_cost, payment_method.
+// Tidak edit: items, discount, total_amount (auto-recompute kalau shipping_cost berubah).
+// Blok: cancelled / done / shipped (sudah keluar fisik). Items & total tidak diubah.
+app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (['cancelled','done','shipped'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan ini tidak bisa diedit (sudah dibatalkan/dikirim/selesai)' });
+
+        const {
+            customer_name, customer_phone, customer_address,
+            shipping_city, shipping_courier, shipping_weight_kg,
+            shipping_cost, payment_method
+        } = req.body;
+
+        const setClauses = [];
+        const params = [];
+        let idx = 1;
+
+        // Customer name — required if provided
+        if (customer_name !== undefined) {
+            const v = String(customer_name).trim();
+            if (!v) return res.status(400).json({ error: 'Nama tidak boleh kosong' });
+            setClauses.push(`customer_name = $${idx++}`); params.push(v);
+        }
+        // Customer phone — format Indonesia (08xxx/62xxx/8xxx), 9–15 digit
+        if (customer_phone !== undefined) {
+            const digits = String(customer_phone).replace(/\D/g, '');
+            if (digits.length < 9 || digits.length > 15 || !/^(0|62|8)/.test(digits))
+                return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (gunakan format 08xxx / 62xxx)' });
+            setClauses.push(`customer_phone = $${idx++}`); params.push(String(customer_phone).trim());
+        }
+        // Customer address — required if provided
+        if (customer_address !== undefined) {
+            const v = String(customer_address).trim();
+            if (!v) return res.status(400).json({ error: 'Alamat tidak boleh kosong' });
+            setClauses.push(`customer_address = $${idx++}`); params.push(v);
+        }
+        // Payment method — whitelist (same as POST /orders)
+        if (payment_method !== undefined) {
+            const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Bonus/Free','bank_transfer','qris'];
+            const safe = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
+            setClauses.push(`payment_method = $${idx++}`); params.push(safe);
+        }
+        // Shipping fields — admin trusted (sama spt POST). Validate city ada di CITIES kalau diisi.
+        if (shipping_city !== undefined) {
+            const v = String(shipping_city).trim();
+            // Allow empty (defensive) atau kota valid
+            if (v && !CITIES.find(c => c.name === v))
+                return res.status(400).json({ error: `Kota '${v}' tidak ada di daftar` });
+            setClauses.push(`shipping_city = $${idx++}`); params.push(v);
+        }
+        if (shipping_courier !== undefined) {
+            setClauses.push(`shipping_courier = $${idx++}`); params.push(String(shipping_courier).trim());
+        }
+        if (shipping_weight_kg !== undefined) {
+            const w = parseFloat(shipping_weight_kg);
+            if (!(w >= 0)) return res.status(400).json({ error: 'Berat tidak valid' });
+            setClauses.push(`shipping_weight_kg = $${idx++}`); params.push(w);
+        }
+        // Shipping cost — admin sets manually. Kalau berubah, recompute total_amount
+        // deterministically: total_baru = total_lama - ongkir_lama + ongkir_baru.
+        // (Subtotal produk & diskon tidak terganggu — itu cara aman supaya tak ada
+        // drift dari edit berulang vs sumber kebenaran items.)
+        let newShippingCost = null;
+        if (shipping_cost !== undefined) {
+            const c = parseInt(shipping_cost);
+            if (!(c >= 0)) return res.status(400).json({ error: 'Ongkir tidak valid' });
+            newShippingCost = c;
+            setClauses.push(`shipping_cost = $${idx++}`); params.push(c);
+            const newTotal = Number(order.total_amount) - Number(order.shipping_cost) + c;
+            setClauses.push(`total_amount = $${idx++}`); params.push(newTotal);
+        }
+
+        if (setClauses.length === 0)
+            return res.status(400).json({ error: 'Tidak ada perubahan' });
+
+        setClauses.push(`updated_at = NOW()`);
+        params.push(req.params.id);
+        await dbRun(`UPDATE orders SET ${setClauses.join(', ')} WHERE id = $${idx}`, params);
+
+        const updated = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        res.json({ message: 'Pesanan diperbarui', order: updated });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/orders/:id/bordir-review', requireMenu('orders','edit'), upload.none(), async (req, res) => {
     try {
         const { action, reason, reject_types } = req.body;

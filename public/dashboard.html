@@ -1636,14 +1636,98 @@
 </div>
 
 <!-- ORDER DETAIL MODAL -->
+<!-- EDIT ORDER MODAL — data customer & shipping & payment (admin only) -->
+<div id="edit-order-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+  <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
+      <div>
+        <h3 class="font-bold text-base">Edit Pesanan</h3>
+        <p class="text-[11px] text-white/40 mt-0.5">Invoice & detail akan otomatis ter-update.</p>
+      </div>
+      <button onclick="closeEditOrderModal()" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <div class="p-5 space-y-4">
+      <p id="edit-order-code" class="text-xs font-mono text-white/40"></p>
+      <div>
+        <label class="text-[11px] text-white/60 mb-1 block">Nama Customer <span class="text-red-400">*</span></label>
+        <input type="text" id="edit-customer-name" />
+      </div>
+      <div>
+        <label class="text-[11px] text-white/60 mb-1 block">Nomor WhatsApp <span class="text-red-400">*</span></label>
+        <input type="tel" id="edit-customer-phone" placeholder="08xxx atau 62xxx" />
+      </div>
+      <div>
+        <label class="text-[11px] text-white/60 mb-1 block">Alamat <span class="text-red-400">*</span></label>
+        <textarea id="edit-customer-address" rows="3"></textarea>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">Kota</label>
+          <select id="edit-shipping-city">
+            <option value="">-- Pilih Kota --</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">Kurir</label>
+          <select id="edit-shipping-courier">
+            <option value="">-- Pilih Ekspedisi --</option>
+            <option value="J&T">J&T</option>
+            <option value="JNE">JNE</option>
+            <option value="Lion Parcel">Lion Parcel</option>
+            <option value="Lion Parcel Cargo">Lion Parcel Cargo</option>
+            <option value="Sentral Cargo">Sentral Cargo</option>
+            <option value="Gojek / Grab Instant">Gojek / Grab Instant</option>
+            <option value="Gojek / Grab Sameday">Gojek / Grab Sameday</option>
+            <option value="Free Ongkir">Free Ongkir</option>
+            <option value="Kirim sendiri">Kirim sendiri</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">Berat (kg)</label>
+          <input type="number" id="edit-shipping-weight" step="0.1" min="0" />
+        </div>
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">Ongkir (Rp)</label>
+          <input type="number" id="edit-shipping-cost" min="0" />
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] text-white/60 mb-1 block">Metode Pembayaran</label>
+        <select id="edit-payment-method">
+          <option value="">-- Pilih --</option>
+          <option value="Transfer BCA / Mandiri">Transfer BCA / Mandiri</option>
+          <option value="QRIS">QRIS</option>
+          <option value="Cash">Cash (Tunai)</option>
+          <option value="Bonus/Free">Bonus / Free</option>
+        </select>
+      </div>
+      <div id="edit-total-preview" class="hidden bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2.5 text-[11px] text-amber-200">
+        <i class="fa-solid fa-info-circle"></i> Ongkir berubah → total order akan disesuaikan dari <span id="edit-total-old"></span> jadi <strong id="edit-total-new"></strong>.
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button onclick="closeEditOrderModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+        <button id="edit-order-save-btn" onclick="submitEditOrder()" class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold hover:bg-cyan-500/30">Simpan Perubahan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="order-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[999] hidden items-center justify-center p-4">
 <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto">
-    <div class="px-6 py-5 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
-        <div>
-            <p class="text-xs text-white/40 font-mono mb-0.5" id="order-modal-code">—</p>
-            <h3 class="font-bold text-lg" id="order-modal-name">Detail Pesanan</h3>
+    <div class="px-5 sm:px-6 py-4 sm:py-5 border-b border-darkborder flex justify-between items-center gap-3 sticky top-0 bg-darkcard z-10">
+        <div class="min-w-0 flex-1">
+            <p class="text-xs text-white/40 font-mono mb-0.5 truncate" id="order-modal-code">—</p>
+            <h3 class="font-bold text-base sm:text-lg truncate" id="order-modal-name">Detail Pesanan</h3>
         </div>
-        <button onclick="closeOrderModal()" class="text-white/40 hover:text-white transition"><i class="fa-solid fa-times text-xl"></i></button>
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <!-- Tombol Edit Pesanan: ditampilkan/hide oleh viewOrder berdasar status order
+                 (sembunyikan kalau cancelled/done/shipped). Beri jarak dari X via gap di parent. -->
+            <button id="order-edit-btn" onclick="openEditOrderModal()" title="Edit data pesanan (nama, HP, alamat, kurir, metode bayar)"
+                class="hidden w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-400/25 text-cyan-300 text-xs font-bold transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-pen-to-square"></i><span class="hidden sm:inline">Edit</span>
+            </button>
+            <button onclick="closeOrderModal()" title="Tutup" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center"><i class="fa-solid fa-times text-xl"></i></button>
+        </div>
     </div>
     <div id="order-modal-content" class="p-6 space-y-5"></div>
 </div>
@@ -4762,6 +4846,14 @@ async function viewOrder(id) {
 
         document.getElementById('order-modal-code').textContent = o.order_code;
         document.getElementById('order-modal-name').textContent = o.customer_name;
+        // Simpan order saat ini utk modal Edit (prefill). Hanya admin yg lihat tombol Edit,
+        // dan order yg sudah cancelled/done/shipped di-blok backend juga — sembunyikan tombol.
+        window._currentOrder = o;
+        const editBtn = document.getElementById('order-edit-btn');
+        if (editBtn) {
+            const canEdit = isAdmin && !['cancelled','done','shipped'].includes(o.order_status);
+            editBtn.classList.toggle('hidden', !canEdit);
+        }
 
         // Parse bordir details
         let bordirDetails = [];
@@ -5354,6 +5446,96 @@ function _brmDone(value) {
 function closeOrderModal() {
     document.getElementById('order-modal').classList.add('hidden');
     document.getElementById('order-modal').classList.remove('flex');
+}
+
+// ─── EDIT ORDER MODAL ───────────────────────────────────────────────────────
+// Admin update data customer/shipping/payment dari order yg sedang dibuka.
+// Backend (PUT /orders/:id/edit) handle validasi + auto-recompute total kalau
+// ongkir berubah. Invoice auto-sync karena fetch fresh dari DB tiap kali dibuka.
+function openEditOrderModal() {
+    const o = window._currentOrder;
+    if (!o) { toast('Pilih pesanan dulu', true); return; }
+    if (['cancelled','done','shipped'].includes(o.order_status)) {
+        toast('Pesanan ini tidak bisa diedit (sudah dibatalkan/dikirim/selesai)', true);
+        return;
+    }
+    // Prefill kota dropdown dari CITIES (lazy: ambil dari cities.json sekali)
+    const citySel = document.getElementById('edit-shipping-city');
+    if (citySel && citySel.options.length <= 1) {
+        fetch(API + '/api/cities').then(r => r.json()).then(cities => {
+            cities.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.name; opt.textContent = c.name;
+                citySel.appendChild(opt);
+            });
+            if (o.shipping_city) citySel.value = o.shipping_city;
+        }).catch(() => {});
+    } else if (o.shipping_city) {
+        citySel.value = o.shipping_city;
+    }
+    document.getElementById('edit-order-code').textContent = o.order_code;
+    document.getElementById('edit-customer-name').value = o.customer_name || '';
+    document.getElementById('edit-customer-phone').value = o.customer_phone || '';
+    document.getElementById('edit-customer-address').value = o.customer_address || '';
+    document.getElementById('edit-shipping-courier').value = o.shipping_courier || '';
+    document.getElementById('edit-shipping-weight').value = o.shipping_weight_kg || 1;
+    document.getElementById('edit-shipping-cost').value = o.shipping_cost || 0;
+    document.getElementById('edit-payment-method').value = o.payment_method || '';
+    // Live total preview: kalau admin ubah ongkir, tampilkan delta total
+    const updatePreview = () => {
+        const newOngkir = parseInt(document.getElementById('edit-shipping-cost').value || 0);
+        const oldOngkir = Number(o.shipping_cost || 0);
+        const oldTotal = Number(o.total_amount || 0);
+        if (newOngkir !== oldOngkir) {
+            const newTotal = oldTotal - oldOngkir + newOngkir;
+            document.getElementById('edit-total-old').textContent = 'Rp ' + fmt(oldTotal);
+            document.getElementById('edit-total-new').textContent = 'Rp ' + fmt(newTotal);
+            document.getElementById('edit-total-preview').classList.remove('hidden');
+        } else {
+            document.getElementById('edit-total-preview').classList.add('hidden');
+        }
+    };
+    document.getElementById('edit-shipping-cost').oninput = updatePreview;
+    updatePreview();
+
+    const modal = document.getElementById('edit-order-modal');
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+function closeEditOrderModal() {
+    const modal = document.getElementById('edit-order-modal');
+    modal.classList.add('hidden'); modal.classList.remove('flex');
+}
+async function submitEditOrder() {
+    const o = window._currentOrder;
+    if (!o) return;
+    const btn = document.getElementById('edit-order-save-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...';
+    try {
+        const payload = {
+            customer_name:       document.getElementById('edit-customer-name').value.trim(),
+            customer_phone:      document.getElementById('edit-customer-phone').value.trim(),
+            customer_address:    document.getElementById('edit-customer-address').value.trim(),
+            shipping_city:       document.getElementById('edit-shipping-city').value,
+            shipping_courier:    document.getElementById('edit-shipping-courier').value,
+            shipping_weight_kg:  parseFloat(document.getElementById('edit-shipping-weight').value || 0),
+            shipping_cost:       parseInt(document.getElementById('edit-shipping-cost').value || 0),
+            payment_method:      document.getElementById('edit-payment-method').value,
+        };
+        await apiFetch(`/api/orders/${o.id}/edit`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        toast('✓ Pesanan diperbarui');
+        closeEditOrderModal();
+        // Refresh modal detail + list utama
+        await viewOrder(o.id);
+        if (typeof renderOrders === 'function') renderOrders();
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        btn.disabled = false; btn.innerHTML = 'Simpan Perubahan';
+    }
 }
 
 // ── Image Lightbox (full-screen viewer + download) ─────────────────────────────
