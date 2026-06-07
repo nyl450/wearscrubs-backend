@@ -806,6 +806,7 @@
                       <option value="Sentral Cargo">Sentral Cargo</option>
                       <option value="Gojek / Grab Instant">Gojek / Grab Instant</option>
                       <option value="Gojek / Grab Sameday">Gojek / Grab Sameday</option>
+                      <option value="Diambil di Event">Diambil di Event</option>
                       <option value="Free Ongkir">Free Ongkir</option>
                       <option value="Kirim sendiri">Kirim sendiri</option>
                   </select>
@@ -1678,6 +1679,7 @@
             <option value="Sentral Cargo">Sentral Cargo</option>
             <option value="Gojek / Grab Instant">Gojek / Grab Instant</option>
             <option value="Gojek / Grab Sameday">Gojek / Grab Sameday</option>
+            <option value="Diambil di Event">Diambil di Event</option>
             <option value="Free Ongkir">Free Ongkir</option>
             <option value="Kirim sendiri">Kirim sendiri</option>
           </select>
@@ -1728,6 +1730,71 @@
       <div class="flex gap-2 pt-1">
         <button onclick="closeEditOrderModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
         <button id="edit-order-save-btn" onclick="submitEditOrder()" class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold hover:bg-cyan-500/30">Simpan Perubahan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SPLIT ORDER MODAL — pisah pesanan jadi 2 (admin only) -->
+<div id="split-order-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+  <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
+      <div>
+        <h3 class="font-bold text-base">Pisahkan Pesanan</h3>
+        <p class="text-[11px] text-white/40 mt-0.5">Pilih item yang dipindah ke pesanan BARU. Item dicentang = order baru. Sisanya = tetap di pesanan asli.</p>
+      </div>
+      <button onclick="closeSplitOrderModal()" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center shrink-0"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <div class="p-5 space-y-4">
+      <p id="split-order-code" class="text-xs font-mono text-white/40"></p>
+
+      <!-- Items list dgn checkbox -->
+      <div>
+        <p class="text-[10px] uppercase tracking-wider font-bold text-white/40 mb-2">Item Pesanan</p>
+        <div id="split-items-list" class="space-y-1.5 max-h-64 overflow-y-auto rounded-xl border border-white/10 p-2"></div>
+      </div>
+
+      <!-- Detail order baru -->
+      <div class="bg-white/3 rounded-xl p-3 space-y-3">
+        <p class="text-[10px] uppercase tracking-wider font-bold text-white/40">Detail Pesanan Baru (yang dipisah)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] text-white/60 mb-1 block">Kurir</label>
+            <select id="split-courier" onchange="splitOnCourierChange()">
+              <option value="Diambil di Event">Diambil di Event</option>
+              <option value="J&T">J&T</option>
+              <option value="JNE">JNE</option>
+              <option value="Lion Parcel">Lion Parcel</option>
+              <option value="Lion Parcel Cargo">Lion Parcel Cargo</option>
+              <option value="Sentral Cargo">Sentral Cargo</option>
+              <option value="Gojek / Grab Instant">Gojek / Grab Instant</option>
+              <option value="Gojek / Grab Sameday">Gojek / Grab Sameday</option>
+              <option value="Free Ongkir">Free Ongkir</option>
+              <option value="Kirim sendiri">Kirim sendiri</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] text-white/60 mb-1 block">Ongkir (Rp)</label>
+            <input type="number" id="split-shipping-cost" min="0" value="0" />
+          </div>
+          <div>
+            <label class="text-[11px] text-white/60 mb-1 block">Berat (kg)</label>
+            <input type="number" id="split-weight" step="0.1" min="0" value="0" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview total -->
+      <div id="split-preview" class="hidden bg-cyan-500/10 border border-cyan-400/25 rounded-xl px-3 py-3 text-[11px] text-cyan-100 space-y-1">
+        <p class="font-bold text-cyan-300"><i class="fa-solid fa-arrows-split-up-and-left"></i> Preview Pemisahan</p>
+        <p>Pesanan asli (<span id="split-stay-count">0</span> item): <strong id="split-stay-total">Rp 0</strong></p>
+        <p>Pesanan baru (<span id="split-move-count">0</span> item): <strong id="split-move-total">Rp 0</strong></p>
+        <p class="text-cyan-200/70 text-[10px] mt-1">Diskon (kalau ada) dibagi proportional ke subtotal masing-masing. Status bayar & sumber diturunkan dari pesanan asli.</p>
+      </div>
+
+      <div class="flex gap-2 pt-1">
+        <button onclick="closeSplitOrderModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+        <button id="split-submit-btn" onclick="submitSplitOrder()" class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold hover:bg-cyan-500/30">Pisahkan Sekarang</button>
       </div>
     </div>
   </div>
@@ -5247,6 +5314,7 @@ async function viewOrder(id) {
             ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Input Resi / Kirim</button>` : ''}
             ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
             ${o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
+            ${isAdmin && !['cancelled','done','shipped'].includes(o.order_status) && (o.items||[]).length >= 2 ? `<button onclick="openSplitOrderModal()" title="Pisah jadi 2 pesanan (mis. sebagian diambil, sebagian dikirim)" class="text-xs px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/25 flex items-center gap-1.5"><i class="fa-solid fa-arrows-split-up-and-left"></i> Pisah Pesanan</button>` : ''}
             ${isAdmin && o.order_status !== 'done' && o.order_status !== 'cancelled' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto sm:ml-6" title="Batalkan pesanan ini"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
@@ -5578,6 +5646,135 @@ async function submitEditOrder() {
         toast('Gagal: ' + e.message, true);
     } finally {
         btn.disabled = false; btn.innerHTML = 'Simpan Perubahan';
+    }
+}
+
+// ─── SPLIT ORDER MODAL ──────────────────────────────────────────────────────
+// Admin pisahkan order jadi 2: items terpilih → order baru (kurir baru, ongkir baru),
+// items sisanya → tetap di order asli (kurir & ongkir lama). Backend handle semua
+// recompute (subtotal, diskon proporsional, total, bordir flags) + audit notes.
+function openSplitOrderModal() {
+    const o = window._currentOrder;
+    if (!o) { toast('Pilih pesanan dulu', true); return; }
+    if (['cancelled','done','shipped'].includes(o.order_status)) {
+        toast('Pesanan ini tidak bisa dipisah', true); return;
+    }
+    const items = o.items || [];
+    if (items.length < 2) { toast('Butuh minimal 2 item utk dipisah', true); return; }
+
+    document.getElementById('split-order-code').textContent = o.order_code;
+
+    // Render checkbox per item
+    const list = document.getElementById('split-items-list');
+    list.innerHTML = items.map(i => {
+        const tags = [];
+        if (i.is_bonus) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300">BONUS</span>');
+        if (i.is_custom_size) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300">CUSTOM</span>');
+        if (i.is_po) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300">PO</span>');
+        const bordir = [];
+        if (i.bordir_nama) bordir.push('✏️ Nama');
+        if (i.bordir_logo) bordir.push('🎨 Logo');
+        const lineTotal = Number(i.price) * Number(i.quantity);
+        return `<label class="flex items-start gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition">
+            <input type="checkbox" name="split-item" value="${i.id}" class="mt-1 w-4 h-4 accent-cyan-500 shrink-0" onchange="updateSplitPreview()">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                    <p class="text-sm font-semibold truncate">${esc(i.product_name)} ${tags.join(' ')}</p>
+                    <p class="text-xs text-white/70 shrink-0">${i.is_bonus ? 'GRATIS' : 'Rp ' + fmt(lineTotal)}</p>
+                </div>
+                <p class="text-[11px] text-white/40">${esc(i.size)} · ${esc(i.color)}${i.variant_type && i.variant_type !== 'null' ? ' · ' + esc(i.variant_type) : ''} · x${i.quantity}${bordir.length ? ' · ' + bordir.join(' ') : ''}</p>
+            </div>
+        </label>`;
+    }).join('');
+
+    // Reset detail order baru
+    document.getElementById('split-courier').value = 'Diambil di Event';
+    document.getElementById('split-shipping-cost').value = 0;
+    document.getElementById('split-weight').value = 0;
+    splitOnCourierChange();
+    updateSplitPreview();
+
+    document.getElementById('split-order-modal').classList.remove('hidden');
+    document.getElementById('split-order-modal').classList.add('flex');
+}
+function closeSplitOrderModal() {
+    document.getElementById('split-order-modal').classList.add('hidden');
+    document.getElementById('split-order-modal').classList.remove('flex');
+}
+// Kalau pilih "Diambil di Event"/Free/Kirim-sendiri → ongkir 0 + lock field
+function splitOnCourierChange() {
+    const courier = document.getElementById('split-courier')?.value || '';
+    const costEl  = document.getElementById('split-shipping-cost');
+    if (!costEl) return;
+    if (['Diambil di Event','Free Ongkir','Kirim sendiri'].includes(courier)) {
+        costEl.value = 0;
+        costEl.readOnly = true;
+        costEl.style.opacity = '0.5';
+    } else {
+        costEl.readOnly = false;
+        costEl.style.opacity = '';
+    }
+    updateSplitPreview();
+}
+// Live preview total kedua sisi setelah split (mirror logika server).
+function updateSplitPreview() {
+    const o = window._currentOrder;
+    if (!o) return;
+    const checked = Array.from(document.querySelectorAll('input[name="split-item"]:checked')).map(c => Number(c.value));
+    const items = o.items || [];
+    const moving = items.filter(i => checked.includes(Number(i.id)));
+    const staying = items.filter(i => !checked.includes(Number(i.id)));
+    const sub = (arr) => arr.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0);
+    const movingSub = sub(moving), stayingSub = sub(staying), total = movingSub + stayingSub;
+    const origDisc = Number(o.discount_amount || 0);
+    const movingDisc = total > 0 ? Math.round(origDisc * movingSub / total) : 0;
+    const stayingDisc = origDisc - movingDisc;
+    const childShip = parseInt(document.getElementById('split-shipping-cost')?.value || 0);
+    const stayingShip = Number(o.shipping_cost || 0);
+    const stayingTotal = stayingSub - stayingDisc + stayingShip;
+    const childTotal = movingSub - movingDisc + childShip;
+
+    const preview = document.getElementById('split-preview');
+    if (moving.length === 0 || staying.length === 0) {
+        preview.classList.add('hidden'); return;
+    }
+    document.getElementById('split-stay-count').textContent = staying.length;
+    document.getElementById('split-stay-total').textContent = 'Rp ' + fmt(stayingTotal);
+    document.getElementById('split-move-count').textContent = moving.length;
+    document.getElementById('split-move-total').textContent = 'Rp ' + fmt(childTotal);
+    preview.classList.remove('hidden');
+}
+async function submitSplitOrder() {
+    const o = window._currentOrder;
+    if (!o) return;
+    const checked = Array.from(document.querySelectorAll('input[name="split-item"]:checked')).map(c => Number(c.value));
+    if (checked.length === 0) { toast('Pilih minimal 1 item utk dipindah', true); return; }
+    if (checked.length === (o.items || []).length) { toast('Tak boleh pindah SEMUA — minimal sisakan 1 di pesanan asli', true); return; }
+
+    const btn = document.getElementById('split-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Memproses...';
+    try {
+        const payload = {
+            item_ids: checked,
+            new_courier:       document.getElementById('split-courier').value,
+            new_shipping_cost: parseInt(document.getElementById('split-shipping-cost').value || 0),
+            new_weight_kg:     parseFloat(document.getElementById('split-weight').value || 0),
+        };
+        const res = await apiFetch(`/api/orders/${o.id}/split`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        toast(`✓ Dipisah jadi #${res.new_order_code}`);
+        closeSplitOrderModal();
+        // Refresh: load order BARU di modal detail (admin biasanya mau lanjut atur
+        // kurir/alamat utk yg dikirim). List utama juga refresh.
+        if (typeof renderOrders === 'function') renderOrders();
+        await viewOrder(res.new_order_id);
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        btn.disabled = false; btn.innerHTML = 'Pisahkan Sekarang';
     }
 }
 
@@ -7478,7 +7675,7 @@ function waOnCourierChange() {
     const courier = document.getElementById('wa-shipping-courier')?.value || '';
     const costEl  = document.getElementById('wa-shipping-cost');
     if (!costEl) return;
-    if (courier === 'Free Ongkir' || courier === 'Kirim sendiri') {
+    if (courier === 'Free Ongkir' || courier === 'Kirim sendiri' || courier === 'Diambil di Event') {
         costEl.value = 0;
         costEl.readOnly = true;
         costEl.style.opacity = '0.5';

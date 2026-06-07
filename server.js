@@ -2937,6 +2937,145 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/orders/:id/split — Pisahkan order jadi 2 berdasar items terpilih.
+// Use case utama: event mixed ambil+kirim. Sebagian item diambil langsung
+// (kurir "Diambil di Event", ongkir 0), sisanya tetap pakai kurir asli (dikirim).
+//
+// Desain:
+// - Original RETAINED (bukan cancelled). Items subset di-move ke child via
+//   UPDATE order_id. Lebih bersih dari "cancel + buat 2 baru" karena tidak
+//   trigger refund auto kalau paid, dan tracking customer tetap satu titik.
+// - Child = order baru. Copy semua data customer + payment context. Order code
+//   baru via generateOrderCode (pakai source asli).
+// - Diskon dibagi PROPORTIONAL ke subtotal items masing-masing pihak.
+// - Stok tidak disentuh — item moved, alokasi stok sudah benar (dilakukan saat
+//   confirm-payment original).
+// - has_bordir_*/bordir_status recompute per pihak berdasar items aktualnya.
+// - Embroidery_details COPY ke child (tidak split per item_label — MVP sederhana;
+//   admin lihat array yg sama, UI tetap render item_label-aware).
+// - Notes append "[Dipisah dari/jadi #X]" di kedua sisi untuk audit trail.
+app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (['cancelled','done','shipped'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan ini tidak bisa dipisah (sudah dikirim/dibatalkan/selesai)' });
+
+        let { item_ids } = req.body;
+        const { new_courier, new_shipping_cost, new_weight_kg, new_shipping_city } = req.body;
+
+        // Multer .none() parse FormData multi-value → string[]. JSON body bisa array langsung.
+        // Defensive: terima string single, comma-string, atau array.
+        if (typeof item_ids === 'string') item_ids = item_ids.split(',').map(s => s.trim()).filter(Boolean);
+        if (!Array.isArray(item_ids) || item_ids.length === 0)
+            return res.status(400).json({ error: 'Pilih minimal 1 item untuk dipindah ke pesanan baru' });
+        const moveIds = item_ids.map(Number).filter(n => Number.isInteger(n) && n > 0);
+        if (moveIds.length === 0)
+            return res.status(400).json({ error: 'item_ids tidak valid' });
+
+        // Ambil items & pastikan yang dipilih benar-benar punya order ini (anti-tamper).
+        const allItems = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+        const moveSet = new Set(moveIds);
+        const movingItems = allItems.filter(i => moveSet.has(Number(i.id)));
+        const stayingItems = allItems.filter(i => !moveSet.has(Number(i.id)));
+        if (movingItems.length !== moveIds.length)
+            return res.status(400).json({ error: 'Sebagian item yang dipilih bukan dari pesanan ini' });
+        if (movingItems.length === 0)
+            return res.status(400).json({ error: 'Tidak ada item yang dipindah' });
+        if (stayingItems.length === 0)
+            return res.status(400).json({ error: 'Tidak boleh memindah SEMUA item — minimal sisakan 1 di pesanan asli' });
+
+        // Subtotal per pihak (harga × qty). price sudah include bordir cost karena
+        // di POST orders kita simpan unitPrice = basePrice + embroidery_cost.
+        const sumSubtotal = (items) => items.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0);
+        const movingSubtotal = sumSubtotal(movingItems);
+        const stayingSubtotal = sumSubtotal(stayingItems);
+        const totalSubtotal = movingSubtotal + stayingSubtotal;
+
+        // Proportional discount: split berdasar share subtotal. Pembulatan: child ambil
+        // round, sisanya ke original supaya sum tetap = total diskon asli (no drift).
+        const originalDiscount = Number(order.discount_amount || 0);
+        const movingDiscount = totalSubtotal > 0 ? Math.round(originalDiscount * movingSubtotal / totalSubtotal) : 0;
+        const stayingDiscount = originalDiscount - movingDiscount;
+
+        // Child shipping params (admin set, defaults aman).
+        const childCourier = (new_courier && String(new_courier).trim()) || 'Diambil di Event';
+        const childShippingCost = Number.isFinite(parseInt(new_shipping_cost)) ? Math.max(0, parseInt(new_shipping_cost)) : 0;
+        const childWeight = Number.isFinite(parseFloat(new_weight_kg)) ? Math.max(0, parseFloat(new_weight_kg)) : 0;
+        const childCity = new_shipping_city !== undefined ? String(new_shipping_city).trim() : (order.shipping_city || '');
+
+        // Bordir flags recompute per pihak.
+        const childHasBordirLogo = movingItems.some(i => i.bordir_logo);
+        const childHasBordirNama = movingItems.some(i => i.bordir_nama);
+        const stayingHasBordirLogo = stayingItems.some(i => i.bordir_logo);
+        const stayingHasBordirNama = stayingItems.some(i => i.bordir_nama);
+
+        // Total per pihak.
+        const childTotal = movingSubtotal - movingDiscount + childShippingCost;
+        const stayingTotal = stayingSubtotal - stayingDiscount + Number(order.shipping_cost || 0);
+
+        const childOrderCode = generateOrderCode(order.order_source);
+        const childNote = ((order.notes || '').trim() + (order.notes ? '\n' : '') + `[Dipisah dari #${order.order_code}]`).trim();
+        const stayingNote = ((order.notes || '').trim() + (order.notes ? '\n' : '') + `[Dipisah jadi #${childOrderCode}]`).trim();
+
+        const newOrderId = await withTransaction(async (client) => {
+            // 1. Insert child — copy customer & payment context dari original
+            const childRes = await client.query(`
+                INSERT INTO orders (
+                    order_code, customer_name, customer_phone, customer_address,
+                    shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
+                    embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status,
+                    notes, order_source, payment_method, payment_status, order_status,
+                    discount_percent, discount_amount, discount_label, bordir_logo_requested,
+                    billing_to, paid_at
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+                RETURNING id`,
+                [
+                    childOrderCode, order.customer_name, order.customer_phone, order.customer_address,
+                    childCity, childCourier, childWeight, childShippingCost, childTotal,
+                    order.embroidery_details,
+                    childHasBordirLogo, childHasBordirNama,
+                    (childHasBordirLogo || childHasBordirNama) ? (order.bordir_status || 'pending') : null,
+                    childNote, order.order_source, order.payment_method, order.payment_status, order.order_status,
+                    order.discount_percent || 0, movingDiscount, order.discount_label, order.bordir_logo_requested,
+                    order.billing_to, order.paid_at
+                ]
+            );
+            const newId = childRes.rows[0].id;
+
+            // 2. Re-parent items terpilih ke child
+            await client.query(
+                `UPDATE order_items SET order_id = $1 WHERE order_id = $2 AND id = ANY($3::int[])`,
+                [newId, order.id, moveIds]
+            );
+
+            // 3. Update original: subtotal, diskon, bordir flags, notes
+            await client.query(`
+                UPDATE orders SET
+                    total_amount = $1,
+                    discount_amount = $2,
+                    has_bordir_logo = $3,
+                    has_bordir_nama = $4,
+                    bordir_status = CASE WHEN ($3 OR $4) THEN COALESCE(bordir_status, 'pending') ELSE NULL END,
+                    notes = $5,
+                    updated_at = NOW()
+                WHERE id = $6`,
+                [stayingTotal, stayingDiscount, stayingHasBordirLogo, stayingHasBordirNama, stayingNote, order.id]
+            );
+
+            return newId;
+        });
+
+        res.json({
+            message: 'Pesanan berhasil dipisah',
+            new_order_id: newOrderId,
+            new_order_code: childOrderCode,
+            original_new_total: stayingTotal,
+            child_total: childTotal
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/orders/:id/bordir-review', requireMenu('orders','edit'), upload.none(), async (req, res) => {
     try {
         const { action, reason, reject_types } = req.body;
