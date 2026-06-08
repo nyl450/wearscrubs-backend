@@ -506,6 +506,14 @@ async function initDB() {
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_custom_size BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_po BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS po_fulfilled BOOLEAN DEFAULT FALSE`);
+    // Custom Product (8 Jun): fully off-catalog item (name + category + variant + color
+    // + size + price all admin-supplied). product_id is NULL — name/category live on
+    // the order_items row itself. Stock is never touched; pack-guard treats it like
+    // custom_size (manual "Tandai Siap" fulfill). Bordir gating uses custom_product_category.
+    await dbRun(`ALTER TABLE order_items ALTER COLUMN product_id DROP NOT NULL`).catch(() => {});
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_custom_product BOOLEAN DEFAULT FALSE`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS custom_product_name TEXT DEFAULT NULL`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS custom_product_category TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_by TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT DEFAULT NULL`);
     // Migrate: order channel & payment method
@@ -746,8 +754,8 @@ async function backfillCancelledRefunds() {
         }
         for (const o of orphans) {
             const items = await dbAll(
-                `SELECT oi.quantity, oi.size, oi.color, oi.variant_type, p.name AS product_name
-                 FROM order_items oi JOIN products p ON p.id = oi.product_id
+                `SELECT oi.quantity, oi.size, oi.color, oi.variant_type, COALESCE(oi.custom_product_name, p.name) AS product_name
+                 FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
                  WHERE oi.order_id = $1`,
                 [o.id]
             );
@@ -1449,15 +1457,17 @@ app.get('/api/pre-orders', requireAuth(), async (req, res) => {
                     oi.quantity, oi.is_po, oi.is_custom_size, oi.po_fulfilled, oi.price,
                     o.order_code, o.customer_name, o.customer_phone, o.order_source,
                     o.payment_status, o.order_status, o.created_at,
-                    p.name AS product_name,
+                    COALESCE(oi.custom_product_name, p.name) AS product_name,
                     inv.stock AS variant_stock,
-                    CASE WHEN oi.is_custom_size THEN 'custom' ELSE 'catalog' END AS po_type
+                    CASE WHEN oi.is_custom_product THEN 'custom_product'
+                         WHEN oi.is_custom_size THEN 'custom'
+                         ELSE 'catalog' END AS po_type
              FROM order_items oi
              JOIN orders o ON o.id = oi.order_id
-             JOIN products p ON p.id = oi.product_id
+             LEFT JOIN products p ON p.id = oi.product_id
              LEFT JOIN inventory inv ON inv.product_id = oi.product_id AND inv.size = oi.size
                   AND inv.color = oi.color AND inv.variant_type = oi.variant_type
-             WHERE (oi.is_po = TRUE OR oi.is_custom_size = TRUE)
+             WHERE (oi.is_po = TRUE OR oi.is_custom_size = TRUE OR oi.is_custom_product = TRUE)
                AND oi.po_fulfilled = FALSE
                AND o.order_status <> 'cancelled'
              ORDER BY o.created_at ASC, oi.id ASC`,
@@ -2000,8 +2010,8 @@ app.get('/api/orders', requireAuth(), async (req, res) => {
         for (const order of orders) {
             // GANTI: ? → $1
             order.items = await dbAll(
-                `SELECT oi.*, p.name as product_name FROM order_items oi
-                 JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
+                `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) as product_name FROM order_items oi
+                 LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
                 [order.id]
             );
         }
@@ -2015,7 +2025,7 @@ app.get('/api/orders/:id', requireAuth(), async (req, res) => {
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         // Join product name + fetch first photo for each item
         order.items = await dbAll(
-            `SELECT oi.*, p.name as product_name,
+            `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) as product_name,
                     COALESCE(
                         -- Exact match on variant_type (e.g. lengan pendek vs panjang), prefer slot 1.
                         -- NULLIF maps the string 'null' (no-variant sentinel) to real NULL;
@@ -2030,7 +2040,7 @@ app.get('/api/orders/:id', requireAuth(), async (req, res) => {
                          ORDER BY pv.slot ASC NULLS LAST LIMIT 1)
                     ) as photo
              FROM order_items oi
-             JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
+             LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
             [order.id]
         );
         res.json(order);
@@ -2084,11 +2094,11 @@ app.post('/api/orders', async (req, res) => {
         // the same shirt appears as multiple lines (plain + with name + with logo).
         const variantTotals = new Map();
         for (const item of items) {
-            // Custom-size (off-catalog, no inventory row) and Pre-Order (qty > stock,
-            // fulfilled later at receive) both skip the stock check. ADMIN-ONLY: a public
-            // caller sending these flags must NOT bypass stock (same anti-tamper posture
-            // as is_bonus), so the skip is gated behind isAdmin.
-            if (isAdmin && (item.is_custom_size === true || item.is_po === true)) continue;
+            // Custom-size, Custom-Product (both off-catalog, no inventory row) and
+            // Pre-Order (qty > stock, fulfilled later at receive) all skip the stock
+            // check. ADMIN-ONLY: a public caller sending these flags must NOT bypass
+            // stock (same anti-tamper posture as is_bonus), so the skip is gated behind isAdmin.
+            if (isAdmin && (item.is_custom_size === true || item.is_po === true || item.is_custom_product === true)) continue;
             const k = `${item.product_id}|${item.size}|${item.color}|${item.variant_type || 'null'}`;
             variantTotals.set(k, (variantTotals.get(k) || 0) + Number(item.quantity || 0));
         }
@@ -2110,8 +2120,31 @@ app.post('/api/orders', async (req, res) => {
 
         let productTotal = 0;
         const itemDetails = [];
+        // Allowed categories for custom_product (mirrors products.category CHECK).
+        const CUSTOM_PROD_CATS = ['tops', 'pants', 'caps', 'gown'];
         for (const item of items) {
-            const product = await dbGet('SELECT * FROM products WHERE id = $1', [item.product_id]);
+            // Custom-Product (8 Jun): fully off-catalog, no products row. name/category/
+            // price all come from the admin-supplied payload. ADMIN-ONLY — public callers
+            // sending this flag must NOT bypass catalog price (anti-tamper).
+            const isCustomProduct = isAdmin && item.is_custom_product === true;
+            let product;
+            if (isCustomProduct) {
+                // Validate the client-supplied custom product payload up front; fail fast
+                // before we open a transaction.
+                const cpName = (item.custom_product_name || '').trim();
+                const cpCat = (item.custom_product_category || '').trim();
+                if (!cpName) return res.status(400).json({ error: 'Custom product: nama wajib diisi' });
+                if (!CUSTOM_PROD_CATS.includes(cpCat))
+                    return res.status(400).json({ error: 'Custom product: kategori tidak valid' });
+                if (!Number.isInteger(item.custom_price) || item.custom_price < 0)
+                    return res.status(400).json({ error: 'Custom product: harga satuan wajib & tidak boleh negatif' });
+                // Synthetic product stand-in so the rest of the loop reads uniformly.
+                // product_id stays NULL when we INSERT later.
+                product = { name: cpName, category: cpCat, price: item.custom_price, price_by_type: null };
+            } else {
+                product = await dbGet('SELECT * FROM products WHERE id = $1', [item.product_id]);
+                if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
+            }
             // Per-item price = base product price + per-item embroidery cost.
             // Bonus item (gift): entire line is free (product + bordir = Rp 0). Stock
             // is still deducted later — only the price is zeroed.
@@ -2121,7 +2154,7 @@ app.post('/api/orders', async (req, res) => {
             // Custom size (e.g. 4XL): off-catalog garment with an admin-set base price.
             // ADMIN-ONLY (anti-tamper). When custom, the base price comes from custom_price
             // instead of the catalog product.price; falls back to product.price if missing.
-            const isCustomSize = isAdmin && item.is_custom_size === true;
+            const isCustomSize = isAdmin && item.is_custom_size === true && !isCustomProduct;
             // Catalog base price: tops/gown bisa punya harga berbeda per variant
             // (mis. Lengan Pendek vs Panjang di price_by_type). product.price hanya
             // menyimpan harga TERMURAH (min), jadi resolve per variant_type dulu;
@@ -2130,11 +2163,11 @@ app.post('/api/orders', async (req, res) => {
             const catalogPrice = (priceByType && item.variant_type && priceByType[item.variant_type] != null)
                 ? Number(priceByType[item.variant_type])
                 : Number(product.price);
-            const customBase = (isCustomSize && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : catalogPrice;
+            const customBase = ((isCustomSize || isCustomProduct) && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : catalogPrice;
             // Pre-Order (qty > stock): whole line is deferred, stock allocated later at
-            // receive (FIFO, paid-only). ADMIN-ONLY. Custom size takes precedence — a
+            // receive (FIFO, paid-only). ADMIN-ONLY. Custom takes precedence — a
             // custom (off-catalog) line is never a PO since it has no inventory to wait for.
-            const isPO = isAdmin && item.is_po === true && !isCustomSize;
+            const isPO = isAdmin && item.is_po === true && !isCustomSize && !isCustomProduct;
             // Bordir price: admin may override per-order (e.g. logo lebih susah → 40rb);
             // public callers ALWAYS use the fixed 20rb/30rb (gate behind isAdmin, anti-tamper).
             const namaPrice = (isAdmin && Number.isInteger(item.bordir_nama_price) && item.bordir_nama_price >= 0) ? item.bordir_nama_price : 20000;
@@ -2142,7 +2175,7 @@ app.post('/api/orders', async (req, res) => {
             const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? namaPrice : 0) + (item.bordir_logo ? logoPrice : 0));
             const basePrice = isBonus ? 0 : customBase;
             const unitPrice = basePrice + itemEmbroidery;
-            itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, is_po: isPO, price: unitPrice, product_name: product.name, base_price: basePrice, embroidery_cost: itemEmbroidery,
+            itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, is_custom_product: isCustomProduct, is_po: isPO, price: unitPrice, product_name: product.name, custom_product_name: isCustomProduct ? product.name : null, custom_product_category: isCustomProduct ? product.category : null, base_price: basePrice, embroidery_cost: itemEmbroidery,
                 bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null });
             productTotal += unitPrice * item.quantity;
         }
@@ -2246,12 +2279,13 @@ app.post('/api/orders', async (req, res) => {
 
             for (const item of itemDetails) {
                 await client.query(
-                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size, is_po)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-                    [newOrderId, item.product_id, item.size, item.color,
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size, is_po, is_custom_product, custom_product_name, custom_product_category)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+                    [newOrderId, item.is_custom_product ? null : item.product_id, item.size, item.color,
                         item.variant_type || 'null', item.quantity, item.price,
                         item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false,
-                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null, item.is_custom_size || false, item.is_po || false]
+                        item.bordir_nama_price ?? null, item.bordir_logo_price ?? null, item.is_custom_size || false, item.is_po || false,
+                        item.is_custom_product || false, item.custom_product_name || null, item.custom_product_category || null]
                 );
             }
             return newOrderId;
@@ -2262,6 +2296,7 @@ app.post('/api/orders', async (req, res) => {
         const itemSummary = itemDetails.map(i => {
             let line = `• ${i.product_name} (${i.color}${i.variant_type && i.variant_type !== 'null' ? ', ' + i.variant_type : ''}, ${i.size}) x${i.quantity}`;
             if (i.is_custom_size) line += ` [Custom]`;
+            if (i.is_custom_product) line += ` [Custom Product]`;
             if (i.is_po) line += ` [PRE-ORDER]`;
             if (i.bordir_nama) line += ` [Bordir Nama]`;
             if (i.bordir_logo) line += ` [Bordir Logo]`;
@@ -2386,7 +2421,7 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                 // hard stock check below, which would otherwise throw a false 409).
                 // Pre-Order lines are deferred: stock is allocated/deducted later at
                 // receive (FIFO), not here — so skip them at confirm too.
-                if (it.is_custom_size || it.is_po) continue;
+                if (it.is_custom_size || it.is_po || it.is_custom_product) continue;
                 const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
                 if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
                 variantTotals.get(k).quantity += it.quantity;
@@ -2548,7 +2583,7 @@ app.put('/api/orders/:id/pack', requireMenu('orders','edit'), upload.single('pac
         // custom size is marked ready manually. Block packing/shipping while any line is
         // still waiting — otherwise we'd ship goods we don't have yet.
         const pendingPO = await dbGet(
-            'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND (is_po = TRUE OR is_custom_size = TRUE) AND po_fulfilled = FALSE',
+            'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND (is_po = TRUE OR is_custom_size = TRUE OR is_custom_product = TRUE) AND po_fulfilled = FALSE',
             [order.id]
         );
         if (pendingPO && pendingPO.n > 0)
@@ -2693,9 +2728,10 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             if (order.payment_status === 'paid') {
                 const itemsRes = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
                 for (const item of itemsRes.rows) {
-                    // Custom-size lines were never deducted at confirm → nothing to restore
-                    // (and they have no inventory row; restoring would just log a bogus ledger entry).
-                    if (item.is_custom_size) continue;
+                    // Custom-size / Custom-Product lines were never deducted at confirm →
+                    // nothing to restore (and they have no inventory row; restoring would
+                    // just log a bogus ledger entry).
+                    if (item.is_custom_size || item.is_custom_product) continue;
                     // Pre-Order lines: only fulfilled ones had stock deducted (at receive).
                     // An unfulfilled PO was never deducted → skip (restoring would inflate stock).
                     if (item.is_po && !item.po_fulfilled) continue;
@@ -2749,8 +2785,8 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                 if (existing.rows.length === 0) {
                     // Build items summary string for at-a-glance reference
                     const itemsRes = await client.query(
-                        `SELECT oi.quantity, oi.size, oi.color, oi.variant_type, p.name AS product_name
-                         FROM order_items oi JOIN products p ON p.id = oi.product_id
+                        `SELECT oi.quantity, oi.size, oi.color, oi.variant_type, COALESCE(oi.custom_product_name, p.name) AS product_name
+                         FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
                          WHERE oi.order_id = $1`,
                         [order.id]
                     );
@@ -3075,8 +3111,8 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
         const allEmbroideryArr = Array.isArray(allEmbroidery) ? allEmbroidery : [];
         // Butuh product_name utk rebuild label. Fetch sekali.
         const itemsWithName = await dbAll(
-            `SELECT oi.id, oi.color, oi.size, p.name AS product_name FROM order_items oi
-             JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
+            `SELECT oi.id, oi.color, oi.size, COALESCE(oi.custom_product_name, p.name) AS product_name FROM order_items oi
+             LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
             [order.id]
         );
         const labelById = new Map(itemsWithName.map(i => [
@@ -3202,8 +3238,8 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
 
         // Fetch existing items + product names (utk item_label rebuild)
         const orderItems = await dbAll(
-            `SELECT oi.*, p.name AS product_name FROM order_items oi
-             JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
+            `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) AS product_name FROM order_items oi
+             LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
             [order.id]
         );
         const itemMap = new Map(orderItems.map(i => [Number(i.id), i]));
@@ -4108,7 +4144,7 @@ app.put('/api/orders/:id/items/:itemId/fulfill-po', requireMenu('orders','edit')
 
         const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [req.params.itemId, order.id]);
         if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
-        if (!item.is_custom_size)
+        if (!item.is_custom_size && !item.is_custom_product)
             return res.status(400).json({ error: 'Hanya item Custom yang ditandai siap manual. PO katalog dipenuhi otomatis saat terima stok.' });
         if (item.po_fulfilled)
             return res.status(400).json({ error: 'Item ini sudah ditandai siap' });

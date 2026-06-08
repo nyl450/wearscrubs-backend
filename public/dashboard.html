@@ -2488,8 +2488,10 @@ async function loadPreOrders() {
         const rows = await apiFetch('/api/pre-orders');
         // Sidebar badge = total waiting
         updatePreOrderBadge(rows.length);
-        const catalogCount = rows.filter(r => !r.is_custom_size).reduce((s, r) => s + Number(r.quantity || 0), 0);
-        const customCount  = rows.filter(r => r.is_custom_size).reduce((s, r) => s + Number(r.quantity || 0), 0);
+        // Custom Product is grouped together with Custom Size — both off-catalog,
+        // both manually-fulfilled, share the same workflow ("Tandai Siap").
+        const catalogCount = rows.filter(r => !r.is_custom_size && !r.is_custom_product).reduce((s, r) => s + Number(r.quantity || 0), 0);
+        const customCount  = rows.filter(r => r.is_custom_size || r.is_custom_product).reduce((s, r) => s + Number(r.quantity || 0), 0);
         const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
         setTxt('po-stat-catalog', catalogCount);
         setTxt('po-stat-custom', customCount);
@@ -2505,10 +2507,12 @@ async function loadPreOrders() {
         listEl.innerHTML = rows.map(r => {
             const age = poAgeDays(r.created_at);
             const ageClass = age >= 14 ? 'text-red-400' : age >= 7 ? 'text-orange-400' : 'text-white/50';
-            const isCustom = r.is_custom_size;
-            const typeBadge = isCustom
-                ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">✂️ CUSTOM</span>'
-                : '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PO KATALOG</span>';
+            const isCustom = r.is_custom_size || r.is_custom_product;
+            const typeBadge = r.is_custom_product
+                ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-400/15 text-purple-300 border border-purple-400/25">✨ CUSTOM PRODUCT</span>'
+                : r.is_custom_size
+                    ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">✂️ CUSTOM</span>'
+                    : '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PO KATALOG</span>';
             const paid = r.payment_status === 'paid';
             const payBadge = paid
                 ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">LUNAS</span>'
@@ -4537,8 +4541,8 @@ function renderOrders() {
         const items = o.items || [];
         const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
         const poFulfilled   = items.filter(i => i.is_po && i.po_fulfilled).length;
-        const customUnfulfilled = items.filter(i => i.is_custom_size && !i.po_fulfilled).length;
-        const customFulfilled   = items.filter(i => i.is_custom_size && i.po_fulfilled).length;
+        const customUnfulfilled = items.filter(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled).length;
+        const customFulfilled   = items.filter(i => (i.is_custom_size || i.is_custom_product) && i.po_fulfilled).length;
         const poBadge = poUnfulfilled > 0
             ? `<span class="status-badge border bg-orange-500/15 text-orange-300 border-orange-500/25" title="Pre-Order menunggu stok masuk">📦 PO ${poUnfulfilled}${poFulfilled ? `/${poUnfulfilled+poFulfilled}` : ''}</span>`
             : (poFulfilled > 0 ? `<span class="status-badge border bg-green-500/10 text-green-300 border-green-500/20" title="Semua PO sudah siap">📦 PO siap</span>` : '');
@@ -5143,6 +5147,9 @@ async function viewOrder(id) {
                 <div class="flex-1 min-w-0">
                     <p class="font-semibold text-sm">${esc(i.product_name)}
                         ${i.is_bonus ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/25">🎁 BONUS</span>' : ''}
+                        ${i.is_custom_product ? (i.po_fulfilled
+                            ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">✨ CUSTOM PRODUCT · siap</span>'
+                            : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-400/15 text-purple-300 border border-purple-400/25">✨ CUSTOM PRODUCT · menunggu dijahit</span>') : ''}
                         ${i.is_custom_size ? (i.po_fulfilled
                             ? '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">✂️ CUSTOM · siap</span>'
                             : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300 border border-sky-400/25">✂️ CUSTOM · menunggu dijahit</span>') : ''}
@@ -5151,9 +5158,9 @@ async function viewOrder(id) {
                             : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PRE-ORDER · menunggu stok</span>') : ''}
                     </p>
                     <p class="text-xs text-white/40 mt-0.5">${esc(i.size)} · ${esc(i.color)}${i.variant_type&&i.variant_type!=='null'?' · '+esc(i.variant_type):''} · x${i.quantity}
-                        ${canEditSize && !i.is_custom_size && !(i.is_po && !i.po_fulfilled) ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
+                        ${canEditSize && !i.is_custom_size && !i.is_custom_product && !(i.is_po && !i.po_fulfilled) ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
                     </p>
-                    ${i.is_custom_size && !i.po_fulfilled && !['shipped','done','cancelled'].includes(o.order_status) ? `<button onclick="fulfillCustomItem(${o.id}, ${i.id})" class="mt-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-green-500/15 border border-green-400/30 text-green-300 hover:bg-green-500/25 transition font-bold"><i class="fa-solid fa-check text-[9px]"></i> Tandai Siap (custom selesai dijahit)</button>` : ''}
+                    ${(i.is_custom_size || i.is_custom_product) && !i.po_fulfilled && !['shipped','done','cancelled'].includes(o.order_status) ? `<button onclick="fulfillCustomItem(${o.id}, ${i.id})" class="mt-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-green-500/15 border border-green-400/30 text-green-300 hover:bg-green-500/25 transition font-bold"><i class="fa-solid fa-check text-[9px]"></i> Tandai Siap (${i.is_custom_product ? 'custom product' : 'custom'} selesai dijahit)</button>` : ''}
                     <div class="text-xs text-white/30 mt-1 space-y-0.5">
                         ${(() => {
                             if (i.is_bonus) return '<p>Gratis (bonus)</p>';
@@ -6011,6 +6018,7 @@ function openSplitOrderModal() {
     list.innerHTML = items.map(i => {
         const tags = [];
         if (i.is_bonus) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300">BONUS</span>');
+        if (i.is_custom_product) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-400/15 text-purple-300">CPROD</span>');
         if (i.is_custom_size) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-300">CUSTOM</span>');
         if (i.is_po) tags.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300">PO</span>');
         const bordir = [];
@@ -7435,9 +7443,49 @@ function waAddItem() {
                 <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})">
                     <option value="">-- Pilih Produk --</option>
                     ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-cat="${p.category||''}">${p.name} — ${waProductPriceLabel(p)}</option>`).join('')}
+                    <option value="__custom_product__" data-cat="">✨ Custom Product — di luar katalog</option>
                 </select>
             </div>
-            <div class="grid grid-cols-3 gap-2">
+            <!-- Custom Product panel: muncul saat produk = __custom_product__. Semua field manual,
+                 tidak dicek stok, treat seperti Custom Size (pack-guard via tombol "Tandai Siap"). -->
+            <div id="wa-cprod-panel-${idx}" class="hidden p-3 rounded-xl space-y-2.5" style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.25);">
+                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(216,180,254,0.9);">✨ Custom Product — di luar katalog, stok tidak dicek</p>
+                <div>
+                    <label class="wa-field-label">Nama Produk <span style="color:#f87171">*</span></label>
+                    <input type="text" id="wa-cprod-name-${idx}" placeholder="mis. Scrub Custom dr. Andi" class="input-sm" oninput="waCprodOnChange(${idx})" />
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="wa-field-label">Kategori <span style="color:#f87171">*</span></label>
+                        <select id="wa-cprod-cat-${idx}" class="input-sm" onchange="waCprodOnChange(${idx})">
+                            <option value="">-- Pilih --</option>
+                            <option value="tops">Atasan</option>
+                            <option value="pants">Celana</option>
+                            <option value="caps">Cap</option>
+                            <option value="gown">Gown</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="wa-field-label">Variant <span class="wa-optional">(bebas)</span></label>
+                        <input type="text" id="wa-cprod-variant-${idx}" placeholder="mis. Lengan 3/4" class="input-sm" />
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="wa-field-label">Warna <span style="color:#f87171">*</span></label>
+                        <input type="text" id="wa-cprod-color-${idx}" placeholder="mis. Tosca" class="input-sm" />
+                    </div>
+                    <div>
+                        <label class="wa-field-label">Ukuran <span style="color:#f87171">*</span></label>
+                        <input type="text" id="wa-cprod-size-${idx}" placeholder="mis. 4XL" class="input-sm" />
+                    </div>
+                    <div>
+                        <label class="wa-field-label">Harga Satuan (Rp) <span style="color:#f87171">*</span></label>
+                        <input type="number" id="wa-cprod-price-${idx}" min="0" placeholder="mis. 280000" class="input-sm" oninput="waUpdateTotal()" />
+                    </div>
+                </div>
+            </div>
+            <div id="wa-catalog-fields-${idx}" class="grid grid-cols-3 gap-2">
                 <div>
                     <label class="wa-field-label">Warna</label>
                     <select id="wa-color-${idx}" onchange="waOnColorChange(${idx})" class="input-sm">
@@ -7604,7 +7652,11 @@ function waToggleBonus(idx) {
 // bordir when the selected product is a different category (pants/caps).
 function waSetBordirEnabled(idx) {
     const prodEl = document.getElementById(`wa-prod-${idx}`);
-    const cat = prodEl?.selectedOptions?.[0]?.dataset?.cat || '';
+    // Custom Product mode: category comes from the cprod-cat dropdown, not the
+    // product option's dataset (which is empty for the sentinel).
+    const cat = waIsCustomProduct(idx)
+        ? (document.getElementById(`wa-cprod-cat-${idx}`)?.value || '')
+        : (prodEl?.selectedOptions?.[0]?.dataset?.cat || '');
     const enabled = cat === 'tops' || cat === 'gown';
     const hint = document.getElementById(`wa-bordir-hint-${idx}`);
     if (hint) hint.classList.toggle('hidden', enabled || !cat); // show hint only when a non-top product is chosen
@@ -7680,6 +7732,10 @@ async function waOnProductChange(idx) {
     const colorSel = document.getElementById(`wa-color-${idx}`);
     const variantSel = document.getElementById(`wa-variant-${idx}`);
     const sizeSel = document.getElementById(`wa-size-${idx}`);
+    const catalogWrap = document.getElementById(`wa-catalog-fields-${idx}`);
+    const cprodPanel = document.getElementById(`wa-cprod-panel-${idx}`);
+    const stockInfo = document.getElementById(`wa-stock-info-${idx}`);
+    const poNotice = document.getElementById(`wa-po-notice-${idx}`);
     colorSel.innerHTML = '<option value="">--</option>';
     variantSel.innerHTML = '<option value="">--</option>';
     sizeSel.innerHTML = '<option value="">--</option>';
@@ -7687,6 +7743,27 @@ async function waOnProductChange(idx) {
     // Reset custom-panel inputs + visibility when the product changes (avoid stale state).
     ['custom-color','custom-size','custom-price'].forEach(k => { const e = document.getElementById(`wa-${k}-${idx}`); if (e) e.value = ''; });
     waSetCustomPanel(idx);
+
+    // Custom Product mode: full off-catalog. Hide catalog cascade (color/variant/size)
+    // + their custom overrides + stock/PO notices; show the Custom Product panel.
+    const isCprod = productId === '__custom_product__';
+    if (catalogWrap) catalogWrap.classList.toggle('hidden', isCprod);
+    if (cprodPanel) cprodPanel.classList.toggle('hidden', !isCprod);
+    if (isCprod) {
+        if (stockInfo) stockInfo.classList.add('hidden');
+        if (poNotice) poNotice.classList.add('hidden');
+        const hiddenPO = document.getElementById(`wa-po-${idx}`); if (hiddenPO) hiddenPO.value = 'false';
+        // Reset custom-color/size override panel (not used in cprod mode).
+        const cf = document.getElementById(`wa-custom-fields-${idx}`); if (cf) cf.classList.add('hidden');
+        // Reset cprod inputs to blank for the new line.
+        ['cprod-name','cprod-cat','cprod-variant','cprod-color','cprod-size','cprod-price'].forEach(k => {
+            const e = document.getElementById(`wa-${k}-${idx}`); if (e) e.value = '';
+        });
+        waSetBordirEnabled(idx);
+        waUpdateTotal();
+        return;
+    }
+
     // Bordir applies to tops & gown — enable/disable the pills for the chosen product.
     waSetBordirEnabled(idx);
     if (!productId) { waUpdateTotal(); return; }
@@ -7712,6 +7789,18 @@ function waIsCustomItem(idx) {
     const c = document.getElementById(`wa-color-${idx}`)?.value;
     const s = document.getElementById(`wa-size-${idx}`)?.value;
     return c === '__custom__' || s === '__custom__';
+}
+
+// Custom Product = full off-catalog item (name/category/price all manual).
+function waIsCustomProduct(idx) {
+    return document.getElementById(`wa-prod-${idx}`)?.value === '__custom_product__';
+}
+
+// Custom Product field changed (name/category) — refresh bordir gating based on the
+// newly-entered category, since the regular dataset-driven path doesn't apply here.
+function waCprodOnChange(idx) {
+    waSetBordirEnabled(idx);
+    waUpdateTotal();
 }
 
 // Show/hide the custom panel + its per-field rows based on what is custom. Prefills the
@@ -7990,10 +8079,14 @@ function waUpdateTotal() {
         if (!prodEl || !prodEl.value) return;
         const isBonus = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
         if (isBonus) return; // bonus item: free, excluded from total
-        // Custom item (color and/or size): base price is the admin-entered custom price.
-        const price = waIsCustomItem(idx)
-            ? (parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value) || 0)
-            : waCatalogUnitPrice(idx);
+        // Custom Product (full off-catalog) → price from cprod panel.
+        // Custom item (color/size override) → price from custom-fields panel.
+        // Else → catalog price resolved by variant.
+        const price = waIsCustomProduct(idx)
+            ? (parseInt(document.getElementById(`wa-cprod-price-${idx}`)?.value) || 0)
+            : waIsCustomItem(idx)
+                ? (parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value) || 0)
+                : waCatalogUnitPrice(idx);
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 0) : 0;
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 0) : 0;
@@ -8069,6 +8162,64 @@ async function waSubmitOrder() {
         const prodEl    = document.getElementById(`wa-prod-${idx}`);
         const productId = prodEl?.value;
         if (!productId) continue;
+
+        // Custom Product branch: all fields manual. No stock, no PO, treat like custom-size at server.
+        if (productId === '__custom_product__') {
+            const cpName    = document.getElementById(`wa-cprod-name-${idx}`)?.value.trim() || '';
+            const cpCat     = document.getElementById(`wa-cprod-cat-${idx}`)?.value || '';
+            const cpVariant = document.getElementById(`wa-cprod-variant-${idx}`)?.value.trim() || '';
+            const cpColor   = document.getElementById(`wa-cprod-color-${idx}`)?.value.trim() || '';
+            const cpSize    = document.getElementById(`wa-cprod-size-${idx}`)?.value.trim() || '';
+            const cpPrice   = parseInt(document.getElementById(`wa-cprod-price-${idx}`)?.value);
+            const cpQty     = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
+            const label     = cpName || `Item #${idx}`;
+            if (!cpName)  { posErrors.push(`Custom Product #${idx}: isi nama produk.`); continue; }
+            if (!cpCat)   { posErrors.push(`${label}: pilih kategori.`); continue; }
+            if (!cpColor) { posErrors.push(`${label}: isi warna.`); continue; }
+            if (!cpSize)  { posErrors.push(`${label}: isi ukuran.`); continue; }
+            if (!Number.isInteger(cpPrice) || cpPrice < 0) { posErrors.push(`${label}: isi harga satuan.`); continue; }
+
+            const bordirNamaCP = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
+            const bordirLogoCP = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
+            const isBonusCP    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
+
+            items.push({
+                product_id:   null,
+                is_custom_product: true,
+                custom_product_name: cpName,
+                custom_product_category: cpCat,
+                color:        cpColor,
+                variant_type: cpVariant || 'null',
+                size:         cpSize,
+                quantity:     cpQty,
+                bordir_nama:  bordirNamaCP,
+                bordir_logo:  bordirLogoCP,
+                bordir_nama_price: parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000,
+                bordir_logo_price: parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000,
+                is_bonus:     isBonusCP,
+                custom_price: cpPrice,
+                is_custom_size: false,
+                is_po:        false,
+            });
+
+            if (bordirNamaCP || bordirLogoCP) {
+                const itemLabel = `${cpName} (${cpColor}, ${cpSize})`;
+                if (bordirNamaCP) {
+                    const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
+                    const c = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
+                    const p = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                    if (!t) { posErrors.push(`${itemLabel}: isi teks bordir nama.`); continue; }
+                    embroideryDetails.push({ item_label: itemLabel, type: 'nama', value: t, thread_color: c, position: p });
+                }
+                if (bordirLogoCP) {
+                    const logoData = waBordirLogoFiles[idx];
+                    const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
+                    const p = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                    embroideryDetails.push({ item_label: itemLabel, type: 'logo', value: logoData || 'kirim via WA', thread_color: c, position: p });
+                }
+            }
+            continue;
+        }
 
         // Validate selection: color & size required; variant required if it has real options.
         const colorEl   = document.getElementById(`wa-color-${idx}`);
@@ -8220,6 +8371,7 @@ function buildOrderWaMessage(o) {
         const lineTotal = it.is_bonus ? 0 : (Number(it.price) || 0) * (it.quantity || 1);
         let line = `- ${it.product_name || 'Produk'} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS' : rp(lineTotal)}`;
         if (it.is_custom_size) line += ' [Custom]';
+        if (it.is_custom_product) line += ' [Custom Product]';
         if (it.is_po) line += ' [Pre-Order]';
         if (it.bordir_nama) line += ' [Bordir Nama]';
         if (it.bordir_logo) line += ' [Bordir Logo]';
@@ -8428,9 +8580,10 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
         const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
         const customTag = item.is_custom_size ? ' <span style="background:#e0f2fe;color:#075985;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM</span>' : '';
+        const cprodTag = item.is_custom_product ? ' <span style="background:#f3e8ff;color:#6b21a8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM PRODUCT</span>' : '';
         const poTag = item.is_po ? ` <span style="background:#ffedd5;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">PRE-ORDER${item.po_fulfilled ? ' ✓' : ''}</span>` : '';
         itemRowsHTML += `<tr>
-            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${customTag}${poTag}${bonusTag}</td>
+            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong> Size: ${esc(item.size || '')}${customTag}${cprodTag}${poTag}${bonusTag}</td>
             <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
             <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>
