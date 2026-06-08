@@ -6939,9 +6939,17 @@ function openExchangeCreate(orderId) {
     apiFetch('/api/orders/' + orderId).then(order => {
         const items = order.items || [];
         if (!items.length) { toast('Order tidak punya item', true); return; }
-        const itemOpts = items.map(i =>
-            `<option value="${i.id}" data-size="${escEx(i.size)}" data-qty="${i.quantity}">${escEx(i.product_name)} — ${escEx(i.size)} · ${escEx(i.color)}${i.variant_type&&i.variant_type!=='null'?' · '+escEx(i.variant_type):''} (×${i.quantity})</option>`
-        ).join('');
+        // Off-catalog items (custom product / custom size) tidak punya stok katalog →
+        // tidak bisa tukar size. Tampilkan tapi disabled supaya admin lihat alasan,
+        // bukan hilang tanpa penjelasan.
+        const itemOpts = items.map(i => {
+            const offCatalog = i.is_custom_product || i.is_custom_size;
+            const tag = i.is_custom_product ? ' [Custom Product — tidak bisa tukar]'
+                      : i.is_custom_size    ? ' [Custom Size — tidak bisa tukar]'
+                      : '';
+            const dis = offCatalog ? ' disabled' : '';
+            return `<option value="${i.id}" data-size="${escEx(i.size)}" data-qty="${i.quantity}"${dis}>${escEx(i.product_name)} — ${escEx(i.size)} · ${escEx(i.color)}${i.variant_type&&i.variant_type!=='null'?' · '+escEx(i.variant_type):''} (×${i.quantity})${tag}</option>`;
+        }).join('');
         document.getElementById('exchange-create-order-id').value = orderId;
         document.getElementById('exchange-create-item').innerHTML = itemOpts;
         document.getElementById('exchange-create-qty').value = 1;
@@ -8204,18 +8212,26 @@ async function waSubmitOrder() {
 
             if (bordirNamaCP || bordirLogoCP) {
                 const itemLabel = `${cpName} (${cpColor}, ${cpSize})`;
+                let namaPosCP = null, logoPosCP = null;
                 if (bordirNamaCP) {
                     const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
                     const c = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
-                    const p = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                    namaPosCP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                     if (!t) { posErrors.push(`${itemLabel}: isi teks bordir nama.`); continue; }
-                    embroideryDetails.push({ item_label: itemLabel, type: 'nama', value: t, thread_color: c, position: p });
+                    // Key MUST be `color` (not `thread_color`) — renderer/WA/invoice all read e.color.
+                    embroideryDetails.push({ item_label: itemLabel, type: 'nama', value: t, color: c, position: namaPosCP });
                 }
                 if (bordirLogoCP) {
                     const logoData = waBordirLogoFiles[idx];
                     const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
-                    const p = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
-                    embroideryDetails.push({ item_label: itemLabel, type: 'logo', value: logoData || 'kirim via WA', thread_color: c, position: p });
+                    logoPosCP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                    embroideryDetails.push({ item_label: itemLabel, type: 'logo', value: logoData || 'kirim via WA', color: c, position: logoPosCP });
+                }
+                // Mirror existing rule: kalau both bordir aktif, posisi nama vs logo wajib beda
+                // (1 di kanan, 1 di kiri). Backend POST /api/orders tidak validate ini — frontend
+                // satu-satunya gate, jadi WAJIB sama dgn branch normal di bawah.
+                if (bordirNamaCP && bordirLogoCP && namaPosCP && logoPosCP && namaPosCP === logoPosCP) {
+                    posErrors.push(`${itemLabel}: Posisi bordir nama dan logo tidak boleh sama. Satu harus kanan, satunya kiri.`);
                 }
             }
             continue;

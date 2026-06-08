@@ -3850,6 +3850,11 @@ app.post('/api/orders/:id/exchanges', requireMenu('exchange','edit'), upload.non
 
         const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [order_item_id, order.id]);
         if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
+        // Off-catalog items (custom_product: product_id NULL, no catalog row; custom_size:
+        // size like 4XL not in inventory) tidak punya stok katalog untuk di-swap. Tolak
+        // di sini supaya error message jelas (bukan FK/constraint 500 dari INSERT/approve).
+        if (item.is_custom_product || item.is_custom_size)
+            return res.status(400).json({ error: 'Item custom (custom product / custom size) tidak bisa tukar size — tidak ada stok katalog untuk dipakai sebagai pengganti.' });
         if (String(to_size).trim() === String(item.size).trim())
             return res.status(400).json({ error: 'Size pengganti harus berbeda dari size asli' });
 
