@@ -2479,6 +2479,13 @@ app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.sing
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'bordir') return res.status(400).json({ error: 'Pesanan tidak dalam status bordir' });
+        // Bordir review gate: cuma boleh tandai selesai kalau sudah disetujui.
+        // Status lain (pending/rejected/partial_rejected) = bordir tak boleh dimulai/lanjut.
+        if (order.bordir_status !== 'approved')
+            return res.status(409).json({ error: 'Bordir belum disetujui — review dulu di detail pesanan sebelum tandai selesai.' });
+        // Outstanding selisih bordir tambahan harus lunas dulu.
+        if (Number(order.additional_amount_due || 0) > 0 && !order.additional_paid_at)
+            return res.status(409).json({ error: 'Selisih bordir tambahan belum lunas. Konfirmasi bayar dulu.' });
 
         // Photo OPTIONAL (storage saving): admin confirms via checklist. The step record
         // (who + when + note) is still logged for audit — only the image is skipped.
@@ -2525,6 +2532,16 @@ app.put('/api/orders/:id/pack', requireMenu('orders','edit'), upload.single('pac
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'confirmed') return res.status(400).json({ error: 'Pesanan belum berstatus confirmed/siap kemas' });
+
+        // Bordir guard: order dgn bordir harus sudah disetujui istri sebelum dikemas.
+        // Defense-in-depth — frontend gate "Review Bordir Dulu" sudah ada, ini backend safety.
+        if ((order.has_bordir_logo || order.has_bordir_nama) && order.bordir_status !== 'approved')
+            return res.status(409).json({ error: 'Bordir belum disetujui — review dulu di detail pesanan sebelum kemas.' });
+
+        // Additional bordir (post-payment) guard: kalau ada selisih outstanding, jangan
+        // pack — barang sudah ada bordir baru tapi customer belum bayar selisihnya.
+        if (Number(order.additional_amount_due || 0) > 0 && !order.additional_paid_at)
+            return res.status(409).json({ error: 'Selisih bordir tambahan belum lunas. Konfirmasi bayar dulu dari banner di detail pesanan.' });
 
         // Pre-Order / Custom guard: an order stays at 'confirmed' until every made-to-order
         // line is ready (po_fulfilled). Catalog PO is fulfilled automatically at receive;
@@ -3048,9 +3065,39 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
         const stayingHasBordirLogo = stayingItems.some(i => i.bordir_logo);
         const stayingHasBordirNama = stayingItems.some(i => i.bordir_nama);
 
+        // Filter embroidery_details per pihak berdasar item_label. Sebelumnya copy mentah
+        // → kedua order tampilkan instruksi bordir milik item yg sudah pindah (admin
+        // bingung, salah kirim instruksi ke pihak bordir). Item label format dari saat
+        // create order: `${product_name} (${color}, ${size})`. Untuk item_label duplicate
+        // (kalau 2 item identik product+color+size, edge case rare), entry copy ke kedua
+        // sisi — over-include defensive, admin manual cek di UI.
+        const allEmbroidery = safeJSON(order.embroidery_details, []);
+        const allEmbroideryArr = Array.isArray(allEmbroidery) ? allEmbroidery : [];
+        // Butuh product_name utk rebuild label. Fetch sekali.
+        const itemsWithName = await dbAll(
+            `SELECT oi.id, oi.color, oi.size, p.name AS product_name FROM order_items oi
+             JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
+            [order.id]
+        );
+        const labelById = new Map(itemsWithName.map(i => [
+            Number(i.id),
+            `${i.product_name} (${i.color || '-'}, ${i.size || '-'})`
+        ]));
+        const movingLabels = new Set(movingItems.map(i => labelById.get(Number(i.id))).filter(Boolean));
+        const stayingLabels = new Set(stayingItems.map(i => labelById.get(Number(i.id))).filter(Boolean));
+        const movingEmbroidery = allEmbroideryArr.filter(e => movingLabels.has(e.item_label));
+        const stayingEmbroidery = allEmbroideryArr.filter(e => stayingLabels.has(e.item_label));
+
         // Total per pihak.
         const childTotal = movingSubtotal - movingDiscount + childShippingCost;
         const stayingTotal = stayingSubtotal - stayingDiscount + Number(order.shipping_cost || 0);
+
+        // Pickup auto-skip untuk child: konsisten dgn confirm-payment/bordir-done logic.
+        // Kalau child courier pickup + no bordir + paid → langsung 'done'.
+        const childIsPickup = childCourier === PICKUP_COURIER;
+        const childChildOrderStatus = (childIsPickup && !childHasBordirLogo && !childHasBordirNama && order.payment_status === 'paid')
+            ? 'done'
+            : order.order_status;
 
         const childOrderCode = generateOrderCode(order.order_source);
         const childNote = ((order.notes || '').trim() + (order.notes ? '\n' : '') + `[Dipisah dari #${order.order_code}]`).trim();
@@ -3071,15 +3118,24 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
                 [
                     childOrderCode, order.customer_name, order.customer_phone, order.customer_address,
                     childCity, childCourier, childWeight, childShippingCost, childTotal,
-                    order.embroidery_details,
+                    JSON.stringify(movingEmbroidery),
                     childHasBordirLogo, childHasBordirNama,
                     (childHasBordirLogo || childHasBordirNama) ? (order.bordir_status || 'pending') : null,
-                    childNote, order.order_source, order.payment_method, order.payment_status, order.order_status,
+                    childNote, order.order_source, order.payment_method, order.payment_status, childChildOrderStatus,
                     order.discount_percent || 0, movingDiscount, order.discount_label, order.bordir_logo_requested,
                     order.billing_to, order.paid_at
                 ]
             );
             const newId = childRes.rows[0].id;
+
+            // Pickup auto-skip: catat audit step 'done' supaya timeline konsisten dgn
+            // confirm-payment pickup path.
+            if (childChildOrderStatus === 'done') {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'done',NULL,$2,$3)`,
+                    [newId, 'Hasil split → diambil langsung di event/walk-in', req.user.username]
+                );
+            }
 
             // 2. Re-parent items terpilih ke child
             await client.query(
@@ -3087,7 +3143,7 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
                 [newId, order.id, moveIds]
             );
 
-            // 3. Update original: subtotal, diskon, bordir flags, notes
+            // 3. Update original: subtotal, diskon, bordir flags, embroidery filtered, notes
             await client.query(`
                 UPDATE orders SET
                     total_amount = $1,
@@ -3095,10 +3151,12 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
                     has_bordir_logo = $3,
                     has_bordir_nama = $4,
                     bordir_status = CASE WHEN ($3 OR $4) THEN COALESCE(bordir_status, 'pending') ELSE NULL END,
-                    notes = $5,
+                    embroidery_details = $5,
+                    notes = $6,
                     updated_at = NOW()
-                WHERE id = $6`,
-                [stayingTotal, stayingDiscount, stayingHasBordirLogo, stayingHasBordirNama, stayingNote, order.id]
+                WHERE id = $7`,
+                [stayingTotal, stayingDiscount, stayingHasBordirLogo, stayingHasBordirNama,
+                 JSON.stringify(stayingEmbroidery), stayingNote, order.id]
             );
 
             return newId;
@@ -3135,8 +3193,8 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.payment_status !== 'paid')
             return res.status(400).json({ error: 'Pesanan ini belum dibayar — gunakan Edit Pesanan biasa kalau mau ubah bordir.' });
-        if (['shipped','done','cancelled'].includes(order.order_status))
-            return res.status(400).json({ error: 'Pesanan ini tidak bisa ditambah bordir (sudah dikirim/selesai/dibatalkan)' });
+        if (['shipped','done','cancelled','packed'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan ini tidak bisa ditambah bordir (sudah dikemas/dikirim/selesai/dibatalkan)' });
 
         const { items: bordirRequests } = req.body;
         if (!Array.isArray(bordirRequests) || bordirRequests.length === 0)
@@ -3248,13 +3306,16 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                      u.id]
                 );
             }
-            // Update order
+            // Update order — reset order_status ke 'bordir' supaya tombol "Tandai Bordir
+            // Selesai" muncul dan alur konsisten dgn flow normal (order dgn bordir =
+            // status 'bordir' sampai istri tandai selesai). Kalau sudah 'bordir', stay.
             await client.query(
                 `UPDATE orders SET
                     embroidery_details = $1,
                     has_bordir_nama = $2,
                     has_bordir_logo = $3,
                     bordir_status = 'pending',
+                    order_status = 'bordir',
                     total_amount = $4,
                     additional_amount_due = $5,
                     additional_paid_at = NULL,
