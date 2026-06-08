@@ -533,6 +533,14 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_source_check CHECK(order_source IN ('website','whatsapp','event_offline','offline','collaboration_event'))`).catch(() => {});
     // billing_to = nama pihak yang ditagih (partner) untuk order collaboration_event.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_to TEXT DEFAULT NULL`);
+    // additional_amount_due = nilai bordir TAMBAHAN yg di-add setelah order paid
+    // (customer berubah pikiran post-payment, minta tambah bordir). additional_paid_at
+    // di-set saat admin konfirmasi customer sudah bayar selisih (bukti upload). Selama
+    // additional_amount_due > 0 AND additional_paid_at IS NULL → outstanding (tampil
+    // banner di detail + tombol konfirmasi). total_amount kolom utama di-update ikut
+    // jadi nilai final supaya laporan/invoice konsisten.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS additional_amount_due INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS additional_paid_at TIMESTAMP DEFAULT NULL`);
 
     // ── Migrate: paid_at timestamp (basis tanggal untuk laporan sales) ────────────
     // Diisi NOW() saat confirm-payment. Backfill order paid LAMA dari updated_at
@@ -3103,6 +3111,199 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
             original_new_total: stayingTotal,
             child_total: childTotal
         });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/orders/:id/add-bordir — Tambah bordir SETELAH order dibayar
+// (customer berubah pikiran). Hanya untuk item yg BELUM ada bordir (rule bisnis:
+// 1 nama + 1 logo per baju, kalau slot sudah terisi → order baru).
+//
+// Body JSON: { items: [{ item_id, bordir_nama?, nama_text?, nama_color?, nama_pos?,
+//             nama_price?, bordir_logo?, logo_color?, logo_pos?, logo_price? }] }
+//
+// Efek:
+// - Update order_items: set bordir_nama/_logo flags + per-item prices
+// - Append entries ke embroidery_details (tak ganggu entri lama)
+// - has_bordir_logo/_nama re-derived dari semua items
+// - additional_amount_due += sum(harga bordir baru × qty)
+// - total_amount += additional (nilai final, tampil di invoice/laporan)
+// - bordir_status = 'pending' (admin review lagi setelah selisih lunas)
+// - Audit note: append "[Tambah bordir post-payment: Rp X]"
+app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.payment_status !== 'paid')
+            return res.status(400).json({ error: 'Pesanan ini belum dibayar — gunakan Edit Pesanan biasa kalau mau ubah bordir.' });
+        if (['shipped','done','cancelled'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan ini tidak bisa ditambah bordir (sudah dikirim/selesai/dibatalkan)' });
+
+        const { items: bordirRequests } = req.body;
+        if (!Array.isArray(bordirRequests) || bordirRequests.length === 0)
+            return res.status(400).json({ error: 'Pilih minimal 1 item untuk ditambah bordir' });
+
+        // Fetch existing items + product names (utk item_label rebuild)
+        const orderItems = await dbAll(
+            `SELECT oi.*, p.name AS product_name FROM order_items oi
+             JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
+            [order.id]
+        );
+        const itemMap = new Map(orderItems.map(i => [Number(i.id), i]));
+
+        // Validate each requested item
+        const newEntries = []; // utk append ke embroidery_details
+        let totalAdditional = 0;
+        const itemUpdates = []; // [{id, nama?, namaPrice?, logo?, logoPrice?}]
+
+        for (const r of bordirRequests) {
+            const item = itemMap.get(Number(r.item_id));
+            if (!item) return res.status(400).json({ error: `Item ID ${r.item_id} bukan dari pesanan ini` });
+            if (item.bordir_nama || item.bordir_logo)
+                return res.status(400).json({ error: `Item "${item.product_name}" sudah punya bordir — tidak bisa ditambah lagi (1 nama + 1 logo per baju). Kalau perlu, buat order baru.` });
+            const wantNama = !!r.bordir_nama;
+            const wantLogo = !!r.bordir_logo;
+            if (!wantNama && !wantLogo)
+                return res.status(400).json({ error: `Item "${item.product_name}": pilih minimal 1 (nama / logo)` });
+            // Validate nama detail
+            let namaPrice = 0;
+            if (wantNama) {
+                const t = String(r.nama_text || '').trim();
+                if (!t) return res.status(400).json({ error: `Item "${item.product_name}": isi teks nama bordir` });
+                namaPrice = parseInt(r.nama_price);
+                if (!(Number.isInteger(namaPrice) && namaPrice >= 0))
+                    return res.status(400).json({ error: `Item "${item.product_name}": harga bordir nama tidak valid` });
+            }
+            // Validate logo detail
+            let logoPrice = 0;
+            if (wantLogo) {
+                logoPrice = parseInt(r.logo_price);
+                if (!(Number.isInteger(logoPrice) && logoPrice >= 0))
+                    return res.status(400).json({ error: `Item "${item.product_name}": harga bordir logo tidak valid` });
+            }
+            // Posisi must differ kalau both
+            if (wantNama && wantLogo) {
+                const np = r.nama_pos || 'kanan';
+                const lp = r.logo_pos || 'kiri';
+                if (np === lp) return res.status(400).json({ error: `Item "${item.product_name}": posisi nama & logo tidak boleh sama` });
+            }
+
+            const itemLabel = `${item.product_name} (${item.color || '-'}, ${item.size || '-'})`;
+            if (wantNama) {
+                newEntries.push({
+                    type: 'nama',
+                    item_label: itemLabel,
+                    value: String(r.nama_text).trim(),
+                    color: String(r.nama_color || '').trim(),
+                    position: r.nama_pos || 'kanan'
+                });
+                totalAdditional += namaPrice * Number(item.quantity);
+            }
+            if (wantLogo) {
+                newEntries.push({
+                    type: 'logo',
+                    item_label: itemLabel,
+                    value: 'Logo dikirim via WA', // admin minta nanti via flow existing
+                    color: String(r.logo_color || '').trim(),
+                    position: r.logo_pos || 'kiri'
+                });
+                totalAdditional += logoPrice * Number(item.quantity);
+            }
+            itemUpdates.push({
+                id: item.id,
+                bordir_nama: wantNama, bordir_nama_price: wantNama ? namaPrice : null,
+                bordir_logo: wantLogo, bordir_logo_price: wantLogo ? logoPrice : null
+            });
+        }
+
+        if (totalAdditional <= 0)
+            return res.status(400).json({ error: 'Total harga bordir tambahan harus > 0' });
+
+        // Rebuild embroidery_details: keep yg lama + append baru
+        const existingEntries = safeJSON(order.embroidery_details, []);
+        const mergedEntries = [...(Array.isArray(existingEntries) ? existingEntries : []), ...newEntries];
+
+        const newHasNama = order.has_bordir_nama || newEntries.some(e => e.type === 'nama');
+        const newHasLogo = order.has_bordir_logo || newEntries.some(e => e.type === 'logo');
+        const newTotalAmount = Number(order.total_amount) + totalAdditional;
+        const newAdditionalDue = Number(order.additional_amount_due || 0) + totalAdditional;
+        const auditNote = ((order.notes || '').trim() + (order.notes ? '\n' : '') +
+            `[Tambah bordir post-payment: Rp ${totalAdditional.toLocaleString('id-ID')}]`).trim();
+
+        await withTransaction(async (client) => {
+            // Update each item
+            for (const u of itemUpdates) {
+                await client.query(
+                    `UPDATE order_items SET
+                        bordir_nama = COALESCE($1, bordir_nama),
+                        bordir_nama_price = COALESCE($2, bordir_nama_price),
+                        bordir_logo = COALESCE($3, bordir_logo),
+                        bordir_logo_price = COALESCE($4, bordir_logo_price),
+                        price = price + $5
+                     WHERE id = $6`,
+                    [u.bordir_nama ? true : null,
+                     u.bordir_nama_price,
+                     u.bordir_logo ? true : null,
+                     u.bordir_logo_price,
+                     (u.bordir_nama_price || 0) + (u.bordir_logo_price || 0),
+                     u.id]
+                );
+            }
+            // Update order
+            await client.query(
+                `UPDATE orders SET
+                    embroidery_details = $1,
+                    has_bordir_nama = $2,
+                    has_bordir_logo = $3,
+                    bordir_status = 'pending',
+                    total_amount = $4,
+                    additional_amount_due = $5,
+                    additional_paid_at = NULL,
+                    notes = $6,
+                    updated_at = NOW()
+                 WHERE id = $7`,
+                [JSON.stringify(mergedEntries), newHasNama, newHasLogo,
+                 newTotalAmount, newAdditionalDue, auditNote, order.id]
+            );
+        });
+
+        res.json({
+            message: 'Bordir tambahan dicatat',
+            additional_amount_due: newAdditionalDue,
+            new_total_amount: newTotalAmount
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/orders/:id/confirm-additional-payment — admin upload bukti bayar selisih
+// dari customer (tambah bordir). Set additional_paid_at, catat audit photo.
+app.put('/api/orders/:id/confirm-additional-payment', requireMenu('orders','edit'), upload.single('payment_proof'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (!order.additional_amount_due || Number(order.additional_amount_due) <= 0)
+            return res.status(400).json({ error: 'Pesanan ini tidak punya tagihan bordir tambahan' });
+        if (order.additional_paid_at)
+            return res.status(400).json({ error: 'Selisih bordir sudah dikonfirmasi sebelumnya' });
+        if (!req.file)
+            return res.status(400).json({ error: 'Upload bukti pembayaran selisih dulu' });
+
+        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
+
+        await withTransaction(async (client) => {
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
+                 VALUES ($1, 'payment', $2, $3, $4)`,
+                [order.id, photoUrl,
+                 `Pembayaran selisih bordir Rp ${Number(order.additional_amount_due).toLocaleString('id-ID')}`,
+                 req.user.username]
+            );
+            await client.query(
+                `UPDATE orders SET additional_paid_at = NOW(), updated_at = NOW() WHERE id = $1`,
+                [order.id]
+            );
+        });
+
+        res.json({ message: 'Pembayaran selisih dikonfirmasi', photo_url: await signedMediaUrl(photoUrl) });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

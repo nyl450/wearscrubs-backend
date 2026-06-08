@@ -1735,6 +1735,66 @@
   </div>
 </div>
 
+<!-- ADD BORDIR MODAL — tambah bordir setelah order paid (admin only) -->
+<div id="add-bordir-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+  <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard z-10">
+      <div>
+        <h3 class="font-bold text-base">Tambah Bordir Setelah Bayar</h3>
+        <p class="text-[11px] text-white/40 mt-0.5">Customer berubah pikiran setelah order paid. Sistem hitung selisih → generate WA → admin konfirmasi setelah customer bayar.</p>
+      </div>
+      <button onclick="closeAddBordirModal()" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center shrink-0"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <div class="p-5 space-y-4">
+      <p id="add-bordir-order-code" class="text-xs font-mono text-white/40"></p>
+      <div class="bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2.5 text-[11px] text-amber-200">
+        <i class="fa-solid fa-info-circle"></i> Hanya item yang <strong>belum punya bordir</strong> bisa ditambah (aturan: 1 nama + 1 logo per baju). Setelah simpan, status bordir di-reset ke "pending review" — istri review lagi setelah customer bayar selisih.
+      </div>
+
+      <div>
+        <p class="text-[10px] uppercase tracking-wider font-bold text-white/40 mb-2">Pilih Item yang Ditambah Bordir</p>
+        <div id="add-bordir-items-list" class="space-y-3"></div>
+      </div>
+
+      <!-- Preview total selisih -->
+      <div id="add-bordir-preview" class="hidden bg-purple-500/10 border border-purple-400/25 rounded-xl px-3 py-3 text-[12px]">
+        <p class="font-bold text-purple-300 mb-1"><i class="fa-solid fa-calculator"></i> Selisih yang Harus Dibayar</p>
+        <p class="text-purple-100 text-base font-bold"><span id="add-bordir-total">Rp 0</span></p>
+        <p class="text-purple-200/70 text-[10px] mt-1">Total order naik dari Rp <span id="add-bordir-old-total">0</span> jadi Rp <span id="add-bordir-new-total">0</span>.</p>
+      </div>
+
+      <div class="flex gap-2 pt-1">
+        <button onclick="closeAddBordirModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+        <button id="add-bordir-submit-btn" onclick="submitAddBordir()" class="flex-1 py-2.5 rounded-xl bg-purple-500/20 border border-purple-400/30 text-purple-300 text-sm font-bold hover:bg-purple-500/30">Simpan & Generate WA</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM ADDITIONAL PAYMENT MODAL — upload bukti bayar selisih bordir -->
+<div id="confirm-additional-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+  <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md p-5 space-y-4">
+    <div class="flex justify-between items-start">
+      <div>
+        <h3 class="font-bold text-base">Konfirmasi Bayar Selisih Bordir</h3>
+        <p class="text-[11px] text-white/40 mt-0.5">Upload bukti transfer dari customer.</p>
+      </div>
+      <button onclick="closeConfirmAdditionalModal()" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center shrink-0"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <div class="bg-amber-500/10 border border-amber-400/25 rounded-xl p-3 text-xs text-amber-100">
+      Selisih: <strong id="ca-amount-display">Rp 0</strong>
+    </div>
+    <div>
+      <label class="text-[11px] text-white/60 mb-1 block">Bukti Pembayaran <span class="text-red-400">*</span></label>
+      <input type="file" id="ca-payment-proof" accept="image/*" class="block w-full text-xs text-white/70 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/10 file:text-white file:font-medium hover:file:bg-white/20" />
+    </div>
+    <div class="flex gap-2 pt-1">
+      <button onclick="closeConfirmAdditionalModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+      <button id="ca-submit-btn" onclick="submitConfirmAdditional()" class="flex-1 py-2.5 rounded-xl bg-green-500/20 border border-green-400/30 text-green-300 text-sm font-bold hover:bg-green-500/30">Konfirmasi</button>
+    </div>
+  </div>
+</div>
+
 <!-- SPLIT ORDER MODAL — pisah pesanan jadi 2 (admin only) -->
 <div id="split-order-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
   <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto">
@@ -5326,6 +5386,7 @@ async function viewOrder(id) {
             ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
             ${o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
             ${isAdmin && !['cancelled','done','shipped'].includes(o.order_status) && (o.items||[]).length >= 2 ? `<button onclick="openSplitOrderModal()" title="Pisah jadi 2 pesanan (mis. sebagian diambil, sebagian dikirim)" class="text-xs px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/25 flex items-center gap-1.5"><i class="fa-solid fa-arrows-split-up-and-left"></i> Pisah Pesanan</button>` : ''}
+            ${isAdmin && o.payment_status === 'paid' && !['shipped','done','cancelled'].includes(o.order_status) && !Number(o.additional_amount_due || 0) && (o.items||[]).some(i => !i.bordir_nama && !i.bordir_logo) ? `<button onclick="openAddBordirModal()" title="Customer minta tambah bordir setelah bayar" class="text-xs px-4 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 font-bold border border-purple-400/25 flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> Tambah Bordir</button>` : ''}
             ${isAdmin && o.order_status !== 'done' && o.order_status !== 'cancelled' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 ml-auto sm:ml-6" title="Batalkan pesanan ini"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
@@ -5368,6 +5429,17 @@ async function viewOrder(id) {
                 ${isAdmin && waResiLink ? `<a href="${waResiLink}" target="_blank" class="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold transition shrink-0"><i class="fa-brands fa-whatsapp"></i> Kirim Resi ke Customer</a>` : ''}
             </div>` : ''}
             ${o.billing_to ? `<div class="col-span-2 bg-pink-500/10 border border-pink-400/20 rounded-xl p-3"><p class="text-pink-300/70 text-xs mb-1"><i class="fa-solid fa-handshake"></i> Ditagihkan ke (Partner) · Consignment</p><p class="font-bold">${esc(o.billing_to)}</p></div>` : ''}
+            ${Number(o.additional_amount_due || 0) > 0 ? (
+                o.additional_paid_at
+                    ? `<div class="col-span-2 bg-green-500/10 border border-green-400/25 rounded-xl p-3"><p class="text-green-300 text-xs mb-1"><i class="fa-solid fa-circle-check"></i> Selisih Bordir Tambahan · Lunas</p><p class="font-bold text-sm">Rp ${fmt(o.additional_amount_due)} (dibayar ${fmtDateShort(o.additional_paid_at)})</p></div>`
+                    : `<div class="col-span-2 bg-amber-500/15 border border-amber-400/30 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                          <div class="min-w-0"><p class="text-amber-300 text-xs mb-1 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> Outstanding Selisih Bordir</p><p class="font-bold text-base text-amber-100">Rp ${fmt(o.additional_amount_due)}</p><p class="text-[11px] text-amber-200/70 mt-0.5">Customer belum bayar selisih tambahan bordir.</p></div>
+                          <div class="flex gap-2 shrink-0">
+                              <button onclick="sendAdditionalPaymentWA(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white font-bold flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> Kirim WA Tagihan</button>
+                              ${isAdmin ? `<button onclick="openConfirmAdditionalPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 font-bold border border-green-400/30 flex items-center gap-1.5"><i class="fa-solid fa-check"></i> Konfirmasi Bayar</button>` : ''}
+                          </div>
+                       </div>`
+            ) : ''}
             ${o.notes ? `<div class="col-span-2 bg-white/5 rounded-xl p-3"><p class="text-white/40 text-xs mb-1">Catatan</p><p>${esc(o.notes)}</p></div>` : ''}
         </div>
 
@@ -5657,6 +5729,244 @@ async function submitEditOrder() {
         toast('Gagal: ' + e.message, true);
     } finally {
         btn.disabled = false; btn.innerHTML = 'Simpan Perubahan';
+    }
+}
+
+// ─── ADD BORDIR (POST-PAYMENT) ──────────────────────────────────────────────
+// Customer berubah pikiran setelah order paid → minta tambah bordir. Admin pilih
+// item yang BELUM ada bordir, isi detail, sistem hitung selisih, generate WA
+// template tagihan. Setelah customer bayar, admin upload bukti via tombol
+// "Konfirmasi Bayar" di banner outstanding. bordir_status reset ke 'pending' →
+// review normal di section Review Bordir.
+function openAddBordirModal() {
+    const o = window._currentOrder;
+    if (!o) { toast('Pilih pesanan dulu', true); return; }
+    if (o.payment_status !== 'paid') { toast('Pesanan belum dibayar', true); return; }
+    if (Number(o.additional_amount_due || 0) > 0) {
+        toast('Masih ada selisih outstanding — konfirmasi yg lama dulu', true); return;
+    }
+    const eligible = (o.items || []).filter(i => !i.bordir_nama && !i.bordir_logo);
+    if (eligible.length === 0) {
+        toast('Semua item sudah punya bordir — tidak bisa tambah lagi', true); return;
+    }
+
+    document.getElementById('add-bordir-order-code').textContent = o.order_code;
+
+    const list = document.getElementById('add-bordir-items-list');
+    list.innerHTML = eligible.map(i => `
+        <div class="bg-white/3 border border-white/10 rounded-xl p-3 space-y-2.5" data-item-id="${i.id}" data-qty="${i.quantity}">
+            <label class="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" class="ab-pick mt-1 w-4 h-4 accent-purple-500 shrink-0" onchange="abOnPickChange(this)">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold">${esc(i.product_name)}</p>
+                    <p class="text-[11px] text-white/40">${esc(i.size)} · ${esc(i.color)}${i.variant_type && i.variant_type !== 'null' ? ' · ' + esc(i.variant_type) : ''} · x${i.quantity}</p>
+                </div>
+            </label>
+            <div class="ab-detail hidden pl-7 space-y-3">
+                <!-- Nama -->
+                <div class="bg-purple-500/5 border border-purple-400/15 rounded-lg p-2.5">
+                    <label class="flex items-center gap-2 text-[11px] font-bold text-purple-200 mb-2">
+                        <input type="checkbox" class="ab-want-nama w-3.5 h-3.5 accent-purple-500" onchange="abOnToggleNama(this)">
+                        ✏️ Bordir Nama
+                    </label>
+                    <div class="ab-nama-fields hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" class="ab-nama-text !py-1.5 !text-xs" placeholder="Teks nama (mis. Dr. Andi)" oninput="updateAddBordirPreview()">
+                        <input type="text" class="ab-nama-color !py-1.5 !text-xs" placeholder="Warna benang">
+                        <select class="ab-nama-pos !py-1.5 !text-xs">
+                            <option value="kanan">Posisi: Kanan Dada</option>
+                            <option value="kiri">Posisi: Kiri Dada</option>
+                        </select>
+                        <input type="number" class="ab-nama-price !py-1.5 !text-xs" placeholder="Harga (default 20000)" value="20000" min="0" oninput="updateAddBordirPreview()">
+                    </div>
+                </div>
+                <!-- Logo -->
+                <div class="bg-blue-500/5 border border-blue-400/15 rounded-lg p-2.5">
+                    <label class="flex items-center gap-2 text-[11px] font-bold text-blue-200 mb-2">
+                        <input type="checkbox" class="ab-want-logo w-3.5 h-3.5 accent-blue-500" onchange="abOnToggleLogo(this)">
+                        🎨 Bordir Logo <span class="text-white/40 font-normal">(file logo minta via WA nanti)</span>
+                    </label>
+                    <div class="ab-logo-fields hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" class="ab-logo-color !py-1.5 !text-xs" placeholder="Warna benang">
+                        <select class="ab-logo-pos !py-1.5 !text-xs">
+                            <option value="kiri">Posisi: Kiri Dada</option>
+                            <option value="kanan">Posisi: Kanan Dada</option>
+                        </select>
+                        <input type="number" class="ab-logo-price !py-1.5 !text-xs sm:col-span-2" placeholder="Harga (default 30000)" value="30000" min="0" oninput="updateAddBordirPreview()">
+                    </div>
+                </div>
+            </div>
+        </div>`).join('');
+
+    updateAddBordirPreview();
+    document.getElementById('add-bordir-modal').classList.remove('hidden');
+    document.getElementById('add-bordir-modal').classList.add('flex');
+}
+function closeAddBordirModal() {
+    const m = document.getElementById('add-bordir-modal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+}
+// Toggle visibility detail bordir per item saat checkbox utama dicentang
+function abOnPickChange(cb) {
+    const wrap = cb.closest('[data-item-id]');
+    wrap.querySelector('.ab-detail').classList.toggle('hidden', !cb.checked);
+    if (!cb.checked) {
+        wrap.querySelectorAll('input[type="checkbox"]').forEach(c => { if (c !== cb) c.checked = false; });
+        wrap.querySelectorAll('.ab-nama-fields, .ab-logo-fields').forEach(f => f.classList.add('hidden'));
+    }
+    updateAddBordirPreview();
+}
+function abOnToggleNama(cb) {
+    cb.closest('.ab-detail').querySelector('.ab-nama-fields').classList.toggle('hidden', !cb.checked);
+    updateAddBordirPreview();
+}
+function abOnToggleLogo(cb) {
+    cb.closest('.ab-detail').querySelector('.ab-logo-fields').classList.toggle('hidden', !cb.checked);
+    updateAddBordirPreview();
+}
+// Live total: sum bordir baru × qty per item
+function updateAddBordirPreview() {
+    const o = window._currentOrder;
+    if (!o) return;
+    let total = 0;
+    document.querySelectorAll('#add-bordir-items-list [data-item-id]').forEach(w => {
+        const pick = w.querySelector('.ab-pick');
+        if (!pick || !pick.checked) return;
+        const qty = parseInt(w.dataset.qty || 1);
+        if (w.querySelector('.ab-want-nama')?.checked) {
+            total += (parseInt(w.querySelector('.ab-nama-price')?.value || 0)) * qty;
+        }
+        if (w.querySelector('.ab-want-logo')?.checked) {
+            total += (parseInt(w.querySelector('.ab-logo-price')?.value || 0)) * qty;
+        }
+    });
+    const oldTotal = Number(o.total_amount || 0);
+    const preview = document.getElementById('add-bordir-preview');
+    if (total > 0) {
+        document.getElementById('add-bordir-total').textContent = 'Rp ' + fmt(total);
+        document.getElementById('add-bordir-old-total').textContent = fmt(oldTotal);
+        document.getElementById('add-bordir-new-total').textContent = fmt(oldTotal + total);
+        preview.classList.remove('hidden');
+    } else {
+        preview.classList.add('hidden');
+    }
+}
+async function submitAddBordir() {
+    const o = window._currentOrder;
+    if (!o) return;
+    const items = [];
+    let validationErr = null;
+    document.querySelectorAll('#add-bordir-items-list [data-item-id]').forEach(w => {
+        const pick = w.querySelector('.ab-pick');
+        if (!pick || !pick.checked) return;
+        const itemId = Number(w.dataset.itemId);
+        const wantNama = w.querySelector('.ab-want-nama')?.checked;
+        const wantLogo = w.querySelector('.ab-want-logo')?.checked;
+        if (!wantNama && !wantLogo) { validationErr = 'Item dipilih tapi tidak centang nama atau logo'; return; }
+        const itemPayload = { item_id: itemId };
+        if (wantNama) {
+            const t = w.querySelector('.ab-nama-text')?.value.trim();
+            if (!t) { validationErr = 'Isi teks nama bordir'; return; }
+            itemPayload.bordir_nama = true;
+            itemPayload.nama_text = t;
+            itemPayload.nama_color = w.querySelector('.ab-nama-color')?.value.trim() || '';
+            itemPayload.nama_pos = w.querySelector('.ab-nama-pos')?.value || 'kanan';
+            itemPayload.nama_price = parseInt(w.querySelector('.ab-nama-price')?.value || 20000);
+        }
+        if (wantLogo) {
+            itemPayload.bordir_logo = true;
+            itemPayload.logo_color = w.querySelector('.ab-logo-color')?.value.trim() || '';
+            itemPayload.logo_pos = w.querySelector('.ab-logo-pos')?.value || 'kiri';
+            itemPayload.logo_price = parseInt(w.querySelector('.ab-logo-price')?.value || 30000);
+            // Posisi must differ kalau both
+            if (wantNama && itemPayload.nama_pos === itemPayload.logo_pos) {
+                validationErr = 'Posisi nama & logo tidak boleh sama'; return;
+            }
+        }
+        items.push(itemPayload);
+    });
+    if (validationErr) { toast(validationErr, true); return; }
+    if (items.length === 0) { toast('Pilih minimal 1 item utk ditambah bordir', true); return; }
+
+    const btn = document.getElementById('add-bordir-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...';
+    try {
+        const res = await apiFetch(`/api/orders/${o.id}/add-bordir`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items })
+        });
+        toast(`✓ Tambahan bordir tercatat. Selisih Rp ${fmt(res.additional_amount_due)}.`);
+        closeAddBordirModal();
+        await viewOrder(o.id);
+        if (typeof renderOrders === 'function') renderOrders();
+        // Auto-open WA tagihan ke customer
+        sendAdditionalPaymentWA(o.id);
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        btn.disabled = false; btn.innerHTML = 'Simpan & Generate WA';
+    }
+}
+
+// Buka WA template tagihan selisih bordir ke customer.
+async function sendAdditionalPaymentWA(orderId) {
+    try {
+        const o = await apiFetch('/api/orders/' + orderId);
+        const phone = normalizeWAPhone(o.customer_phone);
+        const amount = Number(o.additional_amount_due || 0);
+        if (amount <= 0) { toast('Tidak ada selisih outstanding', true); return; }
+        const msg = encodeURIComponent(
+            `Halo ${o.customer_name},\n\n` +
+            `Terkait pesanan *#${o.order_code}*, kami catat penambahan bordir sesuai permintaan Anda.\n\n` +
+            `*Selisih yang perlu dibayar: Rp ${fmt(amount)}*\n\n` +
+            `Silakan transfer ke:\n` +
+            `BCA 8780269791 a/n Priscilla Lavine\n` +
+            `Mandiri 1220010735721 a/n Priscilla Lavine\n\n` +
+            `Lalu kirim bukti transfer ke WA ini ya. Setelah pembayaran kami terima, bordir akan kami review & proses.\n\n` +
+            `Terima kasih.`
+        );
+        if (!phone) { toast('Nomor WA customer tidak valid', true); return; }
+        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    } catch (e) { toast('Gagal: ' + e.message, true); }
+}
+
+// Modal konfirmasi bayar selisih bordir
+let _confirmAdditionalOrderId = null;
+function openConfirmAdditionalPayment(orderId) {
+    const o = window._currentOrder;
+    if (!o || o.id !== orderId) { toast('Refresh dulu', true); return; }
+    _confirmAdditionalOrderId = orderId;
+    document.getElementById('ca-amount-display').textContent = 'Rp ' + fmt(o.additional_amount_due);
+    document.getElementById('ca-payment-proof').value = '';
+    const m = document.getElementById('confirm-additional-modal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeConfirmAdditionalModal() {
+    const m = document.getElementById('confirm-additional-modal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+    _confirmAdditionalOrderId = null;
+}
+async function submitConfirmAdditional() {
+    if (!_confirmAdditionalOrderId) return;
+    const fileEl = document.getElementById('ca-payment-proof');
+    if (!fileEl.files || !fileEl.files[0]) { toast('Upload bukti transfer dulu', true); return; }
+    const btn = document.getElementById('ca-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Memproses...';
+    try {
+        const fd = new FormData();
+        fd.append('payment_proof', fileEl.files[0]);
+        await apiFetch(`/api/orders/${_confirmAdditionalOrderId}/confirm-additional-payment`, {
+            method: 'PUT', body: fd
+        });
+        toast('✓ Pembayaran selisih dikonfirmasi. Bordir siap di-review.');
+        const orderId = _confirmAdditionalOrderId;
+        closeConfirmAdditionalModal();
+        await viewOrder(orderId);
+        if (typeof renderOrders === 'function') renderOrders();
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        btn.disabled = false; btn.innerHTML = 'Konfirmasi';
     }
 }
 
