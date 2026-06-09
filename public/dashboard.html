@@ -5286,7 +5286,7 @@ async function viewOrder(id) {
                                    </span>
                                    <span class="text-xs text-white/50">${esc(e.value || 'Menunggu file logo')}</span>
                                </div>`
-                            : `<p class="text-sm font-semibold">${esc(e.value||'')}</p>`)
+                            : `<p class="text-sm font-semibold">${esc(e.value||'')}${e.value_line2 ? `<br><span class="text-white/70">${esc(e.value_line2)}</span>` : ''}</p>`)
                     }
                     <div class="flex flex-wrap gap-x-3 mt-1">
                         ${e.color ? `<p class="text-[11px] text-white/40">🎨 Benang: <span class="text-white/60">${esc(e.color)}</span></p>` : ''}
@@ -5799,12 +5799,13 @@ function openAddBordirModal() {
                     </label>
                     <div class="ab-nama-fields hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input type="text" class="ab-nama-text !py-1.5 !text-xs" placeholder="Teks nama (mis. Dr. Andi)" oninput="updateAddBordirPreview()">
+                        <input type="text" class="ab-nama-text2 !py-1.5 !text-xs" placeholder="Baris ke-2 — opsional (mis. Sp.PD)">
                         <input type="text" class="ab-nama-color !py-1.5 !text-xs" placeholder="Warna benang">
                         <select class="ab-nama-pos !py-1.5 !text-xs">
                             <option value="kanan">Posisi: Kanan Dada</option>
                             <option value="kiri">Posisi: Kiri Dada</option>
                         </select>
-                        <input type="number" class="ab-nama-price !py-1.5 !text-xs" placeholder="Harga (default 20000)" value="20000" min="0" oninput="updateAddBordirPreview()">
+                        <input type="number" class="ab-nama-price !py-1.5 !text-xs sm:col-span-2" placeholder="Harga (default 20000)" value="20000" min="0" oninput="updateAddBordirPreview()">
                     </div>
                 </div>
                 <!-- Logo -->
@@ -5896,6 +5897,9 @@ async function submitAddBordir() {
             if (!t) { validationErr = 'Isi teks nama bordir'; return; }
             itemPayload.bordir_nama = true;
             itemPayload.nama_text = t;
+            // Baris ke-2 opsional (mis. jabatan/gelar). Hanya dikirim kalau diisi.
+            const t2 = w.querySelector('.ab-nama-text2')?.value.trim() || '';
+            if (t2) itemPayload.nama_text2 = t2;
             itemPayload.nama_color = w.querySelector('.ab-nama-color')?.value.trim() || '';
             itemPayload.nama_pos = w.querySelector('.ab-nama-pos')?.value || 'kanan';
             itemPayload.nama_price = parseInt(w.querySelector('.ab-nama-price')?.value || 20000);
@@ -7582,6 +7586,10 @@ function waAddItem() {
                     <label class="wa-field-label">Nama yang dibordir <span style="color:#f87171">*</span></label>
                     <input type="text" id="wa-bordir-nama-text-${idx}" placeholder="dr. James, M.Ked — perhatikan ejaan & huruf kapital" class="input-sm" />
                 </div>
+                <div>
+                    <label class="wa-field-label">Baris ke-2 <span class="wa-optional">(opsional — mis. jabatan/gelar)</span></label>
+                    <input type="text" id="wa-bordir-nama-text2-${idx}" placeholder="mis. Sp.PD, M.Kes" class="input-sm" />
+                </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="wa-field-label">Warna Benang</label>
@@ -8214,12 +8222,15 @@ async function waSubmitOrder() {
                 const itemLabel = `${cpName} (${cpColor}, ${cpSize})`;
                 let namaPosCP = null, logoPosCP = null;
                 if (bordirNamaCP) {
-                    const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
-                    const c = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
+                    const t  = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
+                    const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                    const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
                     namaPosCP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                     if (!t) { posErrors.push(`${itemLabel}: isi teks bordir nama.`); continue; }
                     // Key MUST be `color` (not `thread_color`) — renderer/WA/invoice all read e.color.
-                    embroideryDetails.push({ item_label: itemLabel, type: 'nama', value: t, color: c, position: namaPosCP });
+                    const namaPayloadCP = { item_label: itemLabel, type: 'nama', value: t, color: c, position: namaPosCP };
+                    if (t2) namaPayloadCP.value_line2 = t2;
+                    embroideryDetails.push(namaPayloadCP);
                 }
                 if (bordirLogoCP) {
                     const logoData = waBordirLogoFiles[idx];
@@ -8313,10 +8324,15 @@ async function waSubmitOrder() {
 
             if (bordirNama) {
                 const namaText  = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
+                const namaText2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
                 const namaColor = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
                 namaPos = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                 if (!namaText) { posErrors.push(`Nama bordir untuk ${prodName} belum diisi.`); continue; }
-                embroideryDetails.push({ type: 'nama', item_label: itemLabel, value: namaText, color: namaColor, position: namaPos });
+                // value_line2 dikirim hanya kalau diisi (anti-noise di JSON). Renderer
+                // graceful: kalau field absent → render 1 baris seperti dulu.
+                const namaPayload = { type: 'nama', item_label: itemLabel, value: namaText, color: namaColor, position: namaPos };
+                if (namaText2) namaPayload.value_line2 = namaText2;
+                embroideryDetails.push(namaPayload);
             }
             if (bordirLogo) {
                 const logoColor = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
@@ -8400,7 +8416,13 @@ function buildOrderWaMessage(o) {
     const bordirLines = (Array.isArray(emb) && emb.length)
         ? `\n\n*Detail Bordir:*\n` + emb.map(e => {
             const posLabel = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
-            if (e.type === 'nama') return `Nama: *${e.value}* | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
+            if (e.type === 'nama') {
+                // Baris ke-2 opsional (mis. jabatan/gelar). Pakai " // " separator
+                // supaya jelas di WA single-line.
+                const v2 = (e.value_line2 || '').trim();
+                const nameDisplay = v2 ? `${e.value} // ${v2}` : e.value;
+                return `Nama: *${nameDisplay}* | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
+            }
             const v = typeof e.value === 'string' ? e.value : '';
             const logoLabel = (v.startsWith('data:image/') || v.startsWith('http')) ? '[Logo Customer]' : (v || '[Logo Customer]');
             return `Logo: ${logoLabel} | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
@@ -8643,6 +8665,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
                 return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;">
                     <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
+                    ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;color:${col};margin:3px 0 0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
                     <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Tinggi ~1,2 cm · ${posLbl}</p>
                 </div>`;
             } else {

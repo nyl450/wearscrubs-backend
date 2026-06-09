@@ -2314,7 +2314,11 @@ app.post('/api/orders', async (req, res) => {
                 if (v.startsWith('http')) return v;
                 return v || 'kirim via WA';
             }
-            return e.value || '';
+            // Nama: render baris ke-2 inline kalau ada (mis. "dr. James // Sp.PD").
+            // Pakai " // " separator supaya jelas terbaca di WA single-line context.
+            const v1 = e.value || '';
+            const v2 = (e.value_line2 || '').trim();
+            return v2 ? `${v1} // ${v2}` : v1;
         };
         const embroiderySection = embDetailsStored && embDetailsStored.length > 0
             ? `\n\n🧵 *Detail Bordir:*\n` + embDetailsStored.map(e =>
@@ -3283,13 +3287,18 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
 
             const itemLabel = `${item.product_name} (${item.color || '-'}, ${item.size || '-'})`;
             if (wantNama) {
-                newEntries.push({
+                // Baris ke-2 opsional. Disimpan sebagai field `value_line2` di JSON kalau ada.
+                // Renderer graceful: kalau absent → render 1 baris seperti dulu.
+                const t2 = String(r.nama_text2 || '').trim();
+                const entry = {
                     type: 'nama',
                     item_label: itemLabel,
                     value: String(r.nama_text).trim(),
                     color: String(r.nama_color || '').trim(),
                     position: r.nama_pos || 'kanan'
-                });
+                };
+                if (t2) entry.value_line2 = t2;
+                newEntries.push(entry);
                 totalAdditional += namaPrice * Number(item.quantity);
             }
             if (wantLogo) {
