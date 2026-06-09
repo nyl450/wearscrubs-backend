@@ -5,6 +5,12 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const multer = require('multer');
+// Sharp utk konversi audit photos (bukti bayar/pack/bordir/refund/cancel) ke WebP.
+// Lazy + graceful: kalau sharp gagal load (mis. native binding tidak available di
+// platform tertentu), server tetap jalan — audit photo cuma diupload apa adanya.
+let sharp = null;
+try { sharp = require('sharp'); }
+catch (e) { console.warn('[Boot] sharp tidak tersedia — audit photos akan diupload tanpa kompresi:', e?.message || e); }
 const fs = require('fs');
 const fetch = require('node-fetch');
 const bcrypt = require('bcryptjs');
@@ -211,11 +217,36 @@ if (SUPABASE_URL && SUPABASE_KEY) {
  * Kalau Supabase tidak dikonfigurasi, fallback ke disk lokal.
  * @param {Buffer} buffer - file buffer dari multer memoryStorage
  * @param {string} originalname - nama file asli (untuk ekstensi)
- * @param {string} folder - subfolder di bucket ('products' | 'orders')
+ * @param {string} folder - subfolder di bucket ('products' | 'orders' | 'refunds' | 'logos')
+ * @param {object} [opts]
+ * @param {boolean} [opts.optimize=false] - kalau true & sharp tersedia, resize max 1920px +
+ *   konversi ke WebP q=85 (untuk audit photos: bukti bayar/pack/bordir/refund/cancel).
+ *   Hemat storage 85-92% sambil tetap visually-lossless. Fail-safe: kalau sharp error,
+ *   fallback ke original buffer (jangan blok upload karena masalah kompresi).
  * @returns {Promise<string>} URL publik foto
  */
-async function uploadToSupabase(buffer, originalname, folder = 'products') {
-    const ext = path.extname(originalname).toLowerCase();
+async function uploadToSupabase(buffer, originalname, folder = 'products', opts = {}) {
+    const { optimize = false } = opts;
+    let ext = path.extname(originalname).toLowerCase();
+    let finalBuffer = buffer;
+
+    if (optimize && sharp) {
+        try {
+            const optimized = await sharp(buffer)
+                .rotate()                                          // auto-orient via EXIF dulu sebelum strip
+                .resize(1920, null, { withoutEnlargement: true, fit: 'inside' })
+                .webp({ quality: 85 })
+                .toBuffer();
+            finalBuffer = optimized;
+            ext = '.webp';
+            const savedPct = Math.round((1 - optimized.length / buffer.length) * 100);
+            console.log(`[Upload Optimize] ${folder}/${originalname}: ${(buffer.length/1024).toFixed(0)}KB → ${(optimized.length/1024).toFixed(0)}KB (-${savedPct}%)`);
+        } catch (e) {
+            console.warn(`[Upload Optimize] Gagal compress ${folder}/${originalname}, upload original: ${e?.message || e}`);
+            // finalBuffer + ext tetap original
+        }
+    }
+
     const filename = `${folder}/ws_${Date.now()}_${Math.round(Math.random() * 9999)}${ext}`;
     const isPrivate = PRIVATE_FOLDERS.includes(folder);
     const bucket = isPrivate ? SUPABASE_PRIVATE_BUCKET : SUPABASE_BUCKET;
@@ -225,7 +256,7 @@ async function uploadToSupabase(buffer, originalname, folder = 'products') {
         const { error } = await supabaseClient
             .storage
             .from(bucket)
-            .upload(filename, buffer, {
+            .upload(filename, finalBuffer, {
                 contentType: ext === '.jpg' || ext === '.jpeg'
                     ? 'image/jpeg'
                     : ext === '.png' ? 'image/png'
@@ -246,7 +277,7 @@ async function uploadToSupabase(buffer, originalname, folder = 'products') {
         // Fallback: simpan ke disk lokal (untuk development)
         const localFilename = `ws_${Date.now()}_${Math.round(Math.random() * 9999)}${ext}`;
         const localPath = path.join(uploadsDir, localFilename);
-        fs.writeFileSync(localPath, buffer);
+        fs.writeFileSync(localPath, finalBuffer);
         return `/uploads/${localFilename}`;
     }
 }
@@ -2393,7 +2424,7 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
         // Upload to Supabase BEFORE the transaction — external call, can be slow.
         // If TX later fails, the photo becomes orphan (harmless, tiny size).
         const photoUrl = req.file
-            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
+            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true })
             : null;
 
         const items = await dbAll('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
@@ -2528,7 +2559,7 @@ app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.sing
 
         // Photo OPTIONAL (storage saving): admin confirms via checklist. The step record
         // (who + when + note) is still logged for audit — only the image is skipped.
-        const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders') : null;
+        const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true }) : null;
 
         // Pickup courier: skip Kemas/Kirim → langsung 'done' (mirip flow walk-in).
         const isPickup = (order.shipping_courier || '').trim() === PICKUP_COURIER;
@@ -2594,7 +2625,7 @@ app.put('/api/orders/:id/pack', requireMenu('orders','edit'), upload.single('pac
             return res.status(409).json({ error: 'Ada item Pre-Order / Custom yang belum siap. Tidak bisa dikemas dulu. PO katalog dipenuhi otomatis saat terima stok; item custom tandai "Siap" dulu di detail pesanan.' });
 
         // Photo OPTIONAL (storage saving): admin confirms via checklist. Step record still logged.
-        const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders') : null;
+        const photoUrl = req.file ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true }) : null;
 
         await withTransaction(async (client) => {
             await client.query(
@@ -2638,7 +2669,7 @@ app.put('/api/orders/:id/ship', requireMenu('orders','edit'), upload.single('shi
 
         // Upload before TX (slow external)
         const photoUrl = req.file
-            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
+            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true })
             : null;
 
         await withTransaction(async (client) => {
@@ -2724,7 +2755,7 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         // For paid orders, a refund record is auto-created with status='pending' so
         // admin follows up the actual money transfer through that flow.
         const cancelContextUrl = req.file
-            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders')
+            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true })
             : null;
 
         // Atomic: stock restore (if paid) + photo + cancel update — all-or-nothing
@@ -3393,7 +3424,7 @@ app.put('/api/orders/:id/confirm-additional-payment', requireMenu('orders','edit
         if (!req.file)
             return res.status(400).json({ error: 'Upload bukti pembayaran selisih dulu' });
 
-        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders');
+        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true });
 
         await withTransaction(async (client) => {
             await client.query(
@@ -3682,7 +3713,7 @@ app.put('/api/refunds/:id/mark-transferred', requireMenu('refund','edit'), uploa
         if (refund.status === 'completed') return res.status(400).json({ error: 'Refund sudah selesai' });
         if (refund.status === 'cancelled') return res.status(400).json({ error: 'Refund sudah dibatalkan' });
 
-        const proofUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'refunds');
+        const proofUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'refunds', { optimize: true });
         await dbRun(
             `UPDATE refunds SET status = 'transferred', proof_url = $1, transferred_at = NOW(), admin_user = $2 WHERE id = $3`,
             [proofUrl, req.user.username, refund.id]
