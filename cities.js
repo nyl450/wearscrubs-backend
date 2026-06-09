@@ -11,8 +11,35 @@
 // Order berat (>10kg) di luar Zona 1 tetap "dikonfirmasi admin" (lihat server.js).
 const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 
+// City-level overrides (Juni 2026 — keputusan owner setelah baseline J&T per-kota).
+// Dipakai DULU sebelum fallback ZONE_RATES — overlay tanpa harus tambah zona baru.
+// Pattern: kota yg tidak ada di sini → pakai zona-nya.
+const CITY_RATES = {
+  // Aceh (17 kota) — naik dari zona 4 (28rb) jadi 40rb/kg
+  "Banda Aceh": 40000, "Sabang": 40000, "Langsa": 40000, "Lhokseumawe": 40000,
+  "Subulussalam": 40000, "Aceh Besar": 40000, "Aceh Barat": 40000, "Aceh Selatan": 40000,
+  "Aceh Timur": 40000, "Aceh Tengah": 40000, "Aceh Utara": 40000, "Pidie": 40000,
+  "Bireuen": 40000, "Simeulue": 40000, "Gayo Lues": 40000, "Nagan Raya": 40000,
+
+  // Lampung (14 kota) — TURUN dari zona 4 (28rb) jadi 15rb/kg
+  "Bandar Lampung": 15000, "Metro": 15000, "Lampung Barat": 15000, "Lampung Selatan": 15000,
+  "Lampung Tengah": 15000, "Lampung Timur": 15000, "Lampung Utara": 15000, "Mesuji": 15000,
+  "Pesawaran": 15000, "Pesisir Barat": 15000, "Pringsewu": 15000, "Tanggamus": 15000,
+  "Tulang Bawang": 15000, "Way Kanan": 15000,
+
+  // Gorontalo (4 kota) — naik dari zona 5 (31rb) jadi 50rb/kg
+  "Gorontalo": 50000, "Kabupaten Gorontalo": 50000, "Pohuwato": 50000, "Bone Bolango": 50000,
+};
+
 function rateForZone(zone) {
   return ZONE_RATES[zone] || ZONE_RATES[3];
+}
+
+// Resolusi tarif per kota. Cek CITY_RATES dulu (override), fallback ke zone rate.
+function rateForCity(cityName, zone) {
+  if (cityName && Object.prototype.hasOwnProperty.call(CITY_RATES, cityName))
+    return CITY_RATES[cityName];
+  return rateForZone(zone);
 }
 
 // Kota dikelompokkan per zona (per provinsi). Jabodetabek (Bogor/Depok/Bekasi/
@@ -153,4 +180,4 @@ CITIES.sort((a, b) => {
   return a.name.localeCompare(b.name, 'id');
 });
 
-module.exports = { CITIES, ZONE_RATES, rateForZone };
+module.exports = { CITIES, ZONE_RATES, CITY_RATES, rateForZone, rateForCity };

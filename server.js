@@ -17,7 +17,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { CITIES, rateForZone } = require('./cities');
+const { CITIES, rateForZone, rateForCity } = require('./cities');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -2005,7 +2005,9 @@ app.get('/api/shipping-cost', (req, res) => {
         cost = 0;
         needsConfirmation = true;
     } else {
-        ratePerKg = rateForZone(zone);
+        // Cek CITY_RATES override dulu (mis. Aceh 40rb, Lampung 15rb, Gorontalo 50rb)
+        // sebelum fallback ke ZONE_RATES.
+        ratePerKg = rateForCity(cityInfo.name, zone);
         cost = weightKg * ratePerKg;
         courier = zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
     }
@@ -2245,7 +2247,7 @@ app.post('/api/orders', async (req, res) => {
             const wKg = Math.ceil(totalQty / 3);
             if (!ci) shippingCost = 0;
             else if (ci.zone !== 1 && wKg > 10) shippingCost = 0;   // Lion Cargo — admin konfirmasi nanti
-            else shippingCost = wKg * rateForZone(ci.zone || 3);
+            else shippingCost = wKg * rateForCity(ci.name, ci.zone || 3);
         }
 
         // Diskon (hanya product total, ongkir tidak kena diskon).

@@ -299,6 +299,20 @@ const BORDIR_NAMA_PRICE = 20000;
 const BORDIR_LOGO_PRICE = 30000;
 // Per-zone shipping rates (client fallback — server stays authoritative via /api/shipping-cost).
 const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
+// City-level overrides (Jun 2026): Aceh 40rb, Lampung 15rb, Gorontalo 50rb.
+// Mirror of cities.js CITY_RATES — UPDATE both together when rates change.
+const CITY_RATES = {
+  "Banda Aceh":40000,"Sabang":40000,"Langsa":40000,"Lhokseumawe":40000,"Subulussalam":40000,
+  "Aceh Besar":40000,"Aceh Barat":40000,"Aceh Selatan":40000,"Aceh Timur":40000,"Aceh Tengah":40000,
+  "Aceh Utara":40000,"Pidie":40000,"Bireuen":40000,"Simeulue":40000,"Gayo Lues":40000,"Nagan Raya":40000,
+  "Bandar Lampung":15000,"Metro":15000,"Lampung Barat":15000,"Lampung Selatan":15000,"Lampung Tengah":15000,
+  "Lampung Timur":15000,"Lampung Utara":15000,"Mesuji":15000,"Pesawaran":15000,"Pesisir Barat":15000,
+  "Pringsewu":15000,"Tanggamus":15000,"Tulang Bawang":15000,"Way Kanan":15000,
+  "Gorontalo":50000,"Kabupaten Gorontalo":50000,"Pohuwato":50000,"Bone Bolango":50000,
+};
+function rateForCityClient(name, zone) {
+  return Object.prototype.hasOwnProperty.call(CITY_RATES, name) ? CITY_RATES[name] : (ZONE_RATES[zone] || 20000);
+}
 
 let cartItems = [];
 let selectedCity = null;   // { name, is_dki, zone, courier, shipping_cost }
@@ -472,7 +486,7 @@ async function selectCity(name) {
                 shipping_cost = 0;
                 needs_confirmation = true;
             } else {
-                shipping_cost = weight_kg * (ZONE_RATES[zone] || 20000);
+                shipping_cost = weight_kg * rateForCityClient(name, zone);
                 courier = zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
             }
             data = { city: name, is_dki: cityData ? cityData.is_dki : false, zone, courier, shipping_cost, weight_kg, needs_confirmation,
