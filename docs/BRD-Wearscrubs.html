@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>BRD Wearscrubs — Business Requirements Document</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm 22mm 18mm;
+    @bottom-center {
+      content: "Wearscrubs BRD · halaman " counter(page) " dari " counter(pages);
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 9pt;
+      color: #888;
+    }
+  }
+  @page :first { @bottom-center { content: ""; } }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #1a1a1a;
+    font-size: 11pt;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Cover page */
+  .cover {
+    page-break-after: always;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 60mm 0 40mm;
+  }
+  .cover .brand { font-size: 14pt; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: #6b21a8; }
+  .cover h1 { font-size: 36pt; font-weight: 800; margin: 8mm 0 4mm; letter-spacing: -0.02em; line-height: 1.05; }
+  .cover .subtitle { font-size: 14pt; color: #555; font-weight: 400; max-width: 130mm; line-height: 1.4; }
+  .cover .meta {
+    border-top: 1px solid #ddd;
+    padding-top: 6mm;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4mm 8mm;
+    font-size: 10pt;
+  }
+  .cover .meta dt { font-weight: 700; color: #6b21a8; text-transform: uppercase; letter-spacing: 0.08em; font-size: 9pt; margin-bottom: 1mm; }
+  .cover .meta dd { margin: 0 0 3mm; color: #1a1a1a; }
+
+  /* Section structure */
+  h1.chapter {
+    page-break-before: always;
+    font-size: 22pt;
+    font-weight: 800;
+    color: #1a1a1a;
+    margin: 0 0 4mm;
+    padding-bottom: 3mm;
+    border-bottom: 3px solid #6b21a8;
+    letter-spacing: -0.01em;
+  }
+  h1.chapter .num {
+    display: inline-block;
+    background: #6b21a8;
+    color: #fff;
+    padding: 1mm 4mm;
+    margin-right: 4mm;
+    border-radius: 4px;
+    font-size: 14pt;
+    vertical-align: middle;
+  }
+  h2 { font-size: 14pt; font-weight: 700; margin: 8mm 0 3mm; color: #1a1a1a; letter-spacing: -0.01em; }
+  h2:first-of-type { margin-top: 4mm; }
+  h3 { font-size: 12pt; font-weight: 700; margin: 5mm 0 2mm; color: #4a1d6e; }
+  h4 { font-size: 11pt; font-weight: 700; margin: 4mm 0 1.5mm; color: #1a1a1a; }
+  p { margin: 0 0 3mm; text-align: justify; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1.5mm; }
+  li > ul, li > ol { margin-top: 1.5mm; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 10pt; }
+  thead { background: #f3e8ff; }
+  th, td { padding: 2mm 3mm; text-align: left; border: 1px solid #e0d4ec; vertical-align: top; }
+  th { font-weight: 700; color: #4a1d6e; }
+  tbody tr:nth-child(even) { background: #faf6fc; }
+
+  /* Highlight boxes */
+  .box {
+    background: #f7f3fb;
+    border-left: 3px solid #6b21a8;
+    padding: 3mm 4mm;
+    margin: 3mm 0 4mm;
+    font-size: 10pt;
+    border-radius: 0 4px 4px 0;
+  }
+  .box.warn { background: #fef9e6; border-left-color: #d97706; }
+  .box.good { background: #e8f7ee; border-left-color: #16a34a; }
+  .box.danger { background: #fdeded; border-left-color: #dc2626; }
+  .box strong { color: #4a1d6e; }
+  .box.warn strong { color: #92400e; }
+  .box.good strong { color: #14532d; }
+  .box.danger strong { color: #7f1d1d; }
+
+  code {
+    font-family: 'Courier New', monospace;
+    background: #eee;
+    padding: 0.5mm 1.5mm;
+    border-radius: 2px;
+    font-size: 9.5pt;
+  }
+  pre {
+    background: #1a1a1a;
+    color: #e0e0e0;
+    padding: 3mm 4mm;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 9pt;
+    overflow-x: auto;
+    margin: 3mm 0;
+    line-height: 1.45;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+
+  .toc { font-size: 10.5pt; }
+  .toc ol { list-style: none; padding: 0; counter-reset: toc; }
+  .toc ol > li { counter-increment: toc; margin: 1.5mm 0; padding-left: 8mm; position: relative; }
+  .toc ol > li::before { content: counter(toc) "."; position: absolute; left: 0; font-weight: 700; color: #6b21a8; }
+  .toc ol ol > li::before { content: counter(toc, lower-alpha) "."; }
+  .toc .dots { color: #ccc; }
+  .toc strong { color: #1a1a1a; }
+  .keep { page-break-inside: avoid; }
+  .pageBreak { page-break-after: always; }
+
+  /* Section intro tagline */
+  .tagline {
+    font-size: 11pt;
+    color: #6b21a8;
+    font-style: italic;
+    margin: 0 0 4mm;
+  }
+
+  /* Two column flow diagram */
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2mm;
+    margin: 3mm 0 5mm;
+  }
+  .flow .step {
+    background: #f7f3fb;
+    border-left: 4px solid #6b21a8;
+    padding: 2mm 4mm;
+    font-size: 10pt;
+    border-radius: 0 4px 4px 0;
+  }
+  .flow .step b { color: #4a1d6e; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ────────────────────────────────────────────────────────────
+     COVER PAGE
+     ──────────────────────────────────────────────────────────── -->
+<section class="cover">
+  <div>
+    <p class="brand">Business Requirements Document</p>
+    <h1>Wearscrubs<br>Platform E-Commerce</h1>
+    <p class="subtitle">Dokumentasi lengkap fitur, alur kerja, keamanan, dan strategi SEO untuk platform e-commerce baju operasi dokter <strong>wearscrubs.id</strong>.</p>
+  </div>
+  <div>
+    <dl class="meta">
+      <div>
+        <dt>Versi Dokumen</dt>
+        <dd>1.0</dd>
+      </div>
+      <div>
+        <dt>Tanggal Terbit</dt>
+        <dd>9 Juni 2026</dd>
+      </div>
+      <div>
+        <dt>Pemilik Produk</dt>
+        <dd>James Tendean</dd>
+      </div>
+      <div>
+        <dt>Status Platform</dt>
+        <dd>LIVE — wearscrubs.id</dd>
+      </div>
+      <div>
+        <dt>Audience</dt>
+        <dd>Internal · Investor · Developer Handoff</dd>
+      </div>
+      <div>
+        <dt>Stack Utama</dt>
+        <dd>Node.js · PostgreSQL · Railway · Supabase</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     DAFTAR ISI
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">i</span>Daftar Isi</h1>
+  <div class="toc">
+    <ol>
+      <li><strong>Ringkasan Eksekutif</strong> <span class="dots">..........................................</span></li>
+      <li><strong>Profil Bisnis</strong> <span class="dots">..................................................</span>
+        <ol>
+          <li>Latar Belakang & Tujuan</li>
+          <li>Target Pengguna</li>
+          <li>Nilai yang Ditawarkan</li>
+          <li>Filosofi Desain Sistem</li>
+        </ol>
+      </li>
+      <li><strong>Arsitektur Sistem</strong> <span class="dots">..............................................</span>
+        <ol>
+          <li>Tumpukan Teknologi (Stack)</li>
+          <li>Topologi Penyebaran</li>
+          <li>Alur Sinkronisasi Kode</li>
+        </ol>
+      </li>
+      <li><strong>Modul Website Publik</strong> <span class="dots">.......................................</span>
+        <ol>
+          <li>Beranda (Homepage)</li>
+          <li>Halaman Kategori</li>
+          <li>Halaman Detail Produk</li>
+          <li>Keranjang (Cart)</li>
+          <li>Checkout 5 Langkah</li>
+          <li>Halaman Statis (About, News, FAQ, dll)</li>
+          <li>Bilingual ID/EN</li>
+        </ol>
+      </li>
+      <li><strong>Modul Dashboard Admin</strong> <span class="dots">....................................</span>
+        <ol>
+          <li>Login & Kontrol Akses (RBAC)</li>
+          <li>Overview Dashboard</li>
+          <li>Manajemen Produk</li>
+          <li>Manajemen Stok (Inventory)</li>
+          <li>Manajemen Pesanan</li>
+          <li>Modul Kasir (5 Sumber Order)</li>
+          <li>Bordir — Workflow Lengkap</li>
+          <li>Edit & Split Pesanan</li>
+          <li>Pickup Auto-Skip</li>
+          <li>Refund & Cancel</li>
+          <li>Exchange (Tukar Size)</li>
+          <li>Menu Pre-Order</li>
+          <li>Modul Report</li>
+          <li>Manajemen User</li>
+          <li>Panduan In-App</li>
+        </ol>
+      </li>
+      <li><strong>Workflow End-to-End</strong> <span class="dots">..........................................</span></li>
+      <li><strong>Keamanan & Privasi</strong> <span class="dots">..........................................</span></li>
+      <li><strong>Implementasi SEO</strong> <span class="dots">.............................................</span></li>
+      <li><strong>Infrastruktur & Operasi</strong> <span class="dots">.................................</span></li>
+      <li><strong>Roadmap & Pending Items</strong> <span class="dots">.................................</span></li>
+      <li><strong>Glossarium</strong> <span class="dots">.....................................................</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     1. RINGKASAN EKSEKUTIF
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">1</span>Ringkasan Eksekutif</h1>
+  <p class="tagline">Wearscrubs adalah platform e-commerce baju operasi (scrubs) untuk dokter, dirancang dari awal sebagai pengganti spreadsheet manual menjadi sistem terintegrasi yang bisa dioperasikan satu admin tanpa pelatihan teknis.</p>
+
+  <h2>Apa Itu Wearscrubs?</h2>
+  <p>Wearscrubs (<code>wearscrubs.id</code>) adalah toko online yang menjual baju operasi premium untuk dokter dan tenaga medis. Brand ini lahir dari pengamatan bahwa scrubs di pasaran umumnya generik, tidak nyaman, dan dijual tanpa pemahaman kebutuhan dokter. Wearscrubs menjawab itu dengan produk yang dirancang oleh dokter, materi yang lebih nyaman dipakai operasi panjang, dan layanan bordir nama + logo institusi untuk personalisasi.</p>
+
+  <h2>Status Platform Saat Ini</h2>
+  <ul>
+    <li><strong>Live penuh</strong> di domain utama <code>wearscrubs.id</code> dan <code>www.wearscrubs.id</code> dengan SSL aktif.</li>
+    <li><strong>Bilingual</strong> Indonesia dan Inggris, 43 halaman publik, semua sinkron.</li>
+    <li><strong>Dashboard admin matang</strong> dengan 15+ modul (Kasir, Manajemen Pesanan, Bordir Workflow, Report, Refund, Exchange, RBAC, dll).</li>
+    <li><strong>Database PostgreSQL</strong> via Supabase dengan Row-Level Security aktif di 11 tabel publik.</li>
+    <li><strong>Auto-deploy</strong> dari GitHub ke Railway setiap push.</li>
+  </ul>
+
+  <h2>Ringkasan Modul Utama</h2>
+  <table>
+    <thead>
+      <tr><th>Area</th><th>Komponen</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td rowspan="3">Website Publik</td><td>Homepage, kategori, produk, cart, checkout</td><td>Live</td></tr>
+      <tr><td>Halaman statis (about, news, FAQ, syarat)</td><td>Live</td></tr>
+      <tr><td>SEO lengkap (hreflang, JSON-LD, schema)</td><td>Live</td></tr>
+      <tr><td rowspan="6">Dashboard Admin</td><td>Kasir (5 sumber order)</td><td>Live</td></tr>
+      <tr><td>Manajemen pesanan + bordir review</td><td>Live</td></tr>
+      <tr><td>Edit pesanan + split order + pickup auto-skip</td><td>Live</td></tr>
+      <tr><td>Inventory dgn opname mode + history</td><td>Live</td></tr>
+      <tr><td>RBAC per-menu (admin, manager, staff)</td><td>Live</td></tr>
+      <tr><td>Report 3-tab (Sales, Sales Type, Items)</td><td>Live</td></tr>
+      <tr><td>Backend</td><td>Node.js + Express, ~4200 baris</td><td>Live</td></tr>
+      <tr><td>Database</td><td>PostgreSQL via Supabase, RLS aktif</td><td>Live</td></tr>
+      <tr><td>Hosting</td><td>Railway auto-deploy dari GitHub <code>main</code></td><td>Live</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Tujuan Dokumen Ini</h2>
+  <p>BRD ini berfungsi sebagai sumber kebenaran tunggal untuk semua pihak yang berinteraksi dengan platform Wearscrubs:</p>
+  <ul>
+    <li><strong>Internal (owner & admin):</strong> referensi cepat fitur, alur kerja istri sebagai admin, jejak keputusan desain.</li>
+    <li><strong>Eksternal (investor / partner / klien):</strong> bukti kematangan platform, fondasi untuk pitching atau akuisisi.</li>
+    <li><strong>Developer handoff:</strong> dokumentasi teknis cukup untuk developer baru melanjutkan pengembangan tanpa kehilangan konteks.</li>
+  </ul>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     2. PROFIL BISNIS
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">2</span>Profil Bisnis</h1>
+
+  <h2>2.1 Latar Belakang &amp; Tujuan</h2>
+  <p>Wearscrubs dimulai dari masalah konkret: dokter butuh baju operasi yang bagus dan rapi, tapi pengalaman pembelian di pasar tradisional (offline atau marketplace generic) buruk. Bahan kasar, ukuran tidak konsisten, layanan bordir nama dokter atau logo rumah sakit hampir tidak ada, dan tidak ada brand yang benar-benar memahami kebutuhan ini.</p>
+  <p>Owner Wearscrubs (James) — yang juga membangun seluruh platform ini — menyadari gap ini dari pengalaman istrinya sendiri sebagai dokter. Solusinya: <strong>brand scrubs premium yang dirancang dari sudut pandang dokter</strong>, dijual lewat platform online yang seluruh operasionalnya bisa dijalankan istri sebagai admin tunggal.</p>
+
+  <div class="box">
+    <strong>Tujuan utama platform:</strong> menggantikan spreadsheet manual + WhatsApp manual + invoice manual menjadi satu dashboard intuitif yang menangani seluruh siklus pesanan dari order masuk sampai paket diterima customer.
+  </div>
+
+  <h2>2.2 Target Pengguna</h2>
+  <table>
+    <thead><tr><th>Segmen</th><th>Karakteristik</th><th>Kebutuhan Utama</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Dokter individu</strong></td>
+        <td>Dokter umum, spesialis, residen. Order 1-3 set per pembelian.</td>
+        <td>Kenyamanan bahan, ukuran tepat, bordir nama profesional, pengiriman cepat.</td>
+      </tr>
+      <tr>
+        <td><strong>Tim / Departemen RS</strong></td>
+        <td>Order bulk (5-30 set) dgn bordir logo institusi.</td>
+        <td>Konsistensi warna seragam, bordir logo presisi, invoice rapi, ongkir terkelola.</td>
+      </tr>
+      <tr>
+        <td><strong>Klinik / Praktek mandiri</strong></td>
+        <td>Order recurring (3-10 set per pembelian).</td>
+        <td>Konsistensi stok, opsi custom size, after-sales response cepat.</td>
+      </tr>
+      <tr>
+        <td><strong>Mahasiswa kedokteran</strong></td>
+        <td>Order untuk koas / praktek lapangan, biasanya 1-2 set.</td>
+        <td>Harga terjangkau, ukuran lengkap, pengiriman ke kota tujuan koas.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2.3 Nilai yang Ditawarkan</h2>
+  <p>Berbeda dari marketplace generic dan toko scrubs konvensional, Wearscrubs membawa 4 keunggulan inti:</p>
+  <ul>
+    <li><strong>Dirancang oleh dokter.</strong> Setiap produk dievaluasi dari sisi fit, mobilitas, dan daya serap keringat dari sudut pandang dokter aktif — bukan vendor garmen umum. Badge "Dirancang oleh Dokter" ditampilkan eksplisit di halaman produk.</li>
+    <li><strong>Bordir nama &amp; logo profesional.</strong> Layanan bordir nama dokter (dgn pilihan warna benang, posisi dada kiri/kanan) dan bordir logo institusi tersedia di setiap pembelian. Layanan ini umumnya tidak ada di kompetitor.</li>
+    <li><strong>Custom size &amp; custom product.</strong> Customer tidak terbatas pada katalog standar — admin dapat membuat order untuk ukuran di luar katalog (4XL, dll) atau bahkan produk yang full-custom (nama, kategori, harga semua manual). Cocok untuk kebutuhan khusus klinik atau RS yang minta spesifikasi unik.</li>
+    <li><strong>Layanan admin responsif.</strong> Setiap order dipantau langsung oleh istri sebagai admin, dengan WA notifikasi otomatis di setiap step (konfirmasi bayar, packing, kirim resi, selesai). Tidak ada anonimitas marketplace.</li>
+  </ul>
+
+  <h2>2.4 Filosofi Desain Sistem</h2>
+  <p>Sistem dirancang dengan prinsip <strong>"satu admin tanpa pelatihan harus bisa pakai"</strong>. Konsekuensi desain dari prinsip ini:</p>
+  <ul>
+    <li><strong>Bahasa Indonesia di seluruh dashboard.</strong> Tidak ada jargon teknis. Label tombol kontekstual ("Kemas Barang", "Input Resi / Kirim", "Tandai Diterima") — bukan generik "Submit" atau "Update Status".</li>
+    <li><strong>Visual gate.</strong> Tombol action di-disable + diberi label penjelas ("Review Bordir Dulu", "Bayar Selisih Dulu") kalau ada prasyarat belum dipenuhi. Admin tidak perlu mengingat aturan — sistem yang mengingatkan.</li>
+    <li><strong>Step-by-step.</strong> Status pesanan progresif dengan tombol yang muncul sesuai konteks. Tidak ada layar dengan 20 tombol yang membingungkan.</li>
+    <li><strong>Panduan tertanam.</strong> Menu "Bantuan" di sidebar berisi panduan in-app untuk setiap modul, plus dokumen <code>PANDUAN-ADMIN.md</code> yang bisa dicetak.</li>
+  </ul>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     3. ARSITEKTUR SISTEM
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">3</span>Arsitektur Sistem</h1>
+
+  <h2>3.1 Tumpukan Teknologi (Stack)</h2>
+  <table>
+    <thead><tr><th>Lapisan</th><th>Teknologi</th><th>Catatan</th></tr></thead>
+    <tbody>
+      <tr><td>Frontend Publik</td><td>HTML statis + Tailwind CSS (compiled) + Vanilla JS</td><td>43 halaman, no framework. CSS dikompilasi ke <code>tw.css</code> ~12KB gzip.</td></tr>
+      <tr><td>Dashboard Admin</td><td>HTML single-page + Tailwind CDN + Vanilla JS</td><td>1 file <code>dashboard.html</code> ~8800 baris. CDN dipakai karena class admin dinamis.</td></tr>
+      <tr><td>Backend</td><td>Node.js + Express</td><td>1 file <code>server.js</code> ~4200 baris. Endpoints REST.</td></tr>
+      <tr><td>Database</td><td>PostgreSQL via Supabase (pg Pool)</td><td>17 produk aktif, ~321 varian, transactional via <code>withTransaction</code>.</td></tr>
+      <tr><td>Storage</td><td>Supabase Storage (2 bucket)</td><td>Bucket <code>wearscrubs</code> public (foto produk, logo). Bucket <code>wearscrubs-orders</code> privat (bukti bayar, signed URL 1 jam).</td></tr>
+      <tr><td>Autentikasi</td><td>JWT + bcryptjs</td><td>Token expiry 8 jam, secret di Railway env. Rate limit di endpoint login.</td></tr>
+      <tr><td>Hosting</td><td>Railway (Hobby tier)</td><td>Auto-deploy dari GitHub branch <code>main</code>.</td></tr>
+      <tr><td>Notifikasi</td><td>Fonnte (WhatsApp API)</td><td>Notifikasi admin saat order baru masuk.</td></tr>
+      <tr><td>DNS</td><td>Cloudflare</td><td>Apex + www, SSL otomatis.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3.2 Topologi Penyebaran</h2>
+  <pre><code>📁 Source       D:\ws\wearscrubs-backend\        ← SUMBER UTAMA TUNGGAL
+                  • public/*.html (frontend)
+                  • server.js (backend)
+                  • public/tw.css (Tailwind compiled)
+                  ↓ git push origin main
+☁️  GitHub       nyl450/wearscrubs-backend
+                  ↓ auto-deploy webhook
+🚂  Railway     wearscrubs-backend-production.up.railway.app
+                  ↓ pg Pool
+🗄️  Supabase    PostgreSQL (region ap-southeast-1)
+                  + Storage Bucket (wearscrubs, wearscrubs-orders)
+                  ↓ DNS (Cloudflare)
+🌐 Domain        wearscrubs.id + www.wearscrubs.id (SSL)</code></pre>
+
+  <div class="box warn">
+    <strong>Catatan operasional:</strong> Folder lama <code>D:\ws\wordpress\</code> SUDAH DITINGGALKAN. Semua edit dilakukan langsung di <code>D:\ws\wearscrubs-backend\</code>. Tidak ada lagi dual-source synchronization.
+  </div>
+
+  <h2>3.3 Alur Sinkronisasi Kode</h2>
+  <p>Workflow git dirancang seminimal mungkin agar siklus edit-deploy cepat:</p>
+  <div class="flow">
+    <div class="step"><b>1. Edit file</b> langsung di repo utama <code>D:\ws\wearscrubs-backend\</code> menggunakan path absolut.</div>
+    <div class="step"><b>2. Commit</b> dengan <code>git -C "D:/ws/wearscrubs-backend" add &amp;&amp; commit</code>.</div>
+    <div class="step"><b>3. Push</b> ke <code>origin main</code>. Tidak perlu worktree, tidak perlu ff-merge manual.</div>
+    <div class="step"><b>4. Railway auto-deploy</b> terpicu otomatis lewat webhook GitHub. Build + restart container ~1-2 menit.</div>
+    <div class="step"><b>5. Verifikasi</b> dengan refresh <code>wearscrubs.id</code> atau dashboard admin.</div>
+  </div>
+
+  <p>Untuk perubahan di file HTML publik yang memakai class Tailwind baru, perlu <strong>rebuild CSS</strong> dulu:</p>
+  <pre><code>npx tailwindcss@3 -c tailwind.config.js -i tw.input.css -o public/tw.css --minify</code></pre>
+  <p>Dashboard admin TIDAK butuh rebuild karena masih pakai Tailwind CDN.</p>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     4. MODUL WEBSITE PUBLIK
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">4</span>Modul Website Publik</h1>
+  <p class="tagline">43 halaman responsif, bilingual ID/EN, mobile-first, SEO komplit. Customer journey: cari produk → pilih varian → atur bordir → checkout → terima konfirmasi WA.</p>
+
+  <h2>4.1 Beranda (Homepage)</h2>
+  <p><strong>URL:</strong> <code>/</code> (ID) dan <code>/index-en.html</code> (EN).</p>
+  <p><strong>Tujuan:</strong> mengarahkan visitor ke kategori produk dalam &lt; 5 detik, sambil membangun trust lewat narrasi brand "dirancang oleh dokter".</p>
+
+  <h3>Komponen Utama</h3>
+  <ul>
+    <li><strong>Sticky pill header</strong> — navigasi mengambang transparan dengan blur, invert ke white pill saat scroll. Di desktop homepage menggunakan <code>xl:fixed</code> sehingga hero nempel di atas.</li>
+    <li><strong>Hero section</strong> — judul utama + CTA "Belanja Sekarang" + thumbnail kategori unggulan.</li>
+    <li><strong>Section kategori</strong> — 4 kategori utama (Tops, Pants, Caps, Gown) sebagai entry point.</li>
+    <li><strong>Section "Terlaris"</strong> — produk pilihan dengan teaser harga.</li>
+    <li><strong>News teaser</strong> — 3 artikel terbaru gaya hidup medis dgn CTA "Lihat Semua" ke <code>news.html</code>.</li>
+    <li><strong>Footer charcoal</strong> — <code>rounded-t-[48px]</code> dengan link halaman statis + sosial media.</li>
+  </ul>
+
+  <h2>4.2 Halaman Kategori</h2>
+  <p>8 halaman kategori (4 kategori × 2 bahasa) menampilkan grid produk lengkap dengan filter implisit per kategori.</p>
+  <ul>
+    <li><code>category-tops.html</code> / <code>-en.html</code> — Atasan scrubs lengan pendek &amp; panjang.</li>
+    <li><code>category-pants.html</code> / <code>-en.html</code> — Celana scrubs.</li>
+    <li><code>category-caps.html</code> / <code>-en.html</code> — Topi operasi (caps).</li>
+    <li><code>category-gowns.html</code> / <code>-en.html</code> — Gown operasi.</li>
+  </ul>
+  <p>Setiap halaman dilengkapi <strong>JSON-LD BreadcrumbList</strong> statis untuk SEO breadcrumb di Google.</p>
+
+  <h2>4.3 Halaman Detail Produk</h2>
+  <p><strong>URL:</strong> <code>product.html?id={id}</code> (ID) dan <code>product-en.html?id={id}</code> (EN).</p>
+  <p>Halaman ini paling kompleks di sisi publik karena harus menangani:</p>
+  <ul>
+    <li><strong>Cascade pilihan varian</strong> — warna → variant_type (Lengan Pendek/Panjang) → ukuran (S/M/L/XL/XXL). Setiap perubahan memuat ulang stok riil dari API.</li>
+    <li><strong>Resolusi harga per varian</strong> — produk dengan <code>price_by_type</code> menampilkan harga berbeda per pilihan lengan (mis. Pendek Rp 245.000, Panjang Rp 260.000).</li>
+    <li><strong>Pilihan bordir nama</strong> — input teks nama, baris ke-2 opsional (jabatan/gelar), warna benang, posisi dada (kiri/kanan), preview harga.</li>
+    <li><strong>Pilihan bordir logo</strong> — upload gambar logo (PNG/JPG, max 1.8MB), atau pilih "kirim lewat WA nanti".</li>
+    <li><strong>Stok info live</strong> — info ketersediaan stok untuk varian terpilih.</li>
+    <li><strong>Add to cart</strong> — payload disimpan di <code>localStorage</code> untuk sinkronisasi cross-page.</li>
+  </ul>
+  <p>Halaman juga mengembed <strong>JSON-LD Product</strong> dinamis dengan offers/price/availability untuk rich snippet Google.</p>
+
+  <h2>4.4 Keranjang (Cart)</h2>
+  <p><strong>URL:</strong> <code>cart.html</code> / <code>cart-en.html</code>.</p>
+  <ul>
+    <li>Render item dari <code>localStorage</code> dengan HTML-escape (anti-XSS).</li>
+    <li>Edit qty per item, hapus item.</li>
+    <li>Subtotal otomatis.</li>
+    <li>CTA "Lanjut Checkout" → <code>checkout.html</code>.</li>
+  </ul>
+
+  <h2>4.5 Checkout 5 Langkah</h2>
+  <p><strong>URL:</strong> <code>checkout.html</code> / <code>checkout-en.html</code>.</p>
+  <p>Customer journey dibagi 5 step linear untuk mengurangi kognitif load dan abandonment:</p>
+  <div class="flow">
+    <div class="step"><b>Step 1 — Data Pelanggan:</b> nama, nomor WhatsApp (validasi format 08xxx / 62xxx, 9-15 digit), alamat lengkap.</div>
+    <div class="step"><b>Step 2 — Pengiriman:</b> pilih kota tujuan dari dropdown 400 kota. Berat dihitung otomatis (qty / 3 kg). Ongkir ter-compute 5-zona (Jabodetabek 10rb · Banten/Jabar 12rb · Jateng-DIY-Jatim-Bali 20rb · Sumatra/Kalimantan/NTB/NTT 28rb · Sulawesi/Maluku/Papua 31rb per kg). Kurir auto-pilih berdasar zona.</div>
+    <div class="step"><b>Step 3 — Metode Pembayaran:</b> Transfer Bank (BCA) atau QRIS. Panel kondisional menampilkan nomor rekening atau gambar QRIS WS sesuai pilihan.</div>
+    <div class="step"><b>Step 4 — Review &amp; Konfirmasi:</b> ringkasan order, total, ongkir, grand total. Customer cek dulu sebelum submit.</div>
+    <div class="step"><b>Step 5 — Submit:</b> POST ke <code>/api/orders</code>. Backend validate &amp; insert dalam transaksi atomik. Customer dapat order code, dan instruksi pembayaran (transfer 2x24 jam atau auto-cancel).</div>
+  </div>
+  <div class="box">
+    <strong>Anti-tamper:</strong> ongkir di-recompute server-side dari kota + qty (bukan dipercaya dari klien). Diskon dipaksa 0 untuk order publik (hanya admin via Kasir yg bisa pakai diskon).
+  </div>
+
+  <h2>4.6 Halaman Statis</h2>
+  <table>
+    <thead><tr><th>Halaman</th><th>URL</th><th>Isi</th></tr></thead>
+    <tbody>
+      <tr><td>About</td><td><code>about.html</code></td><td>Cerita brand, filosofi "dirancang oleh dokter".</td></tr>
+      <tr><td>News</td><td><code>news.html</code></td><td>Artikel gaya hidup medis (kartu Lumio-style).</td></tr>
+      <tr><td>FAQ</td><td><code>FAQ.html</code></td><td>8 Q&amp;A: order, ukuran, bordir, bayar, kirim, lacak, tukar, kontak. Embed <code>FAQPage</code> JSON-LD.</td></tr>
+      <tr><td>Syarat &amp; Ketentuan</td><td><code>syarat.html</code></td><td>Return policy, garansi, klausul tukar size.</td></tr>
+      <tr><td>Shipping Info</td><td><code>shipping.html</code></td><td>Tabel zona ongkir 5-zona, estimasi waktu, kurir.</td></tr>
+      <tr><td>Privacy</td><td><code>privacy.html</code></td><td>Kebijakan privasi data customer.</td></tr>
+      <tr><td>Contact</td><td><code>contact.html</code></td><td>Kontak WhatsApp, alamat fisik.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>4.7 Bilingual ID/EN</h2>
+  <p>Setiap halaman publik tersedia dalam 2 bahasa:</p>
+  <ul>
+    <li><strong>Versi ID:</strong> file utama (mis. <code>product.html</code>).</li>
+    <li><strong>Versi EN:</strong> suffix <code>-en.html</code> (mis. <code>product-en.html</code>).</li>
+    <li><strong>Switch bahasa</strong> via pill ID/EN di header (mobile &amp; desktop).</li>
+    <li><strong>SEO hreflang</strong> absolut + <code>x-default</code> di setiap halaman supaya Google index kedua versi tanpa duplicate content penalty.</li>
+  </ul>
+  <div class="box warn">
+    <strong>Aturan edit penting:</strong> setiap perubahan di halaman ID wajib diaplikasikan juga ke versi EN (translate), dan sebaliknya. Header &amp; footer perubahan global wajib di-apply ke SEMUA halaman ID+EN, dengan cek mobile + iPad (xl:) + desktop.
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     5. MODUL DASHBOARD ADMIN
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">5</span>Modul Dashboard Admin</h1>
+  <p class="tagline">Dashboard 15+ modul untuk mengelola seluruh operasional Wearscrubs dari satu layar. Dirancang agar bisa dioperasikan istri sebagai admin tunggal tanpa pelatihan teknis.</p>
+
+  <h2>5.1 Login &amp; Kontrol Akses (RBAC)</h2>
+  <p><strong>URL:</strong> <code>/login.html</code>.</p>
+  <p>Login menggunakan username + password dengan rate-limit untuk mencegah brute-force. Setelah berhasil, token JWT disimpan di localStorage dengan expiry 8 jam.</p>
+
+  <h3>3 Tingkatan Role</h3>
+  <table>
+    <thead><tr><th>Role</th><th>Akses</th><th>Use Case</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Admin</strong></td><td>Semua modul, semua action termasuk Cancel order &amp; Refund.</td><td>Owner / istri (akun utama).</td></tr>
+      <tr><td><strong>Manager</strong></td><td>Semua modul kecuali user management.</td><td>Asisten admin senior.</td></tr>
+      <tr><td><strong>Staff</strong></td><td>Per-menu permission. Setiap menu (orders, kasir, inventory, dll) bisa diatur view/edit terpisah.</td><td>Tim packing, tim WA, fleksibel sesuai kebutuhan.</td></tr>
+    </tbody>
+  </table>
+  <p>Permission staff disimpan di kolom <code>allowed_menus</code> JSON. Auto-redirect: kalau staff tidak punya akses ke menu Overview (default landing), sistem akan auto-redirect ke menu pertama yang diizinkan.</p>
+
+  <h2>5.2 Overview Dashboard</h2>
+  <p>Landing setelah login. Menampilkan ringkasan harian/mingguan: total pesanan masuk, omzet hari ini, jumlah pesanan butuh aksi (menunggu bayar, menunggu kemas, dll), badge notifikasi di sidebar untuk Pre-Order, Refund pending, dan Exchange pending.</p>
+
+  <h2>5.3 Manajemen Produk</h2>
+  <ul>
+    <li>CRUD produk dengan multi-varian (warna × variant_type × size).</li>
+    <li>Upload foto produk (multi-image per varian, slot 1-5).</li>
+    <li>Kategori: tops / pants / caps / gown (CHECK constraint di DB).</li>
+    <li><code>price_by_type</code>: harga berbeda per variant_type (mis. Pendek vs Panjang).</li>
+    <li>Soft-delete: <code>is_active = false</code> menyembunyikan dari halaman publik, history pesanan tetap utuh.</li>
+    <li>Atomic upsert: foto di-upload ke Storage <strong>sebelum</strong> transaksi DB, sehingga gagal di tengah tidak meninggalkan produk parsial.</li>
+  </ul>
+
+  <h2>5.4 Manajemen Stok (Inventory)</h2>
+  <p>Salah satu modul paling matang. Setiap mutasi stok ber-log di tabel <code>stock_movements</code> dengan <code>movement_type</code> spesifik.</p>
+
+  <h3>Fitur Utama</h3>
+  <ul>
+    <li><strong>Card view + Grid view</strong> — admin pilih layout sesuai preferensi.</li>
+    <li><strong>Inline edit cepat</strong> di grid view: klik cell stok → input langsung → save.</li>
+    <li><strong>Modal "Terima Stok"</strong> — input stok baru dengan note. Bisa pilih: kondisi normal / reject. Pre-Order eksisting otomatis terpenuhi (FIFO, paid-only) saat receive.</li>
+    <li><strong>Reject to Normal</strong> — konversi stok reject jadi normal kalau setelah dicek ulang ternyata oke.</li>
+    <li><strong>Bulk edit</strong> dengan threshold grid (set multiple varian sekaligus).</li>
+    <li><strong>Opname mode</strong> — penyesuaian stok dengan alasan whitelist (5 alasan: hitung ulang, kerusakan, hilang, ditemukan, lain-lain).</li>
+    <li><strong>Variant History modal</strong> — riwayat pergerakan stok + daftar pembeli per varian.</li>
+    <li><strong>Badge "N PO"</strong> di card/grid — tanda ada Pre-Order menunggu varian ini.</li>
+  </ul>
+
+  <h3>Movement Types</h3>
+  <table>
+    <thead><tr><th>Type</th><th>Arti</th></tr></thead>
+    <tbody>
+      <tr><td><code>receive</code></td><td>Tambah stok normal dari supplier.</td></tr>
+      <tr><td><code>receive_reject</code></td><td>Tambah stok reject (cacat).</td></tr>
+      <tr><td><code>reject_to_normal</code></td><td>Konversi reject jadi normal.</td></tr>
+      <tr><td><code>manual_set</code></td><td>Set manual via inline edit / bulk.</td></tr>
+      <tr><td><code>order_out</code></td><td>Stok keluar saat order dikonfirmasi bayar.</td></tr>
+      <tr><td><code>order_cancel_restore</code></td><td>Stok dikembalikan saat pesanan dibatalkan (post-payment).</td></tr>
+      <tr><td><code>order_edit_adjust</code></td><td>Penyesuaian stok karena admin edit size order.</td></tr>
+      <tr><td><code>exchange_replacement_out</code></td><td>Stok keluar saat tukar size approved (size pengganti dikirim).</td></tr>
+      <tr><td><code>exchange_return_in</code></td><td>Stok kembali saat barang asli diterima dari customer.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5.5 Manajemen Pesanan</h2>
+  <p>Modul utama. Setiap pesanan ditampilkan sebagai card dengan informasi pelanggan, item, total, status, dan tombol action kontekstual.</p>
+
+  <h3>Status Pesanan (State Machine)</h3>
+  <div class="flow">
+    <div class="step"><b>pending</b> — Order baru masuk, menunggu konfirmasi bayar.</div>
+    <div class="step"><b>confirmed</b> — Pembayaran dikonfirmasi admin (upload bukti). Stok ter-deduct di sini.</div>
+    <div class="step"><b>bordir</b> — Khusus order dengan bordir. Menunggu istri review &amp; proses bordir.</div>
+    <div class="step"><b>packed</b> — Barang dikemas, siap dikirim.</div>
+    <div class="step"><b>shipped</b> — Resi diinput, paket dalam perjalanan.</div>
+    <div class="step"><b>done</b> — Paket diterima customer. Siklus selesai.</div>
+    <div class="step"><b>cancelled</b> — Dibatalkan. Kalau sudah paid, stok di-restore + auto-create refund record.</div>
+  </div>
+
+  <h3>Visual Gates &amp; Label Kontekstual</h3>
+  <p>Tombol action di kanan card / di modal detail berubah label dan warna sesuai konteks:</p>
+  <table>
+    <thead><tr><th>Kondisi</th><th>Tampilan Tombol</th></tr></thead>
+    <tbody>
+      <tr><td>Order baru, butuh konfirmasi bayar</td><td>"Konfirmasi Pembayaran" (hijau)</td></tr>
+      <tr><td>Ada bordir non-website, belum approved</td><td>"🔍 Review Bordir Dulu" (amber, hard-block)</td></tr>
+      <tr><td>Selisih bordir tambahan outstanding</td><td>"💰 Bayar Selisih Dulu" (amber)</td></tr>
+      <tr><td>Status confirmed, siap dikemas</td><td>"Kemas Barang" (biru)</td></tr>
+      <tr><td>Status packed, siap kirim</td><td>"Input Resi / Kirim" (biru)</td></tr>
+      <tr><td>Status shipped, customer terima</td><td>"Tandai Diterima" (hijau)</td></tr>
+      <tr><td>Status bordir, semua approved + lunas</td><td>"🧵 Tandai Bordir Selesai" (purple)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5.6 Modul Kasir (5 Sumber Order)</h2>
+  <p>Sebelumnya bernama "Input Order WA", dinamakan ulang jadi "Kasir" karena fungsinya sudah jauh melampaui WhatsApp order. Modul ini handle 5 jenis sumber pesanan:</p>
+
+  <table>
+    <thead><tr><th>Sumber</th><th>Skenario</th><th>Treatment Khusus</th></tr></thead>
+    <tbody>
+      <tr><td><code>website</code></td><td>Order dari halaman publik wearscrubs.id.</td><td>Default, biasanya tidak dibuat manual.</td></tr>
+      <tr><td><code>whatsapp</code></td><td>Customer order via chat WA, admin input manual.</td><td>Setelah submit, builder pesan WA otomatis untuk customer.</td></tr>
+      <tr><td><code>event_offline</code></td><td>Booth di event medis (konferensi, simposium).</td><td>Bisa pilih bayar Cash / QRIS / Free.</td></tr>
+      <tr><td><code>offline</code></td><td>Walk-in di toko fisik.</td><td>Sama dengan event_offline.</td></tr>
+      <tr><td><code>collaboration_event</code></td><td>Kerjasama partner — pembeli bayar ke partner, kita tagih partner dgn consignment 30%.</td><td>Wajib isi <code>billing_to</code> (nama partner). Diskon 30% dipilih manual.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Fitur Kasir Lanjutan</h3>
+  <ul>
+    <li><strong>Cascade dropdown produk:</strong> warna → variant_type → ukuran, dengan stok info live.</li>
+    <li><strong>Custom Size:</strong> opsi "✏️ Custom Size" di dropdown ukuran — input label bebas (mis. 4XL) + harga manual. Off-catalog, skip cek stok.</li>
+    <li><strong>Custom Warna:</strong> opsi "✏️ Custom Warna" di dropdown warna — label warna bebas + harga manual.</li>
+    <li><strong>Custom Product:</strong> opsi "✨ Custom Product" di dropdown produk paling bawah — semua field manual (nama, kategori, variant, warna, ukuran, harga). Full off-catalog.</li>
+    <li><strong>Pre-Order toggle:</strong> muncul otomatis kalau qty &gt; stok. Whole-item PO, stok dialokasi saat barang datang (FIFO, paid-only).</li>
+    <li><strong>Bonus toggle:</strong> tandai item sebagai bonus (Rp 0). Stok tetap di-deduct, harga di-nol-kan.</li>
+    <li><strong>Bordir per-item:</strong> nama (dgn baris ke-2 opsional), logo (upload PNG/JPG atau placeholder "kirim via WA"), warna benang, posisi dada kiri/kanan.</li>
+    <li><strong>Diskon:</strong> pilihan 0% / 5% / Consignment 30% (validasi server-side).</li>
+    <li><strong>Result panel adaptif:</strong> setelah submit, panel hasil menampilkan instruksi bayar yang sesuai sumber + metode (QRIS image / BCA-Mandiri / Cash / Collab note).</li>
+  </ul>
+
+  <h2>5.7 Bordir — Workflow Lengkap</h2>
+  <p>Salah satu fitur paling kompleks karena melibatkan banyak edge case bisnis: review pre-payment vs post-payment, request tambah bordir setelah bayar, validasi posisi, tolak total order, dll.</p>
+
+  <h3>Aturan Bisnis Lock</h3>
+  <ul>
+    <li><strong>1 baju maks: 1 nama + 1 logo</strong>. Tidak ada 2 logo per baju.</li>
+    <li><strong>Bordir hanya untuk Atasan (tops) &amp; Gown</strong> — celana/cap pill bordir disabled di Kasir.</li>
+    <li><strong>Default harga:</strong> nama Rp 20.000, logo Rp 30.000. Admin bisa override per-order.</li>
+    <li><strong>Posisi:</strong> kiri / kanan dada. Kalau both nama+logo aktif di 1 baju → posisi wajib beda.</li>
+    <li><strong>Baris ke-2 nama opsional</strong> — mis. jabatan/gelar di baris bawah (Sp.PD, M.Kes).</li>
+  </ul>
+
+  <h3>Pre-Payment vs Post-Payment Review</h3>
+  <table>
+    <thead><tr><th>Sumber Order</th><th>Kapan Review</th><th>Alasan</th></tr></thead>
+    <tbody>
+      <tr><td>Kasir (whatsapp / event / offline / collab)</td><td>SEBELUM customer bayar</td><td>Istri lihat detail bordir → approve → invoice dikirim → customer bayar. Kalau bermasalah, tolak = cancel total (uang belum masuk).</td></tr>
+      <tr><td>Website</td><td>SESUDAH customer bayar</td><td>Customer remote, bayar duluan + upload bukti. Admin konfirmasi bayar → baru review bordir. Kalau bermasalah, refund full otomatis.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Visual Gate Hard-Block</h3>
+  <p>Untuk order non-website dengan bordir, tombol "Konfirmasi Pembayaran" di-block dengan label amber "🔍 Review Bordir Dulu". Klik tombol → scroll ke section Review Bordir. Istri WAJIB klik Setujui/Tolak dulu sebelum konfirmasi bayar.</p>
+
+  <h3>Tolak Bordir = Cancel Total Order</h3>
+  <p>Sesuai keputusan owner: tidak ada flow "lanjut tanpa bordir" di order yang sama. Kalau bordir bermasalah, customer perlu order baru. Tombol "Tolak &amp; Batalkan Pesanan" → modal alasan (3 quick-pick: "Logo terlalu rumit" / "Nama terlalu panjang" / "Kualitas logo") → cancel endpoint dipanggil dengan <code>set_bordir_status='rejected'</code> untuk audit trail.</p>
+
+  <h3>Tambah Bordir Post-Payment</h3>
+  <p>Customer berubah pikiran setelah bayar — minta tambah bordir. Tombol "+ Tambah Bordir" muncul kondisional (payment paid, status bukan shipped/done/cancelled, tidak ada outstanding, ada item yang belum punya bordir). Flow:</p>
+  <ol>
+    <li>Admin pilih item belum bordir → isi detail (nama+baris2+text+warna+posisi+harga, atau logo).</li>
+    <li>Backend update items, rebuild <code>embroidery_details</code>, reset <code>bordir_status='pending'</code>.</li>
+    <li>Auto-open template WA tagihan: "Selisih Rp X, transfer BCA/Mandiri".</li>
+    <li>Banner amber di detail: "💰 Outstanding Selisih Bordir Rp X".</li>
+    <li>Admin konfirmasi bayar selisih → upload bukti → set <code>additional_paid_at</code>.</li>
+    <li>Section Review Bordir aktif → istri Setujui / Tolak.</li>
+  </ol>
+
+  <h3>Gate Tombol "Tandai Bordir Selesai" — 3 State</h3>
+  <table>
+    <thead><tr><th>Kondisi</th><th>Tampilan</th><th>Aksi Klik</th></tr></thead>
+    <tbody>
+      <tr><td>Selisih bordir outstanding</td><td>"💰 Bayar Selisih Dulu" amber</td><td>Scroll ke banner outstanding</td></tr>
+      <tr><td>Selisih lunas, bordir belum approved</td><td>"🔍 Review Bordir Dulu" amber</td><td>Scroll ke section Review Bordir</td></tr>
+      <tr><td>Approved + lunas</td><td>"🧵 Tandai Bordir Selesai" purple</td><td>Modal upload bukti normal</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5.8 Edit &amp; Split Pesanan</h2>
+  <h3>Edit Pesanan</h3>
+  <p>Tombol pensil di header modal detail order. Auto-hidden untuk staff non-admin atau order shipped/done/cancelled. Field editable: nama, HP, alamat, kota, kurir, berat, ongkir, metode bayar, sumber, billing_to (kondisional collab), notes.</p>
+  <p>Total otomatis ter-recompute kalau ongkir berubah (formula: <code>total_baru = total_lama - ongkir_lama + ongkir_baru</code>, deterministik, tidak re-derive dari items supaya anti-drift).</p>
+  <p><strong>Sengaja TIDAK editable:</strong> items &amp; diskon. Mengubah ini = risk drift sumber kebenaran. Kalau salah → cancel + recreate.</p>
+
+  <h3>Split Order</h3>
+  <p>Use case: event campur — sebagian customer ambil di booth, sebagian minta dikirim. Tombol "Pisah Pesanan" muncul kondisional (admin + status editable + ≥2 items).</p>
+  <ul>
+    <li>Original RETAINED (bukan cancel) — items subset di-move via UPDATE order_id.</li>
+    <li>Child = order baru dengan order_code baru, copy customer + payment context.</li>
+    <li>Diskon dibagi <strong>proporsional</strong> ke subtotal items. Rounding diserap original supaya sum tetap = diskon asli.</li>
+    <li>Bordir flags recompute per pihak. Embroidery details share ke kedua sisi tapi filter per item_label.</li>
+    <li>Audit notes append <code>[Dipisah dari/jadi #X]</code> di kedua sisi.</li>
+  </ul>
+
+  <h2>5.9 Pickup Auto-Skip</h2>
+  <p>Konstanta server: <code>PICKUP_COURIER = 'Diambil di event / walkin'</code>. Kalau kurir = pickup courier, sistem auto-skip step Kemas + Kirim:</p>
+  <ul>
+    <li>Confirm-payment + no bordir → status langsung <code>done</code>.</li>
+    <li>Confirm-payment + bordir → status <code>bordir</code> dulu (perlu proses bordir).</li>
+    <li>Bordir-done dgn pickup → langsung <code>done</code>.</li>
+    <li>Defensive: kalau order lama di status <code>confirmed</code> dgn pickup courier, tombol "Kemas Barang" diganti "Tandai Diambil &amp; Selesai" yang jump ke done.</li>
+  </ul>
+
+  <h2>5.10 Refund &amp; Cancel</h2>
+  <p>Hanya admin yang bisa cancel order. Behavior tergantung status pembayaran:</p>
+  <ul>
+    <li><strong>Pre-payment cancel:</strong> status → cancelled, tidak ada restore stok (belum keluar), tidak ada refund (uang belum masuk).</li>
+    <li><strong>Post-payment cancel:</strong> status → cancelled, stok di-restore (per item, kecuali custom yang tidak punya inventory), <strong>auto-create refund record</strong> dengan status pending. Admin follow up transfer manual lalu mark transferred dengan bukti.</li>
+    <li>Cancel max sampai <code>packed</code>. Order yang sudah <code>shipped</code> tidak bisa cancel (harus pakai flow exchange/refund post-receive).</li>
+  </ul>
+
+  <h2>5.11 Exchange (Tukar Size)</h2>
+  <p>Customer terima paket, ternyata size tidak pas. Flow:</p>
+  <ol>
+    <li>Customer hubungi admin via WA, kirim foto label.</li>
+    <li>Admin buat exchange di modul Pesanan: pilih item, size tujuan, alasan (<code>size_mismatch</code> / <code>defect</code>), shipping fee.</li>
+    <li>Exchange created dengan status pending. <strong>Custom items (custom_product / custom_size) tidak bisa tukar</strong> — opsi disabled + backend reject 400.</li>
+    <li>Approve → stok size baru di-reserve (<code>exchange_replacement_out</code>), customer kirim balik barang asli.</li>
+    <li>Admin terima balik → tandai <code>return_received</code> → stok size asli di-restore (<code>exchange_return_in</code>). Status → completed.</li>
+  </ol>
+
+  <h2>5.12 Menu Pre-Order</h2>
+  <p>Sidebar menu "Pre-Order" dengan badge counter. List semua line item yang masih menunggu (PO katalog + Custom Size + Custom Product), diurutkan FIFO (tertua dulu). Setiap row menampilkan:</p>
+  <ul>
+    <li>Badge type: 📦 PO KATALOG / ✂️ CUSTOM / ✨ CUSTOM PRODUCT.</li>
+    <li>Badge status bayar: LUNAS / BELUM BAYAR.</li>
+    <li>Stok varian saat ini (untuk PO katalog).</li>
+    <li>Umur hari (warning &gt;7 hari orange, &gt;14 hari red).</li>
+    <li>Tombol "Tandai Siap" (manual fulfill untuk custom; otomatis untuk PO katalog saat receive stok).</li>
+  </ul>
+
+  <h2>5.13 Modul Report</h2>
+  <p>3 tab analytics dengan filter tanggal (mobile-friendly stack vertikal dengan <code>-webkit-appearance:none</code> untuk fix iOS Safari date picker overflow):</p>
+  <ul>
+    <li><strong>Sales:</strong> grafik omzet harian + breakdown per metode bayar.</li>
+    <li><strong>Sales Type:</strong> breakdown per sumber order (website, whatsapp, event, offline, collab).</li>
+    <li><strong>Items:</strong> ranking produk berdasar qty terjual + total omzet. Custom items tidak masuk report ini by design (tidak ada di tabel products).</li>
+  </ul>
+  <p>Hanya paid + non-cancelled orders yg dihitung. Bonus items excluded dari omzet.</p>
+
+  <h2>5.14 Manajemen User</h2>
+  <p>Hanya admin yang bisa akses. CRUD user dengan role assignment + per-menu permission untuk role staff. Password di-hash bcrypt. PATCH user di-batasi: tidak boleh self-lockout (deactivate atau demote diri sendiri).</p>
+
+  <h2>5.15 Panduan In-App</h2>
+  <p>Menu "Bantuan" di sidebar, accessible untuk semua role. Berisi panduan tutorial per modul dengan tombol "Cetak / PDF" untuk dibawa offline. Tersedia juga sebagai file <code>PANDUAN-ADMIN.md</code> di repo.</p>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     6. WORKFLOW END-TO-END
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">6</span>Workflow End-to-End</h1>
+  <p class="tagline">Ilustrasi alur kerja lengkap dari momen order masuk sampai paket diterima customer, untuk skenario paling umum.</p>
+
+  <h2>6.1 Workflow: Customer Order via Website</h2>
+  <div class="flow">
+    <div class="step"><b>1. Customer browse</b> wearscrubs.id → pilih produk → pilih varian → tambah bordir nama "dr. Andi" baris-2 "Sp.PD" → klik "Tambah ke Keranjang".</div>
+    <div class="step"><b>2. Customer checkout:</b> isi data → pilih kota Jakarta → ongkir auto Rp 10.000 → pilih Transfer BCA → review → submit.</div>
+    <div class="step"><b>3. Backend</b> validate, hitung total, insert order + items dalam transaksi atomik. Generate order_code <code>WS-2026-0123</code>.</div>
+    <div class="step"><b>4. Customer dapat instruksi:</b> transfer BCA Rp X dalam 2×24 jam atau auto-cancel.</div>
+    <div class="step"><b>5. Admin notif WA</b> via Fonnte: "Order baru masuk WS-2026-0123 atas nama dr. Andi…".</div>
+    <div class="step"><b>6. Customer transfer</b> → kirim bukti via WA.</div>
+    <div class="step"><b>7. Admin login dashboard</b> → buka detail order → klik "Konfirmasi Pembayaran" → upload bukti. Stok di-deduct (atau status → <code>bordir</code> karena ada bordir).</div>
+    <div class="step"><b>8. Admin review bordir:</b> setujui detail nama "dr. Andi // Sp.PD", warna benang putih, posisi kanan dada.</div>
+    <div class="step"><b>9. Tukang bordir</b> kerjakan. Setelah selesai, admin klik "Tandai Bordir Selesai" → upload bukti foto bordir.</div>
+    <div class="step"><b>10. Admin klik "Kemas Barang"</b> → status packed.</div>
+    <div class="step"><b>11. Admin input resi</b> + tanggal kirim → status shipped. Tombol "Kirim Resi ke Customer" muncul → WA prefilled dengan resi.</div>
+    <div class="step"><b>12. Customer terima paket</b> → konfirm via WA → admin klik "Tandai Diterima" → status done. Audit log <code>order_photos.performed_by</code> tercatat siapa update tiap step.</div>
+  </div>
+
+  <h2>6.2 Workflow: Order via Kasir (WhatsApp Manual)</h2>
+  <p>Customer chat WA, admin input langsung di Kasir:</p>
+  <ol>
+    <li>Admin buka menu Kasir → isi data customer (nama, HP, alamat).</li>
+    <li>Pilih kota → ongkir otomatis. Berat sesuaikan.</li>
+    <li>Sumber: pilih "whatsapp".</li>
+    <li>Tambah item: pilih produk → cascade pilih varian → qty → toggle bordir kalau perlu.</li>
+    <li>Submit → backend insert. Result panel muncul dengan tombol "Kirim ke WA Customer" → WA prefilled dengan detail order + instruksi bayar.</li>
+    <li>Customer transfer → kirim bukti.</li>
+    <li>Lanjut workflow seperti website order dari step 7.</li>
+  </ol>
+
+  <h2>6.3 Workflow: Order Event Walk-In dengan Pickup</h2>
+  <p>Customer datang ke booth event, pilih barang, bayar Cash:</p>
+  <ol>
+    <li>Admin di booth buka Kasir → isi data customer (atau minimal nama+HP).</li>
+    <li>Sumber: <code>event_offline</code>, kurir: "Diambil di event / walkin" (PICKUP_COURIER).</li>
+    <li>Ongkir auto-locked Rp 0.</li>
+    <li>Tambah item → tidak ada bordir → metode bayar Cash → submit.</li>
+    <li>Result panel: "Pastikan Cash Cukup".</li>
+    <li>Klik "Konfirmasi Pembayaran" → <strong>status langsung <code>done</code></strong> (pickup auto-skip Kemas+Kirim). Barang langsung diserahkan.</li>
+  </ol>
+
+  <h2>6.4 Workflow: Custom Product</h2>
+  <p>Customer minta scrub khusus dengan spesifikasi unik (mis. Klinik X minta scrub dengan kombinasi warna custom):</p>
+  <ol>
+    <li>Admin Kasir → dropdown produk pilih "✨ Custom Product".</li>
+    <li>Panel 6 field muncul: nama produk ("Scrub Custom Klinik X"), kategori (Atasan), variant ("Lengan 3/4"), warna ("Tosca"), ukuran ("M"), harga (Rp 280.000).</li>
+    <li>Toggle bordir kalau perlu (gating berdasar kategori yg dipilih).</li>
+    <li>Submit → insert dengan <code>is_custom_product=true</code>, <code>product_id=NULL</code>, nama/kategori disimpan di kolom <code>custom_product_name</code> + <code>custom_product_category</code>.</li>
+    <li>Customer bayar → admin konfirm.</li>
+    <li>Order masuk menu Pre-Order dengan badge "✨ CUSTOM PRODUCT". Penjahit kerjakan.</li>
+    <li>Selesai → admin klik "Tandai Siap" → flow normal lanjut (Kemas, Kirim, Selesai).</li>
+  </ol>
+  <div class="box">
+    <strong>Catatan:</strong> custom product tidak punya inventory row, jadi tidak masuk Report Items by-product. Sales total tetap tercatat di Sales report.
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     7. KEAMANAN & PRIVASI
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">7</span>Keamanan &amp; Privasi</h1>
+  <p class="tagline">Multi-layer defense: autentikasi, otorisasi, anti-tamper, RLS database, escape policy XSS, storage privat.</p>
+
+  <h2>7.1 Autentikasi (JWT)</h2>
+  <ul>
+    <li>Password di-hash dengan <strong>bcryptjs</strong> (cost 10).</li>
+    <li>Login endpoint diparameterisasi penuh (tidak ada SQL injection), error message generik ("Username atau password salah") supaya tidak leak info user exists.</li>
+    <li><strong>Rate limit</strong> 5 attempts per 15 menit per IP via <code>loginLimiter</code>.</li>
+    <li>JWT secret di Railway env (<code>JWT_SECRET</code>, wajib di production, fatal kalau missing).</li>
+    <li>Token expiry 8 jam, disimpan di localStorage admin.</li>
+    <li><strong>Seed admin production</strong> wajib pakai env <code>ADMIN_INITIAL_PASSWORD</code> minimal 12 karakter.</li>
+  </ul>
+
+  <h2>7.2 Otorisasi (RBAC Per-Menu)</h2>
+  <ul>
+    <li>3 role: admin / manager / staff.</li>
+    <li><strong>requireMenu('menu','action')</strong> middleware di setiap endpoint memvalidasi token + permission.</li>
+    <li>Staff <code>allowed_menus</code> JSON memetakan menu → permission (view/edit). Per-menu granular.</li>
+    <li><strong>Cancel order</strong> dan <strong>refund</strong> requires <code>requireAuth(['admin'])</code> — admin only.</li>
+    <li>Staff bisa setujui bordir tapi tidak bisa tolak (tolak = cancel = admin only).</li>
+  </ul>
+
+  <h2>7.3 Anti-Tamper (Admin-Only Flags)</h2>
+  <p>Flag berikut di payload <code>POST /api/orders</code> di-gate behind <code>isAdmin</code>:</p>
+  <ul>
+    <li><code>is_bonus</code> — kalau true, produk gratis. Public caller mengirim ini diabaikan.</li>
+    <li><code>is_custom_size</code> — skip stok check, harga manual. Admin only.</li>
+    <li><code>is_custom_product</code> — full off-catalog, semua field manual. Admin only.</li>
+    <li><code>is_po</code> — pre-order, skip stok. Admin only.</li>
+    <li><code>discount_percent</code> — public dipaksa 0%, hanya admin yang bisa kirim 5% atau 30%.</li>
+    <li><code>order_source</code> — public dipaksa <code>website</code>, hanya admin yang bisa kirim whatsapp/event/offline/collab.</li>
+    <li><code>shipping_cost</code> — public di-recompute server-side dari kota+qty. Hanya admin yang trusted untuk set manual.</li>
+    <li><code>bordir_nama_price</code> / <code>bordir_logo_price</code> — public dipaksa 20rb/30rb default, hanya admin bisa override.</li>
+  </ul>
+
+  <h2>7.4 Row Level Security (Supabase)</h2>
+  <p>11 tabel publik di-ENABLE RLS tanpa policy. Role <code>postgres</code> yang dipakai backend punya <code>rolbypassrls=true</code>, jadi backend tetap jalan normal. Tapi anon key (yg dulu pernah ter-share di chat) ter-block:</p>
+  <ul>
+    <li>Read via anon → return <code>[]</code> (kosong).</li>
+    <li>INSERT via anon → error 42501 RLS violation.</li>
+  </ul>
+  <p>Sebelumnya terbukti bocor: anon key bisa baca tabel <code>products</code> &amp; <code>users</code> (username admin). Sekarang tertutup.</p>
+
+  <h2>7.5 Escape Policy (XSS Defense)</h2>
+  <p>CSP Helmet sengaja dimatikan untuk fleksibilitas styling — jadi escape data customer adalah pertahanan XSS utama. 3 helper escape digunakan konsisten:</p>
+  <ul>
+    <li><code>esc(str)</code> — body innerHTML (escape <code>&amp; &lt; &gt; " '</code>).</li>
+    <li><code>escAttr(str)</code> — atribut single-quote inline onclick.</li>
+    <li><code>escEx(str)</code> — modul Exchange (legacy).</li>
+  </ul>
+  <p>Setiap render data customer ke innerHTML WAJIB di-escape. Audit pass 8 Juni menutup 7 area yang sebelumnya un-escaped.</p>
+
+  <h2>7.6 Storage Privat (Signed URL)</h2>
+  <ul>
+    <li><strong>Bucket public <code>wearscrubs</code>:</strong> foto produk + logo brand. URL public OK.</li>
+    <li><strong>Bucket privat <code>wearscrubs-orders</code>:</strong> bukti pembayaran, bukti packing, bukti bordir, bukti refund. Akses hanya via signed URL dengan expiry 1 jam yang di-generate server saat admin login + buka detail order.</li>
+    <li>Endpoint <code>GET /api/orders/:id/photos</code> requires auth — sebelumnya anon bisa enumerasi bukti, sekarang tertutup.</li>
+  </ul>
+
+  <h2>7.7 CORS</h2>
+  <ul>
+    <li><code>ALLOWED_ORIGINS</code> env variable di Railway, bukan wildcard <code>*</code>.</li>
+    <li>Hanya domain wearscrubs.id + www + railway preview yg diizinkan.</li>
+  </ul>
+
+  <h2>7.8 Audit Trail</h2>
+  <p>Setiap mutasi penting tercatat:</p>
+  <ul>
+    <li><strong>Stock movements</strong> — semua mutasi stok ber-type + admin_user + timestamp.</li>
+    <li><strong>Order photos</strong> — setiap step (confirm-payment, bordir, pack, ship, refund, done) tercatat dengan <code>performed_by</code>. Step "done" pun bikin audit row meski foto NULL.</li>
+    <li><strong>Bordir status changes</strong> — <code>bordir_status</code> + <code>bordir_reject_reason</code>.</li>
+    <li><strong>Cancel</strong> — <code>cancelled_by</code> + <code>cancel_reason</code>.</li>
+  </ul>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     8. IMPLEMENTASI SEO
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">8</span>Implementasi SEO</h1>
+  <p class="tagline">SEO komplit untuk e-commerce bilingual: hreflang, JSON-LD, schema, sitemap, performance — semua sudah live.</p>
+
+  <h2>8.1 Foundation</h2>
+  <ul>
+    <li><strong>robots.txt</strong> di root, allow all + sitemap link.</li>
+    <li><strong>sitemap.xml</strong> dinamis dengan lastmod terkini, listing semua halaman ID+EN.</li>
+    <li><strong>OG/Twitter triplet</strong> — og:title / og:description / og:image di semua halaman.</li>
+    <li><strong>Title unik per halaman</strong> dengan format transaksional (Jual / Beli / Premium · Shop).</li>
+  </ul>
+
+  <h2>8.2 Hreflang &amp; Bilingual</h2>
+  <ul>
+    <li>Hreflang absolut (bukan relatif) di setiap halaman.</li>
+    <li><code>x-default</code> mengarah ke versi ID.</li>
+    <li>42 halaman sudah ter-cover.</li>
+    <li>Canonical homepage → root <code>/</code> (bukan <code>/index.html</code> supaya tidak split signal).</li>
+  </ul>
+
+  <h2>8.3 Schema (JSON-LD)</h2>
+  <table>
+    <thead><tr><th>Schema</th><th>Lokasi</th><th>Fungsi</th></tr></thead>
+    <tbody>
+      <tr><td>Organization + WebSite</td><td>Homepage (ID+EN)</td><td>Brand identity di Google Knowledge Graph.</td></tr>
+      <tr><td>Product (dinamis)</td><td>product.html</td><td>Rich snippet harga + availability. Offers/price/IDR/InStock. TANPA aggregateRating (anti-fabrikasi).</td></tr>
+      <tr><td>BreadcrumbList (dinamis)</td><td>product.html</td><td>Breadcrumb di SERP.</td></tr>
+      <tr><td>BreadcrumbList (statis)</td><td>8 halaman kategori</td><td>Same purpose, hard-coded per kategori.</td></tr>
+      <tr><td>FAQPage</td><td>FAQ.html, FAQ-en.html</td><td>Rich snippet expandable Q&amp;A di Google.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>8.4 Konten SEO</h2>
+  <ul>
+    <li><strong>Title transaksional</strong> — keyword + CTA + brand. Mis. "Jual Scrub Atasan Premium — Wearscrubs Shop".</li>
+    <li><strong>Meta description triplet</strong> — keyword + value prop + CTA, di homepage + 8 kategori, ID+EN.</li>
+    <li><strong>Exactly 1 H1 per halaman</strong> — multiple H1 lama di-demote jadi H2 (audit pass).</li>
+    <li><strong>FAQ konten asli</strong> — 8 Q&amp;A real (order/ukuran/bordir/bayar/kirim/lacak/tukar/kontak), sebelumnya stub kosong.</li>
+  </ul>
+
+  <h2>8.5 Performance</h2>
+  <ul>
+    <li><strong>Gambar lokal → WebP truecolor</strong> — 590 gambar, 527MB → 27MB (-95%). Semua 41 ref HTML diupdate.</li>
+    <li><strong>Tailwind CDN → CSS statis</strong> — compile ke <code>public/tw.css</code> (67KB min, ~12KB gz). 43 halaman publik pakai static link, eliminasi CDN render-blocking.</li>
+    <li><strong>Lazy loading</strong> + <code>decoding="async"</code> di semua &lt;img&gt;.</li>
+    <li><strong>Font dimuat smart</strong> — Inter weight 300-900 lewat &lt;link&gt; di style.css shared.</li>
+  </ul>
+
+  <div class="box good">
+    <strong>Audit skor SEO awal ~70/100.</strong> Setelah 3 batch fix (hreflang absolut, JSON-LD Product+Breadcrumb+FAQ, title transaksional + 1-H1 rule), foundation sudah komplit. Nice-to-have tersisa: og:image kartu 1200×630 berbranding, Google Business Profile (off-site).
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     9. INFRASTRUKTUR & OPERASI
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">9</span>Infrastruktur &amp; Operasi</h1>
+
+  <h2>9.1 Hosting</h2>
+  <table>
+    <thead><tr><th>Komponen</th><th>Layanan</th><th>Tier</th><th>Catatan</th></tr></thead>
+    <tbody>
+      <tr><td>Backend + Frontend</td><td>Railway</td><td>Hobby</td><td>Auto-deploy GitHub, ~512MB RAM cukup utk current load.</td></tr>
+      <tr><td>Database + Storage</td><td>Supabase</td><td>Free</td><td>500MB DB + 1GB Storage. Cukup untuk current scale; upgrade Pro untuk backup otomatis (recommended sebelum scale).</td></tr>
+      <tr><td>DNS + SSL</td><td>Cloudflare</td><td>Free</td><td>Apex + www + auto-SSL.</td></tr>
+      <tr><td>WA Notif</td><td>Fonnte</td><td>Paid</td><td>~50rb/bulan untuk notifikasi admin.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>9.2 Backup Strategy</h2>
+  <ul>
+    <li><strong>Backup manual</strong> via Supabase dashboard (download .sql/.csv) sebelum perubahan besar atau migrasi data.</li>
+    <li><strong>Backup tabel produk</strong> dilakukan sebelum CLEAN-DB 26 Mei: <code>backup_20260526_products</code>, <code>_product_variants</code>, <code>_inventory</code>. Masih di DB sebagai safety net, boleh di-DROP setelah dashboard diverifikasi.</li>
+    <li><strong>Upgrade Pro recommended</strong> untuk backup otomatis daily + point-in-time recovery.</li>
+  </ul>
+
+  <h2>9.3 Connection Pool</h2>
+  <ul>
+    <li>Backend pakai <strong>Supabase pooler port 6543</strong> (transaction mode) — bukan direct port 5432.</li>
+    <li><strong>JANGAN diubah</strong> ke direct port: pool 6543 mengelola koneksi efisien untuk concurrent admin.</li>
+  </ul>
+
+  <h2>9.4 Deploy Workflow</h2>
+  <pre><code># 1. Edit di repo utama
+code D:\ws\wearscrubs-backend\public\dashboard.html
+
+# 2. Commit + push
+git -C "D:/ws/wearscrubs-backend" add -A
+git -C "D:/ws/wearscrubs-backend" commit -m "feat: xyz"
+git -C "D:/ws/wearscrubs-backend" push origin main
+
+# 3. Railway auto-deploy terpicu webhook (~1-2 menit)
+# 4. Verifikasi di wearscrubs.id</code></pre>
+
+  <h2>9.5 Monitoring &amp; Logs</h2>
+  <ul>
+    <li><strong>Railway logs</strong> via dashboard Railway (real-time stdout/stderr).</li>
+    <li><strong>Supabase logs</strong> via dashboard Supabase (query log + error).</li>
+    <li><strong>Tidak ada APM</strong> (Datadog/Sentry) — overhead vs current scale belum justified.</li>
+  </ul>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     10. ROADMAP & PENDING ITEMS
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">10</span>Roadmap &amp; Pending Items</h1>
+
+  <h2>10.1 Pending Aktif (Tidak Blocking)</h2>
+  <table>
+    <thead><tr><th>Item</th><th>Status</th><th>Catatan</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Integrasi KiriminAja (ongkir presisi per-kecamatan)</td>
+        <td>Menunggu approval API</td>
+        <td>James sudah email <code>tech@kiriminaja.com</code>, menunggu staging key. Ongkir 5-zona interim LIVE sebagai jembatan. Tidak blok go-live.</td>
+      </tr>
+      <tr>
+        <td>Smoke-test upload bukti bayar (validasi signed URL bucket privat)</td>
+        <td>Recommended 1× test</td>
+        <td>Pastikan foto tampil setelah upload di detail order.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>10.2 Nice-to-Have (Opsional)</h2>
+  <ul>
+    <li>Rotate <code>JWT_SECRET</code> (pernah ter-share di chat dulu).</li>
+    <li>Upgrade Supabase Pro untuk backup otomatis daily + PITR.</li>
+    <li>Ganti hardcoded <code>WS_API</code> di frontend → same-origin (lebih portable kalau pindah domain).</li>
+    <li>DROP <code>backup_20260526_*</code> tables setelah dashboard final-verified.</li>
+    <li>Tambah Mandiri panel di Transfer Bank publik (sekarang hanya BCA shown).</li>
+    <li>OG image kartu 1200×630 ber-branding (sekarang pakai logo 250×55).</li>
+    <li>Google Business Profile (off-site SEO).</li>
+    <li>ItemList JSON-LD di halaman kategori (nice-to-have, low value).</li>
+  </ul>
+
+  <h2>10.3 Future Considerations</h2>
+  <ul>
+    <li><strong>Mobile app</strong> — current responsive web cukup untuk &lt;1000 order/bulan. App dipertimbangkan kalau scale &gt;5000 order/bulan.</li>
+    <li><strong>Multi-warehouse</strong> — kalau buka cabang fisik kedua, inventory perlu refactor jadi multi-location.</li>
+    <li><strong>Loyalty program</strong> — repeat customer reward (point/discount tier).</li>
+    <li><strong>Marketplace integration</strong> — auto-sync stok ke Tokopedia/Shopee (kalau dibutuhkan).</li>
+    <li><strong>Analytics dashboard lebih kaya</strong> — saat ini Report sudah cukup, tapi cohort retention + customer LTV bisa dibangun.</li>
+  </ul>
+
+  <h2>10.4 Decision Log Highlight</h2>
+  <p>Keputusan desain penting yang sudah di-lock (jangan di-debate ulang tanpa konteks ARK):</p>
+  <ul>
+    <li><strong>Tolak bordir = cancel total order.</strong> Tidak ada flow "lanjut tanpa bordir" di order yang sama. Customer perlu order baru.</li>
+    <li><strong>Custom product tidak bisa tukar size.</strong> Off-catalog, tidak ada stok untuk swap.</li>
+    <li><strong>Edit pesanan tidak include items &amp; diskon.</strong> Anti-drift sumber kebenaran.</li>
+    <li><strong>Window tukar size 3-hari TIDAK ditegakkan.</strong> Sengaja sebagai gimmick goodwill (keputusan owner).</li>
+    <li><strong>Bukti bayar tetap wajib upload.</strong> Bukti packing &amp; bordir-selesai OPSIONAL (hemat storage).</li>
+  </ul>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     11. GLOSSARIUM
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">11</span>Glossarium</h1>
+  <table>
+    <thead><tr><th>Istilah</th><th>Penjelasan</th></tr></thead>
+    <tbody>
+      <tr><td><strong>BRD</strong></td><td>Business Requirements Document — dokumen ini.</td></tr>
+      <tr><td><strong>RBAC</strong></td><td>Role-Based Access Control — sistem otorisasi berdasar peran.</td></tr>
+      <tr><td><strong>RLS</strong></td><td>Row-Level Security — fitur PostgreSQL/Supabase untuk membatasi akses per baris.</td></tr>
+      <tr><td><strong>JWT</strong></td><td>JSON Web Token — token autentikasi stateless.</td></tr>
+      <tr><td><strong>PO</strong></td><td>Pre-Order — pesanan dengan qty melebihi stok, dipenuhi saat barang datang.</td></tr>
+      <tr><td><strong>Custom Size</strong></td><td>Ukuran off-katalog (mis. 4XL) — pakai produk katalog tapi ukuran &amp; harga manual.</td></tr>
+      <tr><td><strong>Custom Product</strong></td><td>Produk full off-katalog — nama, kategori, varian, warna, ukuran, harga semua manual. <code>product_id=NULL</code>.</td></tr>
+      <tr><td><strong>Pickup Courier</strong></td><td>Kurir "Diambil di event / walkin" — auto-skip step Kemas &amp; Kirim.</td></tr>
+      <tr><td><strong>Collaboration Event</strong></td><td>Sumber order partner — pembeli bayar ke partner, kita tagih partner dgn consignment 30%.</td></tr>
+      <tr><td><strong>FIFO</strong></td><td>First-In First-Out — urutan pemenuhan PO (tertua dulu).</td></tr>
+      <tr><td><strong>FOR UPDATE</strong></td><td>SQL lock — mencegah race condition saat deduct stok concurrent.</td></tr>
+      <tr><td><strong>JSON-LD</strong></td><td>Linked Data dalam format JSON — schema markup untuk SEO.</td></tr>
+      <tr><td><strong>Hreflang</strong></td><td>Tag SEO untuk versi bahasa berbeda dari halaman yang sama.</td></tr>
+      <tr><td><strong>Signed URL</strong></td><td>URL dengan token expiry untuk akses file privat.</td></tr>
+      <tr><td><strong>Visual Gate</strong></td><td>Tombol disabled + label penjelas saat ada prasyarat belum dipenuhi.</td></tr>
+      <tr><td><strong>Atomic Transaction</strong></td><td>Operasi DB all-or-nothing — semua sukses atau semua di-rollback.</td></tr>
+      <tr><td><strong>XSS</strong></td><td>Cross-Site Scripting — serangan inject JS via data user. Dicegah dengan escape policy.</td></tr>
+      <tr><td><strong>CORS</strong></td><td>Cross-Origin Resource Sharing — kontrol domain mana yang boleh akses API.</td></tr>
+      <tr><td><strong>Pool 6543</strong></td><td>Supabase pgbouncer pool (transaction mode) — manage koneksi efisien.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="margin-top:12mm;">Akhir Dokumen</h2>
+  <p>BRD ini bersifat hidup — akan diupdate seiring evolusi platform. Versi terkini selalu tersedia di repo Wearscrubs di folder <code>docs/</code>.</p>
+  <p style="margin-top:6mm; font-size:10pt; color:#888;">© 2026 Wearscrubs · Dokumen internal. Disusun bersama ARK (Claude) — asisten teknis platform Wearscrubs.</p>
+</section>
+
+</body>
+</html>
