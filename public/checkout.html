@@ -299,10 +299,10 @@ const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 // City-level overrides (Jun 2026): Aceh 40rb, Lampung 15rb, Gorontalo 50rb.
 // Sinkron dgn cities.js CITY_RATES — UPDATE keduanya bersamaan kalau ada perubahan.
 const CITY_RATES = {
-  // Aceh
-  "Banda Aceh":40000,"Sabang":40000,"Langsa":40000,"Lhokseumawe":40000,"Subulussalam":40000,
-  "Aceh Besar":40000,"Aceh Barat":40000,"Aceh Selatan":40000,"Aceh Timur":40000,"Aceh Tengah":40000,
-  "Aceh Utara":40000,"Pidie":40000,"Bireuen":40000,"Simeulue":40000,"Gayo Lues":40000,"Nagan Raya":40000,
+  // Aceh (REVISI batch-3, 10 Jun)
+  "Banda Aceh":60000,"Sabang":75000,"Langsa":70000,"Lhokseumawe":70000,"Subulussalam":75000,
+  "Aceh Besar":85000,"Aceh Barat":88000,"Aceh Selatan":85000,"Aceh Timur":85000,"Aceh Tengah":85000,
+  "Aceh Utara":85000,"Pidie":85000,"Bireuen":85000,"Simeulue":95000,"Gayo Lues":85000,"Nagan Raya":85000,
   // Lampung
   "Bandar Lampung":15000,"Metro":15000,"Lampung Barat":15000,"Lampung Selatan":15000,"Lampung Tengah":15000,
   "Lampung Timur":15000,"Lampung Utara":15000,"Mesuji":15000,"Pesawaran":15000,"Pesisir Barat":15000,
@@ -336,6 +336,14 @@ const CITY_RATES = {
   "Probolinggo":25000,"Kabupaten Probolinggo":25000,
   "Lumajang":25000,"Jember":28000,"Bondowoso":28000,"Situbondo":28000,
   "Banyuwangi":28000,"Ponorogo":25000,"Pacitan":30000,
+  // Batch-3 (10 Jun): Bali + Sumatra Utara per-kota
+  "Denpasar":30000,"Badung":30000,"Gianyar":38000,"Tabanan":38000,
+  "Bangli":38000,"Klungkung":40000,"Karangasem":40000,"Buleleng":38000,"Jembrana":38000,
+  "Medan":30000,"Binjai":55000,"Pematangsiantar":55000,"Tebing Tinggi":58000,
+  "Tanjungbalai":62000,"Sibolga":60000,"Padangsidimpuan":60000,"Gunungsitoli":60000,
+  "Deli Serdang":60000,"Langkat":62000,"Karo":60000,"Simalungun":65000,
+  "Asahan":65000,"Labuhanbatu":65000,"Tapanuli Utara":65000,"Tapanuli Tengah":70000,
+  "Tapanuli Selatan":65000,"Nias":72000,
 };
 function rateForCityClient(name, zone) {
   return Object.prototype.hasOwnProperty.call(CITY_RATES, name) ? CITY_RATES[name] : (ZONE_RATES[zone] || 20000);

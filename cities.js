@@ -15,11 +15,11 @@ const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 // Dipakai DULU sebelum fallback ZONE_RATES — overlay tanpa harus tambah zona baru.
 // Pattern: kota yg tidak ada di sini → pakai zona-nya.
 const CITY_RATES = {
-  // Aceh (16 kota) — naik dari zona 4 (28rb) jadi 40rb/kg
-  "Banda Aceh": 40000, "Sabang": 40000, "Langsa": 40000, "Lhokseumawe": 40000,
-  "Subulussalam": 40000, "Aceh Besar": 40000, "Aceh Barat": 40000, "Aceh Selatan": 40000,
-  "Aceh Timur": 40000, "Aceh Tengah": 40000, "Aceh Utara": 40000, "Pidie": 40000,
-  "Bireuen": 40000, "Simeulue": 40000, "Gayo Lues": 40000, "Nagan Raya": 40000,
+  // Aceh (16 kota) — REVISI batch-3 (10 Jun) per-kota 60rb-95rb (sebelumnya flat 40rb)
+  "Banda Aceh": 60000, "Sabang": 75000, "Langsa": 70000, "Lhokseumawe": 70000,
+  "Subulussalam": 75000, "Aceh Besar": 85000, "Aceh Barat": 88000, "Aceh Selatan": 85000,
+  "Aceh Timur": 85000, "Aceh Tengah": 85000, "Aceh Utara": 85000, "Pidie": 85000,
+  "Bireuen": 85000, "Simeulue": 95000, "Gayo Lues": 85000, "Nagan Raya": 85000,
 
   // Lampung (14 kota) — TURUN dari zona 4 (28rb) jadi 15rb/kg
   "Bandar Lampung": 15000, "Metro": 15000, "Lampung Barat": 15000, "Lampung Selatan": 15000,
@@ -67,6 +67,19 @@ const CITY_RATES = {
   "Probolinggo": 25000, "Kabupaten Probolinggo": 25000,
   "Lumajang": 25000, "Jember": 28000, "Bondowoso": 28000, "Situbondo": 28000,
   "Banyuwangi": 28000, "Ponorogo": 25000, "Pacitan": 30000,
+
+  // ── BATCH-3 (10 Jun 2026) — Bali + Sumatra Utara ─────────────────────────
+  // Bali (9 kota) — sebelumnya zona 3 (20rb)
+  "Denpasar": 30000, "Badung": 30000, "Gianyar": 38000, "Tabanan": 38000,
+  "Bangli": 38000, "Klungkung": 40000, "Karangasem": 40000, "Buleleng": 38000,
+  "Jembrana": 38000,
+
+  // Sumatra Utara (18 kota) — sebelumnya zona 4 (28rb)
+  "Medan": 30000, "Binjai": 55000, "Pematangsiantar": 55000, "Tebing Tinggi": 58000,
+  "Tanjungbalai": 62000, "Sibolga": 60000, "Padangsidimpuan": 60000, "Gunungsitoli": 60000,
+  "Deli Serdang": 60000, "Langkat": 62000, "Karo": 60000, "Simalungun": 65000,
+  "Asahan": 65000, "Labuhanbatu": 65000, "Tapanuli Utara": 65000, "Tapanuli Tengah": 70000,
+  "Tapanuli Selatan": 65000, "Nias": 72000,
 };
 
 function rateForZone(zone) {
