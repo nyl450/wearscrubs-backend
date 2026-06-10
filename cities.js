@@ -32,22 +32,41 @@ const CITY_RATES = {
 
   // ── BATCH-1 OWNER REVISI (9 Jun 2026) ────────────────────────────────────
   // Jawa Barat (8 kota) — sebelumnya zona 2 (12rb)
-  "Ciamis": 16500, "Tasikmalaya": 14000, "Kuningan": 16500, "Majalengka": 16500,
+  "Ciamis": 16500, "Tasikmalaya": 14000, "Kabupaten Tasikmalaya": 14000,
+  "Kuningan": 16500, "Majalengka": 16500,
   "Sumedang": 15500, "Indramayu": 15000, "Pangandaran": 17500, "Banjar": 16500,
 
   // Jawa Tengah (29 kota) — sebelumnya zona 3 (20rb)
-  "Semarang": 17500, "Solo (Surakarta)": 17500, "Magelang": 18500,
+  "Semarang": 17500, "Kabupaten Semarang": 17500,
+  "Solo (Surakarta)": 17500, "Magelang": 18500, "Kabupaten Magelang": 18500,
   "Purwokerto (Banyumas)": 19500, "Cilacap": 16500, "Kebumen": 20500,
   "Purworejo": 20500, "Klaten": 20500, "Boyolali": 20500, "Sukoharjo": 16500,
   "Wonogiri": 20500, "Karanganyar": 23500, "Sragen": 20500, "Grobogan": 22500,
   "Blora": 23500, "Rembang": 23500, "Pati": 22500, "Kudus": 22500,
   "Jepara": 22500, "Demak": 22500, "Kendal": 22500, "Batang": 23500,
-  "Pekalongan": 21500, "Pemalang": 21500, "Tegal": 20000, "Brebes": 22000,
-  "Wonosobo": 22000, "Temanggung": 25000, "Salatiga": 22000,
+  "Pekalongan": 21500, "Kabupaten Pekalongan": 21500,
+  "Pemalang": 21500, "Tegal": 20000, "Kabupaten Tegal": 20000,
+  "Brebes": 22000, "Wonosobo": 22000, "Temanggung": 25000, "Salatiga": 22000,
 
   // DI Yogyakarta (5 kota) — sebelumnya zona 3 (20rb)
   "Yogyakarta": 18000, "Sleman": 18000, "Bantul": 18000,
   "Gunung Kidul": 25000, "Kulon Progo": 25000,
+
+  // ── BATCH-2 JAWA TIMUR (10 Jun 2026) — sebelumnya zona 3 (20rb) ──────────
+  "Surabaya": 20000, "Malang": 30000, "Kabupaten Malang": 30000, "Batu": 30000,
+  "Sidoarjo": 20000, "Gresik": 25000,
+  "Mojokerto": 28000, "Kabupaten Mojokerto": 28000, "Jombang": 28000,
+  "Kediri": 25000, "Kabupaten Kediri": 25000,
+  "Blitar": 25000, "Kabupaten Blitar": 25000,
+  "Tulungagung": 25000, "Trenggalek": 25000, "Nganjuk": 25000,
+  "Madiun": 22000, "Kabupaten Madiun": 22000,
+  "Magetan": 25000, "Ngawi": 25000, "Bojonegoro": 25000, "Tuban": 25000,
+  "Lamongan": 25000, "Bangkalan": 25000, "Sampang": 25000, "Pamekasan": 25000,
+  "Sumenep": 30000,
+  "Pasuruan": 25000, "Kabupaten Pasuruan": 25000,
+  "Probolinggo": 25000, "Kabupaten Probolinggo": 25000,
+  "Lumajang": 25000, "Jember": 28000, "Bondowoso": 28000, "Situbondo": 28000,
+  "Banyuwangi": 28000, "Ponorogo": 25000, "Pacitan": 30000,
 };
 
 function rateForZone(zone) {

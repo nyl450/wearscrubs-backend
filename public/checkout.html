@@ -299,23 +299,43 @@ const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 // City-level overrides (Jun 2026): Aceh 40rb, Lampung 15rb, Gorontalo 50rb.
 // Sinkron dgn cities.js CITY_RATES — UPDATE keduanya bersamaan kalau ada perubahan.
 const CITY_RATES = {
+  // Aceh
   "Banda Aceh":40000,"Sabang":40000,"Langsa":40000,"Lhokseumawe":40000,"Subulussalam":40000,
   "Aceh Besar":40000,"Aceh Barat":40000,"Aceh Selatan":40000,"Aceh Timur":40000,"Aceh Tengah":40000,
   "Aceh Utara":40000,"Pidie":40000,"Bireuen":40000,"Simeulue":40000,"Gayo Lues":40000,"Nagan Raya":40000,
+  // Lampung
   "Bandar Lampung":15000,"Metro":15000,"Lampung Barat":15000,"Lampung Selatan":15000,"Lampung Tengah":15000,
   "Lampung Timur":15000,"Lampung Utara":15000,"Mesuji":15000,"Pesawaran":15000,"Pesisir Barat":15000,
   "Pringsewu":15000,"Tanggamus":15000,"Tulang Bawang":15000,"Way Kanan":15000,
+  // Gorontalo
   "Gorontalo":50000,"Kabupaten Gorontalo":50000,"Pohuwato":50000,"Bone Bolango":50000,
   // Batch-1 (9 Jun): Jabar/Jateng/DIY per-kota
-  "Ciamis":16500,"Tasikmalaya":14000,"Kuningan":16500,"Majalengka":16500,
+  "Ciamis":16500,"Tasikmalaya":14000,"Kabupaten Tasikmalaya":14000,
+  "Kuningan":16500,"Majalengka":16500,
   "Sumedang":15500,"Indramayu":15000,"Pangandaran":17500,"Banjar":16500,
-  "Semarang":17500,"Solo (Surakarta)":17500,"Magelang":18500,"Purwokerto (Banyumas)":19500,
-  "Cilacap":16500,"Kebumen":20500,"Purworejo":20500,"Klaten":20500,"Boyolali":20500,
-  "Sukoharjo":16500,"Wonogiri":20500,"Karanganyar":23500,"Sragen":20500,"Grobogan":22500,
-  "Blora":23500,"Rembang":23500,"Pati":22500,"Kudus":22500,"Jepara":22500,"Demak":22500,
-  "Kendal":22500,"Batang":23500,"Pekalongan":21500,"Pemalang":21500,"Tegal":20000,
+  "Semarang":17500,"Kabupaten Semarang":17500,
+  "Solo (Surakarta)":17500,"Magelang":18500,"Kabupaten Magelang":18500,
+  "Purwokerto (Banyumas)":19500,"Cilacap":16500,"Kebumen":20500,"Purworejo":20500,
+  "Klaten":20500,"Boyolali":20500,"Sukoharjo":16500,"Wonogiri":20500,"Karanganyar":23500,
+  "Sragen":20500,"Grobogan":22500,"Blora":23500,"Rembang":23500,"Pati":22500,
+  "Kudus":22500,"Jepara":22500,"Demak":22500,"Kendal":22500,"Batang":23500,
+  "Pekalongan":21500,"Kabupaten Pekalongan":21500,
+  "Pemalang":21500,"Tegal":20000,"Kabupaten Tegal":20000,
   "Brebes":22000,"Wonosobo":22000,"Temanggung":25000,"Salatiga":22000,
   "Yogyakarta":18000,"Sleman":18000,"Bantul":18000,"Gunung Kidul":25000,"Kulon Progo":25000,
+  // Batch-2 (10 Jun): Jawa Timur per-kota
+  "Surabaya":20000,"Malang":30000,"Kabupaten Malang":30000,"Batu":30000,
+  "Sidoarjo":20000,"Gresik":25000,
+  "Mojokerto":28000,"Kabupaten Mojokerto":28000,"Jombang":28000,
+  "Kediri":25000,"Kabupaten Kediri":25000,"Blitar":25000,"Kabupaten Blitar":25000,
+  "Tulungagung":25000,"Trenggalek":25000,"Nganjuk":25000,
+  "Madiun":22000,"Kabupaten Madiun":22000,
+  "Magetan":25000,"Ngawi":25000,"Bojonegoro":25000,"Tuban":25000,
+  "Lamongan":25000,"Bangkalan":25000,"Sampang":25000,"Pamekasan":25000,"Sumenep":30000,
+  "Pasuruan":25000,"Kabupaten Pasuruan":25000,
+  "Probolinggo":25000,"Kabupaten Probolinggo":25000,
+  "Lumajang":25000,"Jember":28000,"Bondowoso":28000,"Situbondo":28000,
+  "Banyuwangi":28000,"Ponorogo":25000,"Pacitan":30000,
 };
 function rateForCityClient(name, zone) {
   return Object.prototype.hasOwnProperty.call(CITY_RATES, name) ? CITY_RATES[name] : (ZONE_RATES[zone] || 20000);
