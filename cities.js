@@ -15,7 +15,7 @@ const ZONE_RATES = { 1: 10000, 2: 12000, 3: 20000, 4: 28000, 5: 31000 };
 // Dipakai DULU sebelum fallback ZONE_RATES — overlay tanpa harus tambah zona baru.
 // Pattern: kota yg tidak ada di sini → pakai zona-nya.
 const CITY_RATES = {
-  // Aceh (17 kota) — naik dari zona 4 (28rb) jadi 40rb/kg
+  // Aceh (16 kota) — naik dari zona 4 (28rb) jadi 40rb/kg
   "Banda Aceh": 40000, "Sabang": 40000, "Langsa": 40000, "Lhokseumawe": 40000,
   "Subulussalam": 40000, "Aceh Besar": 40000, "Aceh Barat": 40000, "Aceh Selatan": 40000,
   "Aceh Timur": 40000, "Aceh Tengah": 40000, "Aceh Utara": 40000, "Pidie": 40000,
@@ -29,6 +29,25 @@ const CITY_RATES = {
 
   // Gorontalo (4 kota) — naik dari zona 5 (31rb) jadi 50rb/kg
   "Gorontalo": 50000, "Kabupaten Gorontalo": 50000, "Pohuwato": 50000, "Bone Bolango": 50000,
+
+  // ── BATCH-1 OWNER REVISI (9 Jun 2026) ────────────────────────────────────
+  // Jawa Barat (8 kota) — sebelumnya zona 2 (12rb)
+  "Ciamis": 16500, "Tasikmalaya": 14000, "Kuningan": 16500, "Majalengka": 16500,
+  "Sumedang": 15500, "Indramayu": 15000, "Pangandaran": 17500, "Banjar": 16500,
+
+  // Jawa Tengah (29 kota) — sebelumnya zona 3 (20rb)
+  "Semarang": 17500, "Solo (Surakarta)": 17500, "Magelang": 18500,
+  "Purwokerto (Banyumas)": 19500, "Cilacap": 16500, "Kebumen": 20500,
+  "Purworejo": 20500, "Klaten": 20500, "Boyolali": 20500, "Sukoharjo": 16500,
+  "Wonogiri": 20500, "Karanganyar": 23500, "Sragen": 20500, "Grobogan": 22500,
+  "Blora": 23500, "Rembang": 23500, "Pati": 22500, "Kudus": 22500,
+  "Jepara": 22500, "Demak": 22500, "Kendal": 22500, "Batang": 23500,
+  "Pekalongan": 21500, "Pemalang": 21500, "Tegal": 20000, "Brebes": 22000,
+  "Wonosobo": 22000, "Temanggung": 25000, "Salatiga": 22000,
+
+  // DI Yogyakarta (5 kota) — sebelumnya zona 3 (20rb)
+  "Yogyakarta": 18000, "Sleman": 18000, "Bantul": 18000,
+  "Gunung Kidul": 25000, "Kulon Progo": 25000,
 };
 
 function rateForZone(zone) {

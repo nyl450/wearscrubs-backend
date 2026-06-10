@@ -309,6 +309,16 @@ const CITY_RATES = {
   "Lampung Timur":15000,"Lampung Utara":15000,"Mesuji":15000,"Pesawaran":15000,"Pesisir Barat":15000,
   "Pringsewu":15000,"Tanggamus":15000,"Tulang Bawang":15000,"Way Kanan":15000,
   "Gorontalo":50000,"Kabupaten Gorontalo":50000,"Pohuwato":50000,"Bone Bolango":50000,
+  // Batch-1 (9 Jun): Jabar/Jateng/DIY per-kota
+  "Ciamis":16500,"Tasikmalaya":14000,"Kuningan":16500,"Majalengka":16500,
+  "Sumedang":15500,"Indramayu":15000,"Pangandaran":17500,"Banjar":16500,
+  "Semarang":17500,"Solo (Surakarta)":17500,"Magelang":18500,"Purwokerto (Banyumas)":19500,
+  "Cilacap":16500,"Kebumen":20500,"Purworejo":20500,"Klaten":20500,"Boyolali":20500,
+  "Sukoharjo":16500,"Wonogiri":20500,"Karanganyar":23500,"Sragen":20500,"Grobogan":22500,
+  "Blora":23500,"Rembang":23500,"Pati":22500,"Kudus":22500,"Jepara":22500,"Demak":22500,
+  "Kendal":22500,"Batang":23500,"Pekalongan":21500,"Pemalang":21500,"Tegal":20000,
+  "Brebes":22000,"Wonosobo":22000,"Temanggung":25000,"Salatiga":22000,
+  "Yogyakarta":18000,"Sleman":18000,"Bantul":18000,"Gunung Kidul":25000,"Kulon Progo":25000,
 };
 function rateForCityClient(name, zone) {
   return Object.prototype.hasOwnProperty.call(CITY_RATES, name) ? CITY_RATES[name] : (ZONE_RATES[zone] || 20000);
