@@ -8630,9 +8630,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     // Consolidated bordir rows — max 2 lines regardless of how many items have bordir
     let bordirLineRowsHTML = '';
     if (totalBordirNamaQty > 0)
-        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Nama</td><td>${fmtRp(Math.round(totalBordirNamaCost / totalBordirNamaQty))}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(totalBordirNamaCost)}</td></tr>`;
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Nama</td><td>${fmtRp(Math.round(totalBordirNamaCost / totalBordirNamaQty))}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(totalBordirNamaCost)}</td></tr>`;
     if (totalBordirLogoQty > 0)
-        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Jasa Bordir Logo</td><td>${fmtRp(Math.round(totalBordirLogoCost / totalBordirLogoQty))}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(totalBordirLogoCost)}</td></tr>`;
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Logo</td><td>${fmtRp(Math.round(totalBordirLogoCost / totalBordirLogoQty))}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(totalBordirLogoCost)}</td></tr>`;
     const shippingCost = order.shipping_cost || 0;
     const courier = order.shipping_courier || 'Kurir';
     const shippingCity = order.shipping_city || '';
