@@ -24,7 +24,7 @@ const CITY_RATES = {
   // Lampung (14 kota) — REVISI batch-3 (10 Jun) per-kota
   // Lampung Tengah BELUM user revisi → tetap 15rb dari batch awal
   "Bandar Lampung": 15000, "Metro": 38000, "Lampung Barat": 35000, "Lampung Selatan": 35000,
-  "Lampung Tengah": 15000, "Lampung Timur": 35000, "Lampung Utara": 35000, "Mesuji": 35000,
+  "Lampung Tengah": 35000, "Lampung Timur": 35000, "Lampung Utara": 35000, "Mesuji": 35000,
   "Pesawaran": 25000, "Pesisir Barat": 35000, "Pringsewu": 35000, "Tanggamus": 35000,
   "Tulang Bawang": 35000, "Way Kanan": 35000,
 
@@ -106,9 +106,9 @@ const CITY_RATES = {
   "Bengkulu": 35000, "Rejang Lebong": 45000, "Bengkulu Selatan": 45000, "Bengkulu Utara": 45000,
   "Kepahiang": 40000, "Lebong": 42000, "Mukomuko": 42000, "Seluma": 42000, "Kaur": 40000,
 
-  // Bangka Belitung (6 kota — Bangka Tengah BELUM user revisi, tetap zona 4 28rb)
+  // Bangka Belitung (7 kota)
   "Pangkalpinang": 25000, "Bangka": 45000, "Belitung": 42000, "Bangka Barat": 42000,
-  "Bangka Selatan": 50000, "Belitung Timur": 40000,
+  "Bangka Tengah": 42000, "Bangka Selatan": 50000, "Belitung Timur": 40000,
 
   // Sumatra Selatan (12 kota) — sebelumnya zona 4 (28rb)
   "Palembang": 15000, "Prabumulih": 25000, "Pagar Alam": 25000, "Lubuklinggau": 30000,
