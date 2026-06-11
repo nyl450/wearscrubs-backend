@@ -21,11 +21,12 @@ const CITY_RATES = {
   "Aceh Timur": 85000, "Aceh Tengah": 85000, "Aceh Utara": 85000, "Pidie": 85000,
   "Bireuen": 85000, "Simeulue": 95000, "Gayo Lues": 85000, "Nagan Raya": 85000,
 
-  // Lampung (14 kota) — TURUN dari zona 4 (28rb) jadi 15rb/kg
-  "Bandar Lampung": 15000, "Metro": 15000, "Lampung Barat": 15000, "Lampung Selatan": 15000,
-  "Lampung Tengah": 15000, "Lampung Timur": 15000, "Lampung Utara": 15000, "Mesuji": 15000,
-  "Pesawaran": 15000, "Pesisir Barat": 15000, "Pringsewu": 15000, "Tanggamus": 15000,
-  "Tulang Bawang": 15000, "Way Kanan": 15000,
+  // Lampung (14 kota) — REVISI batch-3 (10 Jun) per-kota
+  // Lampung Tengah BELUM user revisi → tetap 15rb dari batch awal
+  "Bandar Lampung": 15000, "Metro": 38000, "Lampung Barat": 35000, "Lampung Selatan": 35000,
+  "Lampung Tengah": 15000, "Lampung Timur": 35000, "Lampung Utara": 35000, "Mesuji": 35000,
+  "Pesawaran": 25000, "Pesisir Barat": 35000, "Pringsewu": 35000, "Tanggamus": 35000,
+  "Tulang Bawang": 35000, "Way Kanan": 35000,
 
   // Gorontalo (4 kota) — naik dari zona 5 (31rb) jadi 50rb/kg
   "Gorontalo": 50000, "Kabupaten Gorontalo": 50000, "Pohuwato": 50000, "Bone Bolango": 50000,
@@ -80,6 +81,39 @@ const CITY_RATES = {
   "Deli Serdang": 60000, "Langkat": 62000, "Karo": 60000, "Simalungun": 65000,
   "Asahan": 65000, "Labuhanbatu": 65000, "Tapanuli Utara": 65000, "Tapanuli Tengah": 70000,
   "Tapanuli Selatan": 65000, "Nias": 72000,
+
+  // ── BATCH-3 lanjutan (10 Jun) — Sumatra lainnya ──────────────────────────
+  // Jambi (11 kota) — sebelumnya zona 4 (28rb)
+  "Jambi": 30000, "Sungai Penuh": 40000, "Batanghari": 40000, "Bungo": 40000,
+  "Kerinci": 40000, "Merangin": 40000, "Muaro Jambi": 40000, "Sarolangun": 40000,
+  "Tanjung Jabung Barat": 40000, "Tanjung Jabung Timur": 40000, "Tebo": 40000,
+
+  // Kepulauan Riau (7 kota) — sebelumnya zona 4 (28rb)
+  "Batam": 30000, "Tanjungpinang": 45000, "Bintan": 70000, "Karimun": 60000,
+  "Natuna": 60000, "Lingga": 60000, "Kepulauan Anambas": 65000,
+
+  // Riau (12 kota) — sebelumnya zona 4 (28rb)
+  "Pekanbaru": 30000, "Dumai": 35000, "Kampar": 40000, "Bengkalis": 40000,
+  "Siak": 40000, "Rokan Hulu": 40000, "Rokan Hilir": 40000, "Indragiri Hulu": 40000,
+  "Indragiri Hilir": 40000, "Kepulauan Meranti": 40000, "Pelalawan": 40000, "Kuantan Singingi": 40000,
+
+  // Sumatra Barat (11 kota) — sebelumnya zona 4 (28rb)
+  "Padang": 35000, "Bukittinggi": 45000, "Payakumbuh": 50000, "Pariaman": 45000,
+  "Solok": 45000, "Sawahlunto": 50000, "Padang Panjang": 50000, "Agam": 50000,
+  "Pesisir Selatan": 50000, "Tanah Datar": 50000, "Mentawai": 55000,
+
+  // Bengkulu (9 kota) — sebelumnya zona 4 (28rb)
+  "Bengkulu": 35000, "Rejang Lebong": 45000, "Bengkulu Selatan": 45000, "Bengkulu Utara": 45000,
+  "Kepahiang": 40000, "Lebong": 42000, "Mukomuko": 42000, "Seluma": 42000, "Kaur": 40000,
+
+  // Bangka Belitung (6 kota — Bangka Tengah BELUM user revisi, tetap zona 4 28rb)
+  "Pangkalpinang": 25000, "Bangka": 45000, "Belitung": 42000, "Bangka Barat": 42000,
+  "Bangka Selatan": 50000, "Belitung Timur": 40000,
+
+  // Sumatra Selatan (12 kota) — sebelumnya zona 4 (28rb)
+  "Palembang": 15000, "Prabumulih": 25000, "Pagar Alam": 25000, "Lubuklinggau": 30000,
+  "Banyuasin": 45000, "Lahat": 30000, "Muara Enim": 25000, "Musi Banyuasin": 30000,
+  "Musi Rawas": 35000, "Ogan Komering Ilir": 30000, "Ogan Komering Ulu": 28000, "Empat Lawang": 30000,
 };
 
 function rateForZone(zone) {
