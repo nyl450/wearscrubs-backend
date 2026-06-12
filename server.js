@@ -2560,6 +2560,17 @@ app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.sing
         // Outstanding selisih bordir tambahan harus lunas dulu.
         if (Number(order.additional_amount_due || 0) > 0 && !order.additional_paid_at)
             return res.status(409).json({ error: 'Selisih bordir tambahan belum lunas. Konfirmasi bayar dulu.' });
+        // PO katalog unfulfilled guard: bordir fisik tidak bisa dimulai/selesai kalau
+        // barang fisik belum lengkap. PO katalog otomatis fulfilled saat receive stok
+        // (FIFO, paid-only). Custom_size/custom_product di-fulfill manual via fulfill-po
+        // — di sini tidak di-block karena custom dijahit dari nol (terpisah dari proses
+        // bordir katalog), jadi bisa parallel.
+        const pendingCatPO = await dbGet(
+            'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND is_po = TRUE AND po_fulfilled = FALSE',
+            [order.id]
+        );
+        if (pendingCatPO && pendingCatPO.n > 0)
+            return res.status(409).json({ error: 'Ada item Pre-Order menunggu stok masuk — bordir baru bisa selesai setelah barang ready. Tunggu receive stok katalog.' });
 
         // Photo OPTIONAL (storage saving): admin confirms via checklist. The step record
         // (who + when + note) is still logged for audit — only the image is skipped.

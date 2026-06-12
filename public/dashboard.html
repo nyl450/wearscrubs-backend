@@ -286,6 +286,20 @@
     /* ── WA Order Form — motion polish (Emil) ───────────────────────────────
        Admin-facing, used many times/day → subtle + fast. Transform/opacity only. */
 
+    /* Flash highlight: dipakai oleh scrollToModalAnchor() utk visual feedback
+       saat tombol gate (Review Bordir Dulu, Bayar Selisih, Tandai Custom Siap)
+       scroll modal content ke section target. Ring + bg pulse 1.5s. */
+    @keyframes flashHighlightPulse {
+        0%   { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.55); background-color: rgba(56, 189, 248, 0.10); }
+        50%  { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0.18); background-color: rgba(56, 189, 248, 0.05); }
+        100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); background-color: transparent; }
+    }
+    .flash-highlight {
+        animation: flashHighlightPulse 1.5s ease-out;
+        border-radius: 12px;
+        scroll-margin-top: 60px;
+    }
+
     /* New product item — soft rise on insert (no hard pop) */
     @keyframes waItemIn { from { opacity: 0; transform: translateY(10px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
     @keyframes waItemOut { to { opacity: 0; transform: translateY(-6px) scale(0.98); } }
@@ -738,12 +752,14 @@
                 </div>
             </div>
         </div>
-        <!-- Primary group tabs (always visible, mobile-friendly) -->
+        <!-- Primary group tabs (always visible, mobile-friendly).
+             Default landing = action_needed (yg paling urgent buat admin).
+             Urutan: Perlu Aksi > Proses > Arsip > Semua (escape hatch paling belakang). -->
         <div class="flex gap-2 overflow-x-auto pb-1 -mb-1" style="-webkit-overflow-scrolling:touch; scrollbar-width:none;">
-            <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">Semua <span id="order-count-all" class="ml-1 text-[9px] font-bold opacity-50">0</span></button>
-            <button onclick="filterOrders('action_needed')" data-tab="action_needed" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🔴 Perlu Aksi <span id="order-count-action_needed" class="hidden ml-1 bg-red-400/20 text-red-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterOrders('action_needed')" data-tab="action_needed" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">🔴 Perlu Aksi <span id="order-count-action_needed" class="hidden ml-1 bg-red-400/20 text-red-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
             <button onclick="filterOrders('in_progress')" data-tab="in_progress" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🟡 Proses <span id="order-count-in_progress" class="hidden ml-1 bg-yellow-400/20 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
             <button onclick="filterOrders('archive')" data-tab="archive" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✓ Arsip <span id="order-count-archive" class="hidden ml-1 bg-white/10 text-white/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">Semua <span id="order-count-all" class="ml-1 text-[9px] font-bold opacity-50">0</span></button>
         </div>
         <!-- Secondary detail tabs (contextual to selected group) -->
         <div id="order-subtabs" class="hidden flex-wrap gap-1.5">
@@ -2292,7 +2308,10 @@ const ALL_MOTIFS = [
 // ORDER_STATUS_MAP removed — gunakan statusBadge() di bawah
 
 let allProducts = [], popularSelected = new Set();
-let currentOrderFilter = 'all', currentProductFilter = 'all';
+// Default landing = action_needed (yg paling urgent buat admin: belum bayar,
+// minta logo, bordir pending review). User redesign — Semua jadi escape hatch
+// di paling belakang tab list.
+let currentOrderFilter = 'action_needed', currentProductFilter = 'all';
 let mainChart = null, statsData = null;
 
 function toast(msg, isErr = false) {
@@ -4323,7 +4342,14 @@ let currentDateFilter = 'all';   // all | today | yesterday | week | month | las
 let orderPage = 1;
 const ORDER_PAGE_SIZE = 50;
 async function loadOrders() {
-    try { cachedOrders = await apiFetch('/api/orders'); updateOrderTabCounts(); renderOrders(); }
+    try {
+        cachedOrders = await apiFetch('/api/orders');
+        updateOrderTabCounts();
+        // Render subtabs untuk default filter (action_needed) — sebelumnya cuma
+        // dipanggil saat user klik tab manual, jadi initial load subtab kosong.
+        renderOrderSubtabs();
+        renderOrders();
+    }
     catch(e) { toast('Gagal: '+e.message, true); }
 }
 
@@ -4404,11 +4430,19 @@ const ORDER_PREDS = {
     shipped:   o => o.order_status === 'shipped',
     done:      o => o.order_status === 'done',
     cancelled: o => o.order_status === 'cancelled',
+    // Sub-predicates utk Perlu Aksi
+    minta_logo:    o => o.has_bordir_logo && !o.bordir_logo_requested && o.payment_status === 'paid' && o.order_status !== 'cancelled',
+    review_bordir: o => o.payment_status === 'paid' && (o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status === 'pending' && o.order_status !== 'cancelled',
+    // Sub-predicates utk Proses (PO/Custom unfulfilled)
+    tunggu_po: o =>
+        o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
+        (o.items || []).some(i => i.is_po && !i.po_fulfilled),
+    tunggu_custom: o =>
+        o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
+        (o.items || []).some(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled),
     // Group predicates
     action_needed: o =>
-        (o.payment_status === 'pending' && o.order_status !== 'cancelled') ||      // belum bayar
-        (o.has_bordir_logo && !o.bordir_logo_requested && o.payment_status === 'paid') ||  // perlu minta logo
-        (o.payment_status === 'paid' && (o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status === 'pending'),  // bordir perlu review
+        ORDER_PREDS.pending(o) || ORDER_PREDS.minta_logo(o) || ORDER_PREDS.review_bordir(o),
     in_progress: o =>
         o.payment_status === 'paid' && ['confirmed','bordir','packed','shipped'].includes(o.order_status),
     archive: o => o.order_status === 'done' || o.order_status === 'cancelled',
@@ -4417,12 +4451,16 @@ const ORDER_PREDS = {
 // Sub-tab definitions per group
 const SUBTABS = {
     action_needed: [
-        { key: 'pending', label: '⏳ Belum Bayar', color: 'yellow' },
+        { key: 'pending',       label: '⏳ Belum Bayar',  color: 'yellow' },
+        { key: 'minta_logo',    label: '🎨 Minta Logo',   color: 'orange' },
+        { key: 'review_bordir', label: '🔍 Review Bordir', color: 'amber' },
     ],
     in_progress: [
-        { key: 'bordir',  label: '🧵 Bordir',  color: 'purple' },
-        { key: 'packed',  label: '📦 Dikemas', color: 'teal' },
-        { key: 'shipped', label: '🚚 Dikirim', color: 'indigo' },
+        { key: 'tunggu_po',     label: '⏳ Tunggu PO',     color: 'orange' },
+        { key: 'tunggu_custom', label: '✂️ Tunggu Custom', color: 'sky' },
+        { key: 'bordir',        label: '🧵 Bordir',        color: 'purple' },
+        { key: 'packed',        label: '📦 Dikemas',       color: 'teal' },
+        { key: 'shipped',       label: '🚚 Dikirim',       color: 'indigo' },
     ],
     archive: [
         { key: 'done',      label: '✔ Selesai',     color: 'green' },
@@ -4594,11 +4632,16 @@ function renderOrders() {
                         : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>`
                 ) : ''}
                 ${o.order_status==='bordir' ? (() => {
-                    // Gate "Tandai Bordir Selesai": cuma boleh kalau bordir approved + selisih
+                    // Gate "Tandai Bordir Selesai": butuh PO siap + bordir approved + selisih
                     // (kalau ada) sudah lunas. Backend juga reject 409 — ini polish UX biar
-                    // admin nggak salah klik & dapat error. Klik = buka detail (action sesuai).
+                    // admin nggak salah klik. Priority: PO > selisih > review > selesai
+                    // (PO paling atas karena bordir fisik tidak bisa dimulai kalau barang
+                    // belum lengkap).
+                    const items = o.items || [];
+                    const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
                     const hasOutstanding = Number(o.additional_amount_due || 0) > 0 && !o.additional_paid_at;
                     const notApproved = o.bordir_status !== 'approved';
+                    if (poUnfulfilled > 0) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Pre-Order menunggu stok masuk — bordir mulai setelah barang ready" class="text-xs px-3 py-1.5 rounded-lg bg-orange-500/15 border border-orange-400/30 text-orange-300 font-bold">⏳ Menunggu Stok PO</button>`;
                     if (hasOutstanding) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Selisih bordir tambahan belum lunas — konfirmasi bayar dulu" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">💰 Bayar Selisih Dulu</button>`;
                     if (notApproved) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Review bordir dulu (Setujui/Tolak) sebelum tandai selesai" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">🔍 Review Bordir Dulu</button>`;
                     return `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Tandai Bordir Selesai</button>`;
@@ -5408,9 +5451,15 @@ async function viewOrder(id) {
                     : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-circle"></i> Konfirmasi Bayar</button>`
             ) : ''}
             ${o.order_status==='bordir' ? (() => {
+                const items = o.items || [];
+                const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
                 const hasOutstanding = Number(o.additional_amount_due || 0) > 0 && !o.additional_paid_at;
                 const notApproved = o.bordir_status !== 'approved';
-                // Outstanding selisih → scroll ke banner (di info section). Belum approved → scroll ke section review.
+                // Priority: PO > selisih > review > selesai (bordir fisik tidak bisa
+                // dimulai sebelum barang ready). PO unfulfilled → tombol info-only
+                // (admin tunggu receive stok katalog). Selisih → scroll banner.
+                // Belum approved → scroll review section.
+                if (poUnfulfilled > 0) return `<button title="Pre-Order menunggu stok masuk — otomatis fulfilled saat receive stok. Bordir dimulai setelah barang ready." class="text-xs px-4 py-2 rounded-xl bg-orange-500/15 border border-orange-400/30 text-orange-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-hourglass-half"></i> Menunggu Stok PO (${poUnfulfilled})</button>`;
                 if (hasOutstanding) return `<button onclick="scrollToAdditionalPayment()" title="Selisih bordir tambahan belum lunas" class="text-xs px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-money-bill-wave"></i> Bayar Selisih Dulu</button>`;
                 if (notApproved) return `<button onclick="scrollToBordirReview()" title="Review bordir dulu (Setujui/Tolak)" class="text-xs px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Review Bordir Dulu</button>`;
                 return `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Tandai Bordir Selesai</button>`;
@@ -5560,21 +5609,25 @@ async function markLogoRequested(orderId) {
 //    panggil + tambah audit `set_bordir_status='rejected'` untuk trail jelas.
 // Scroll modal detail ke section Review Bordir (target tombol "Review Bordir Dulu"
 // di gate Konfirmasi Bayar — admin auto dibawa ke tempat klik Setujui/Tolak).
-function scrollToBordirReview() {
-    const anchor = document.querySelector('#order-modal #bordir-review-anchor');
-    if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+// Robust scroll: target anchor inside modal-content (scroll container internal,
+// bukan window). scrollIntoView dengan smooth kadang gagal di nested modal di
+// Safari/Chrome — pakai offsetTop calc lebih reliable. Plus flash highlight 1.5s
+// supaya admin lihat visual feedback section mana yg jadi target.
+function scrollToModalAnchor(anchorId, opts = {}) {
+    const modal = document.getElementById('order-modal-content');
+    const anchor = document.getElementById(anchorId);
+    if (!modal || !anchor) return;
+    // Calculate scroll target relative to modal scroll container.
+    const offsetTop = anchor.offsetTop - (opts.padding || 60);
+    modal.scrollTo({ top: Math.max(0, offsetTop), behavior: 'smooth' });
+    // Flash highlight: ring + bg pulse 1.5s sebagai visual cue.
+    const flashClass = opts.flashClass || 'flash-highlight';
+    anchor.classList.add(flashClass);
+    setTimeout(() => anchor.classList.remove(flashClass), 1600);
 }
-// Scroll ke banner outstanding selisih bordir di info section (tombol Konfirmasi Bayar).
-function scrollToAdditionalPayment() {
-    const anchor = document.querySelector('#order-modal #additional-payment-anchor');
-    if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-// Scroll ke section "Item Pesanan" — target tombol "Tandai Custom Siap Dulu" supaya
-// admin langsung lihat tombol "Tandai Siap" per item custom yg masih pending.
-function scrollToCustomFulfill() {
-    const anchor = document.querySelector('#order-modal #custom-fulfill-anchor');
-    if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+function scrollToBordirReview()      { scrollToModalAnchor('bordir-review-anchor'); }
+function scrollToAdditionalPayment() { scrollToModalAnchor('additional-payment-anchor'); }
+function scrollToCustomFulfill()     { scrollToModalAnchor('custom-fulfill-anchor'); }
 
 async function reviewBordir(orderId, action) {
     try {
