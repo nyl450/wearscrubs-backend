@@ -114,6 +114,71 @@ const CITY_RATES = {
   "Palembang": 15000, "Prabumulih": 25000, "Pagar Alam": 25000, "Lubuklinggau": 30000,
   "Banyuasin": 45000, "Lahat": 30000, "Muara Enim": 25000, "Musi Banyuasin": 30000,
   "Musi Rawas": 35000, "Ogan Komering Ilir": 30000, "Ogan Komering Ulu": 28000, "Empat Lawang": 30000,
+
+  // ── BATCH-4 (10 Jun 2026) — Indonesia Timur + Kalimantan + Sulawesi ──────
+  // Papua (24 kota) — sebelumnya zona 5 (31rb)
+  "Jayapura": 140000, "Merauke": 185000, "Nabire": 175000, "Sorong": 150000,
+  "Manokwari": 175000, "Biak Numfor": 185000, "Fakfak": 170000, "Timika (Mimika)": 200000,
+  "Wamena (Jayawijaya)": 185000, "Sarmi": 185000, "Raja Ampat": 170000, "Teluk Bintuni": 190000,
+  "Teluk Wondama": 175000, "Kaimana": 180000, "Maybrat": 165000, "Tambrauw": 165000,
+  "Pegunungan Bintang": 189000, "Yahukimo": 190000, "Puncak Jaya": 180000, "Yalimo": 180000,
+  "Lanny Jaya": 190000, "Mappi": 185000, "Asmat": 185000, "Boven Digoel": 190000,
+
+  // Maluku Utara (8 dari 9 kota — Halmahera Selatan BELUM user revisi)
+  "Ternate": 100000, "Tidore Kepulauan": 135000, "Halmahera Barat": 130000,
+  "Halmahera Tengah": 145000, "Halmahera Timur": 140000, "Halmahera Utara": 140000,
+  "Kepulauan Sula": 135000, "Pulau Taliabu": 135000,
+
+  // Maluku (10 kota) — sebelumnya zona 5 (31rb)
+  "Ambon": 110000, "Tual": 135000, "Maluku Tengah": 135000, "Maluku Tenggara": 135000,
+  "Buru": 135000, "Seram Bagian Barat": 135000, "Seram Bagian Timur": 135000,
+  "Kepulauan Aru": 135000, "Maluku Barat Daya": 135000, "Kepulauan Tanimbar": 135000,
+
+  // NTB (10 kota) — sebelumnya zona 4 (28rb)
+  "Mataram": 35000, "Lombok Barat": 60000, "Lombok Tengah": 60000, "Lombok Timur": 60000,
+  "Lombok Utara": 65000, "Sumbawa": 65000, "Sumbawa Barat": 65000, "Dompu": 75000,
+  "Bima": 60000, "Kabupaten Bima": 60000,
+
+  // NTT (11 kota) — sebelumnya zona 4 (28rb)
+  "Kupang": 80000, "Kabupaten Kupang": 80000, "Ende": 115000, "Flores Timur": 115000,
+  "Manggarai": 105000, "Manggarai Barat": 110000, "Sikka": 120000, "Sumba Barat": 100000,
+  "Sumba Timur": 110000, "Timor Tengah Selatan": 105000, "Timor Tengah Utara": 120000,
+
+  // Sulawesi Tenggara (7 kota) — sebelumnya zona 5 (31rb)
+  "Kendari": 65000, "Bau-Bau": 90000, "Kolaka": 90000, "Konawe": 90000,
+  "Muna": 90000, "Buton": 90000, "Wakatobi": 90000,
+
+  // Sulawesi Tengah (8 kota) — sebelumnya zona 5 (31rb)
+  "Palu": 65000, "Donggala": 75000, "Parigi Moutong": 75000, "Poso": 75000,
+  "Morowali": 75000, "Tojo Una-Una": 75000, "Banggai": 75000, "Sigi": 75000,
+
+  // Sulawesi Utara (8 dari 10 kota — Minahasa + Minahasa Utara BELUM user revisi)
+  "Manado": 65000, "Bitung": 75000, "Tomohon": 75000, "Kotamobagu": 75000,
+  "Minahasa Selatan": 75000, "Bolaang Mongondow": 75000,
+  "Kepulauan Sangihe": 75000, "Kepulauan Talaud": 75000,
+
+  // Sulawesi Selatan (17 dari 22 kota — Sidrap/Bantaeng/Jeneponto/Takalar/Selayar BELUM revisi)
+  "Makassar": 40000, "Parepare": 55000, "Palopo": 65000, "Gowa": 65000,
+  "Maros": 65000, "Pangkajene": 65000, "Barru": 65000, "Bone": 65000,
+  "Soppeng": 65000, "Wajo": 65000, "Pinrang": 65000, "Enrekang": 65000,
+  "Luwu": 65000, "Luwu Utara": 65000, "Luwu Timur": 65000,
+  "Bulukumba": 65000, "Sinjai": 65000,
+
+  // Kalimantan Utara (4 dari 5 kota — Nunukan BELUM user revisi)
+  "Tarakan": 75000, "Bulungan": 75000, "Malinau": 75000, "Tana Tidung": 80000,
+
+  // Kalimantan Selatan (8 dari 9 kota — Tabalong BELUM user revisi)
+  "Banjarmasin": 45000, "Banjarbaru": 50000, "Kabupaten Banjar": 55000, "Barito Kuala": 60000,
+  "Hulu Sungai Selatan": 55000, "Hulu Sungai Tengah": 60000, "Hulu Sungai Utara": 55000,
+  "Tapin": 55000,
+
+  // Kalimantan Tengah (6 kota) — sebelumnya zona 4 (28rb)
+  "Palangkaraya": 45000, "Kotawaringin Barat": 55000, "Kotawaringin Timur": 55000,
+  "Kapuas": 60000, "Barito Selatan": 60000, "Barito Utara": 60000,
+
+  // Kalimantan Barat (8 kota — Kab Pontianak ikut Pontianak)
+  "Pontianak": 35000, "Kabupaten Pontianak": 35000, "Singkawang": 50000, "Sambas": 55000,
+  "Sanggau": 55000, "Sintang": 55000, "Ketapang": 55000, "Mempawah": 55000,
 };
 
 function rateForZone(zone) {
