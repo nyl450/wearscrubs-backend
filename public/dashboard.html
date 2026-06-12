@@ -2271,6 +2271,9 @@ const ALL_GOWN_COLORS = [
     { id: 'baby-blue',  label: 'Baby Blue',  hex: '#b9d1db' },
     { id: 'baby-pink',  label: 'Baby Pink',  hex: '#c0a9ad' },
     { id: 'pink',       label: 'Pink',       hex: '#d6b6bb' },
+    // Backward-compat alias: lihat catalog.js. ALL_COLORS hanya dipakai di dropdown
+    // produk admin — alias ini ditandai isAlias supaya tidak muncul 2x di picker.
+    { id: 'old-pink',   label: 'Pink',       hex: '#d6b6bb', isAlias: true },
 ];
 const ALL_MOTIFS = [
     { id: 'sea-world',         label: 'Sea World' },
@@ -2807,7 +2810,9 @@ function buildSizeBtns(cat, selected) {
 }
 
 function buildColorBtns(selected) {
-    document.getElementById('color-btns').innerHTML = ALL_COLORS.map(c =>
+    // Exclude alias entries (mis. 'old-pink' yg merupakan alias backward-compat 'pink')
+    // — supaya picker tidak tampilkan 2 swatch identik utk warna yg sama.
+    document.getElementById('color-btns').innerHTML = ALL_COLORS.filter(c => !c.isAlias).map(c =>
         `<button type="button" onclick="toggleColor(this)" data-color="${c.id}" title="${c.label}"
             class="color-toggle ${selected.includes(c.id)?'selected ring-2 ring-white ring-offset-2 ring-offset-darkcard scale-110':''}
             w-10 h-10 rounded-full border-2 border-transparent transition-all hover:scale-110"

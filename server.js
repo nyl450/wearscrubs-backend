@@ -880,7 +880,8 @@ const COLOR_HEX = {
     'green-mint': '#6ee7b7',
     'baby-blue': '#b9d1db',
     'baby-pink': '#c0a9ad',
-    'pink': '#d6b6bb'
+    'pink': '#d6b6bb',
+    'old-pink': '#d6b6bb'  // backward-compat alias (lihat catalog.js)
 };
 const COLOR_LABEL = {
     'black': 'Black',
@@ -903,7 +904,8 @@ const COLOR_LABEL = {
     'green-mint': 'Green Mint',
     'baby-blue': 'Baby Blue',
     'baby-pink': 'Baby Pink',
-    'pink': 'Pink'
+    'pink': 'Pink',
+    'old-pink': 'Pink'  // backward-compat alias (lihat catalog.js)
 };
 // Override hex per produk untuk warna yang artinya beda antar lini (mis. "purple" di
 // Avery = plum gelap, beda dari purple scrub periwinkle). Key = SKU produk.

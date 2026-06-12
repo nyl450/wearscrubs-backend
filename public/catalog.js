@@ -32,6 +32,10 @@ const COLOR_META = {
     'baby-blue':    { label: 'Baby Blue',    hex: '#b9d1db' },
     'baby-pink':    { label: 'Baby Pink',    hex: '#c0a9ad' },
     'pink':         { label: 'Pink',         hex: '#d6b6bb' },
+    // Backward-compat alias: dulu disimpan sebagai 'old-pink' di DB (sudah ke-rename
+    // ke 'pink' 9 Jun). Alias ini ada utk handle browser/CDN cache lama yg masih
+    // kirim 'old-pink' — biar tetap resolve ke label "Pink" bukan fallback raw.
+    'old-pink':     { label: 'Pink',         hex: '#d6b6bb' },
     // Gown Ber Design — motifs (stored as "color" key in inventory)
     'sea-world':      { label: 'Sea World',      hex: '#0ea5e9', isMotif: true },
     'balloon':        { label: 'Balloon',         hex: '#f59e0b', isMotif: true },
