@@ -4603,14 +4603,24 @@ function renderOrders() {
                     if (notApproved) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Review bordir dulu (Setujui/Tolak) sebelum tandai selesai" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">🔍 Review Bordir Dulu</button>`;
                     return `<button onclick="openBordirDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold">🧵 Tandai Bordir Selesai</button>`;
                 })() : ''}
-                ${o.order_status==='confirmed' ? (
+                ${o.order_status==='confirmed' ? (() => {
                     // Pickup courier: skip Kemas/Kirim → tombol langsung tandai diterima.
                     // (Untuk order pickup baru, status auto-skip ke 'done' di confirm-payment;
                     // ini fallback utk order LAMA / edge case yg masih 'confirmed'.)
-                    o.shipping_courier === 'Diambil di event / walkin'
-                        ? `<button onclick="markPickupDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Tandai Diambil &amp; Selesai</button>`
-                        : `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas Barang</button>`
-                ) : ''}
+                    if (o.shipping_courier === 'Diambil di event / walkin')
+                        return `<button onclick="markPickupDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Tandai Diambil &amp; Selesai</button>`;
+                    // Gate visual mirror pattern "Review Bordir Dulu": kalau ada item custom
+                    // belum siap, jangan tampilkan Kemas (backend reject 409 → admin bingung).
+                    // Custom > PO katalog > Kemas (priority).
+                    const items = o.items || [];
+                    const customUnfulfilled = items.filter(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled).length;
+                    if (customUnfulfilled > 0)
+                        return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Item custom belum siap — tandai siap di detail pesanan dulu" class="text-xs px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-400/30 text-sky-300 font-bold">✂️ Tandai Custom Siap Dulu</button>`;
+                    const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
+                    if (poUnfulfilled > 0)
+                        return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Pre-Order menunggu stok masuk — otomatis fulfilled saat receive stok" class="text-xs px-3 py-1.5 rounded-lg bg-orange-500/15 border border-orange-400/30 text-orange-300 font-bold">⏳ Menunggu Stok PO</button>`;
+                    return `<button onclick="openPackOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">📦 Kemas Barang</button>`;
+                })() : ''}
                 ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🚚 Input Resi / Kirim</button>` : ''}
                 ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-bold">✔ Tandai Diterima</button>` : ''}
                 ${isAdmin && o.order_status !== 'cancelled' && o.order_status !== 'done' ? `<button onclick="event.stopPropagation();openCancelOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 mt-2 sm:mt-0 sm:ml-6" title="Batalkan pesanan ini">❌ Batalkan</button>` : ''}
@@ -5405,11 +5415,19 @@ async function viewOrder(id) {
                 if (notApproved) return `<button onclick="scrollToBordirReview()" title="Review bordir dulu (Setujui/Tolak)" class="text-xs px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Review Bordir Dulu</button>`;
                 return `<button onclick="openBordirDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-scissors"></i> Tandai Bordir Selesai</button>`;
             })() : ''}
-            ${o.order_status==='confirmed' ? (
-                o.shipping_courier === 'Diambil di event / walkin'
-                    ? `<button onclick="markPickupDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diambil &amp; Selesai</button>`
-                    : `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas Barang</button>`
-            ) : ''}
+            ${o.order_status==='confirmed' ? (() => {
+                if (o.shipping_courier === 'Diambil di event / walkin')
+                    return `<button onclick="markPickupDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diambil &amp; Selesai</button>`;
+                // Gate visual: custom unfulfilled > PO unfulfilled > Kemas (priority sama dgn list card).
+                const items = o.items || [];
+                const customUnfulfilled = items.filter(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled).length;
+                if (customUnfulfilled > 0)
+                    return `<button onclick="scrollToCustomFulfill()" title="Tandai custom siap dulu per item di section Item Pesanan" class="text-xs px-4 py-2 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-300 font-bold flex items-center gap-1.5 hover:bg-sky-500/25 transition"><i class="fa-solid fa-scissors"></i> Tandai Custom Siap Dulu (${customUnfulfilled})</button>`;
+                const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
+                if (poUnfulfilled > 0)
+                    return `<button title="Pre-Order menunggu stok masuk — otomatis fulfilled saat receive stok" class="text-xs px-4 py-2 rounded-xl bg-orange-500/15 border border-orange-400/30 text-orange-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-hourglass-half"></i> Menunggu Stok PO (${poUnfulfilled})</button>`;
+                return `<button onclick="openPackOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-box"></i> Kemas Barang</button>`;
+            })() : ''}
             ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Input Resi / Kirim</button>` : ''}
             ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
             ${o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
@@ -5487,7 +5505,7 @@ async function viewOrder(id) {
         </div>
 
         <!-- Item Pesanan -->
-        <div>
+        <div id="custom-fulfill-anchor">
             <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">🛍️ Item Pesanan</p>
             ${itemsHTML}
             ${(o.discount_amount||0) > 0 ? `
@@ -5550,6 +5568,12 @@ function scrollToBordirReview() {
 function scrollToAdditionalPayment() {
     const anchor = document.querySelector('#order-modal #additional-payment-anchor');
     if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+// Scroll ke section "Item Pesanan" — target tombol "Tandai Custom Siap Dulu" supaya
+// admin langsung lihat tombol "Tandai Siap" per item custom yg masih pending.
+function scrollToCustomFulfill() {
+    const anchor = document.querySelector('#order-modal #custom-fulfill-anchor');
+    if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function reviewBordir(orderId, action) {
