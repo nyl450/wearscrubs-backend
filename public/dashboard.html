@@ -4595,6 +4595,19 @@ const ORDER_PREDS = {
     tunggu_custom: o =>
         o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
         (o.items || []).some(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled),
+    // Action-oriented predicates utk sub-tab Proses.
+    // "Dikemas" = aksi BERIKUTNYA admin = kemas (status confirmed, tidak ada blocker
+    // PO/custom). Exclude order yg masih tunggu_po/tunggu_custom — biar tidak dobel
+    // hitung & label jelas: kalau ada item belum siap, masuk Tunggu PO/Custom dulu.
+    to_pack: o =>
+        o.payment_status === 'paid' && o.order_status === 'confirmed' &&
+        !(o.items || []).some(i =>
+            (i.is_po || i.is_custom_size || i.is_custom_product) && !i.po_fulfilled
+        ),
+    // "Dikirim" = aksi BERIKUTNYA = isi resi + kirim (status packed).
+    to_ship:    o => o.order_status === 'packed',
+    // "Diterima" = aksi BERIKUTNYA = tandai customer terima (status shipped).
+    to_receive: o => o.order_status === 'shipped',
     // Group predicates
     action_needed: o =>
         ORDER_PREDS.pending(o) || ORDER_PREDS.minta_logo(o) || ORDER_PREDS.review_bordir(o),
@@ -4614,8 +4627,9 @@ const SUBTABS = {
         { key: 'tunggu_po',     label: '⏳ Tunggu PO',     color: 'orange' },
         { key: 'tunggu_custom', label: '✂️ Tunggu Custom', color: 'sky' },
         { key: 'bordir',        label: '🧵 Bordir',        color: 'purple' },
-        { key: 'packed',        label: '📦 Dikemas',       color: 'teal' },
-        { key: 'shipped',       label: '🚚 Dikirim',       color: 'indigo' },
+        { key: 'to_pack',       label: '📦 Dikemas',       color: 'teal' },
+        { key: 'to_ship',       label: '🚚 Dikirim',       color: 'indigo' },
+        { key: 'to_receive',    label: '📬 Diterima',      color: 'green' },
     ],
     archive: [
         { key: 'done',      label: '✔ Selesai',     color: 'green' },
@@ -6659,8 +6673,29 @@ function openShipOrder(orderId) {
         optionalFile: true
     };
     document.getElementById('photo-modal-title').textContent = '🚚 Kirim Pesanan — Input Resi';
+    // Banner alamat tujuan utk double cross-check sebelum input resi.
+    // Admin verifikasi: nama + HP + alamat + kota sesuai paket yg dikirim ke kurir.
+    const addrLine    = order?.customer_address || '';
+    const cityLine    = order?.shipping_city || '';
+    const fullAddress = [addrLine, cityLine].filter(Boolean).join(', ');
+    const orderCode   = order?.order_code || '';
+    const custName    = order?.customer_name || '';
+    const custPhone   = order?.customer_phone || '';
     document.getElementById('photo-modal-extra').innerHTML = `
         <div class="space-y-3">
+            <div class="bg-amber-500/10 border border-amber-400/30 rounded-xl p-3">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fa-solid fa-circle-exclamation text-amber-300"></i>
+                    <p class="text-[11px] uppercase tracking-wider text-amber-200 font-bold">Verifikasi Alamat Tujuan</p>
+                </div>
+                <p class="text-[10px] text-white/40 mb-2">Pastikan paket fisik yang dikirim ke kurir <b>cocok</b> dengan nama + alamat + kode order di bawah, sebelum input resi.</p>
+                <div class="space-y-1.5 text-xs">
+                    <div class="flex gap-2"><span class="text-white/40 shrink-0 w-16">Order</span><span class="font-mono font-bold text-white">${esc(orderCode)}</span></div>
+                    <div class="flex gap-2"><span class="text-white/40 shrink-0 w-16">Nama</span><span class="font-bold text-white">${esc(custName)}</span></div>
+                    <div class="flex gap-2"><span class="text-white/40 shrink-0 w-16">No HP</span><span class="text-white">${esc(custPhone)}</span></div>
+                    <div class="flex gap-2"><span class="text-white/40 shrink-0 w-16">Alamat</span><span class="text-white leading-snug">${esc(fullAddress) || '<span class="text-red-300 italic">(kosong — cek detail order!)</span>'}</span></div>
+                </div>
+            </div>
             <div>
                 <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Nomor Resi ${isSelfDelivery ? '<span class="text-white/30 normal-case">(opsional — kirim sendiri)</span>' : '*'}</label>
                 <input name="tracking_number" type="text" ${isSelfDelivery ? '' : 'required'} placeholder="${isSelfDelivery ? 'Kosongkan untuk antar sendiri' : 'Contoh: JX1234567890 / TLJ123ABC...'}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
