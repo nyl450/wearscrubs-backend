@@ -2527,36 +2527,46 @@ async function exportReportExcel() {
         ]);
         const list = rows || [];
 
-        // Header rows
-        // Catatan: kolom "Harga Satuan" = harga base + bordir/unit (sudah include),
-        // sesuai cara DB menyimpan oi.price. "Bordir" + "Bordir/unit (Rp)" memberi
-        // signal eksplisit ke reader supaya tahu mana porsi yang dari bordir.
+        // Header rows + col definition.
+        // Mental model: Harga Satuan = produk MURNI (tanpa bordir). Disc % di-apply
+        // ke subtotal produk. Bordir ditambahkan SETELAH disc (labor service, tidak
+        // ikut didiskon). Total = Subtotal − Disc + Bordir × Qty.
+        // DB menyimpan oi.price = base + bordir/unit, jadi base diturunkan via:
+        //   base_per_unit = oi.price − bordir_per_unit.
         const header = [
             ['Wearscrubs — Report Penjualan'],
             [`Periode: ${from} s/d ${to}`],
             [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Discount: Rp ${Number(salesKpi.discount||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
-            ['Catatan: Harga Satuan = harga base + bordir/unit (sudah include). Lihat kolom Bordir & Bordir/unit utk porsi bordir.'],
-            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Bordir/unit (Rp)','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales'],
+            ['Logika: Harga Satuan = produk saja · Subtotal = Harga × Qty · Disc % dipotong dari Subtotal (bordir TIDAK ikut didiskon) · Total = Subtotal − Disc + (Bordir × Qty).'],
+            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Bordir','Total Sales'],
         ];
 
-        let totQty=0, totBordir=0, totSubtotal=0, totDisc=0, totSales=0;
+        let totQty=0, totSubtotal=0, totDisc=0, totBordir=0, totSales=0;
         const dataRows = list.map(r => {
             const qty = Number(r.quantity || 0);
-            const unit = Number(r.unit_price || 0);          // base + bordir (cara DB)
+            const unitCombined = Number(r.unit_price || 0); // DB: base + bordir/unit
             const bNama = !!r.bordir_nama;
             const bLogo = !!r.bordir_logo;
-            const bordirLabel = (bNama && bLogo) ? 'Nama + Logo' : bNama ? 'Nama' : bLogo ? 'Logo' : '—';
-            // Bordir Rp/unit: gunakan nilai aktual di DB; kalau NULL (data lama
-            // pre-override), fall back ke default 20rb nama / 30rb logo.
+            // Bordir Rp/unit aktual (admin bisa override per order, mis. logo Rp 40rb).
+            // Fall back ke default 20rb/30rb kalau price kolom NULL (data lama).
             const bNamaRp = bNama ? Number(r.bordir_nama_price ?? 20000) : 0;
             const bLogoRp = bLogo ? Number(r.bordir_logo_price ?? 30000) : 0;
             const bordirPerUnit = bNamaRp + bLogoRp;
-            const bordirLineTotal = bordirPerUnit * qty;     // utk agregat di TOTAL row
-            const subtotal = unit * qty;
+            const basePerUnit = Math.max(0, unitCombined - bordirPerUnit); // harga produk murni
+            const subtotal = basePerUnit * qty;
             const discPct = Number(r.discount_percent || 0);
             const discAmt = Math.round(subtotal * discPct / 100);
-            const totalLine = subtotal - discAmt;
-            totQty += qty; totBordir += bordirLineTotal; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
+            const bordirLineTotal = bordirPerUnit * qty;
+            const totalLine = subtotal - discAmt + bordirLineTotal;
+
+            // Bordir column: gabung type + Rp/unit dalam satu sel.
+            let bordirText = '—';
+            if (bNama && bLogo) bordirText = `Nama+Logo - Rp ${bNamaRp.toLocaleString('id-ID')}+${bLogoRp.toLocaleString('id-ID')}`;
+            else if (bNama)     bordirText = `Nama - Rp ${bNamaRp.toLocaleString('id-ID')}`;
+            else if (bLogo)     bordirText = `Logo - Rp ${bLogoRp.toLocaleString('id-ID')}`;
+
+            totQty += qty; totSubtotal += subtotal; totDisc += discAmt; totBordir += bordirLineTotal; totSales += totalLine;
+
             const dt = r.paid_at ? new Date(r.paid_at) : null;
             const dtStr = dt ? `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
             let nameTag = r.product_name || '';
@@ -2575,20 +2585,19 @@ async function exportReportExcel() {
                 r.color || '',
                 r.size || '',
                 qty,
-                bordirLabel,
-                bordirPerUnit || '',     // kosong kalau tidak ada bordir (anti-noise visual)
-                unit,
+                basePerUnit,
                 subtotal,
                 discPct,
                 discAmt,
+                bordirText,
                 totalLine,
             ];
         });
 
-        // TOTAL row — bordir col text dibiarkan kosong; bordir/unit kolom diisi
-        // TOTAL agregat bordir-Rp (= sum bordirPerUnit * qty) supaya angka
-        // bordir-only mudah dilihat di sidebar Excel.
-        const totalRow = ['TOTAL','','','','','','','','','', totQty, '', totBordir, '', totSubtotal, '', totDisc, totSales];
+        // TOTAL row — kolom Bordir diisi total bordir Rp agregat (text "Rp X").
+        const totalRow = ['TOTAL','','','','','','','','','', totQty, '', totSubtotal, '', totDisc,
+            totBordir > 0 ? `Rp ${totBordir.toLocaleString('id-ID')}` : '—',
+            totSales];
 
         const aoa = [...header, ...dataRows];
         if (dataRows.length === 0) {
@@ -2599,35 +2608,35 @@ async function exportReportExcel() {
 
         const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-        // Column widths (18 cols)
+        // Column widths (17 cols)
         ws['!cols'] = [
             {wch:18},{wch:16},{wch:24},{wch:18},{wch:32},{wch:14},{wch:12},{wch:14},{wch:14},{wch:8},
-            {wch:6},{wch:12},{wch:14},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14}
+            {wch:6},{wch:14},{wch:14},{wch:7},{wch:14},{wch:26},{wch:14}
         ];
 
-        // Merge header rows across 18 cols
+        // Merge header rows across 17 cols (idx 0..16)
         ws['!merges'] = [
-            {s:{r:0,c:0}, e:{r:0,c:17}},
-            {s:{r:1,c:0}, e:{r:1,c:17}},
-            {s:{r:2,c:0}, e:{r:2,c:17}},
-            {s:{r:3,c:0}, e:{r:3,c:17}},
+            {s:{r:0,c:0}, e:{r:0,c:16}},
+            {s:{r:1,c:0}, e:{r:1,c:16}},
+            {s:{r:2,c:0}, e:{r:2,c:16}},
+            {s:{r:3,c:0}, e:{r:3,c:16}},
         ];
 
-        // Number format — column indexes (0-based) untuk currency & integer.
-        // Qty:10  Bordir/unit:12  Harga:13  Subtotal:14  Disc%:15  DiscRp:16  Total:17
-        const dataStart = 5; // 5 baris header
+        // Number format — Qty:10  Harga:11  Subtotal:12  Disc%:13  DiscRp:14  Total:16
+        // Kolom Bordir (15) text/mixed → no number format.
+        const dataStart = 5;
         const lastRow = aoa.length - 1;
         const fmtRp = '#,##0';
         const fmtInt = '0';
         for (let r = dataStart; r <= lastRow; r++) {
             const cellQty = XLSX.utils.encode_cell({r, c:10});
-            if (ws[cellQty]) ws[cellQty].z = fmtInt;
-            [12,13,14,16,17].forEach(c => {
+            if (ws[cellQty] && typeof ws[cellQty].v === 'number') ws[cellQty].z = fmtInt;
+            [11,12,14,16].forEach(c => {
                 const a = XLSX.utils.encode_cell({r, c});
                 if (ws[a] && typeof ws[a].v === 'number') ws[a].z = fmtRp;
             });
-            const cellPct = XLSX.utils.encode_cell({r, c:15});
-            if (ws[cellPct]) ws[cellPct].z = fmtInt;
+            const cellPct = XLSX.utils.encode_cell({r, c:13});
+            if (ws[cellPct] && typeof ws[cellPct].v === 'number') ws[cellPct].z = fmtInt;
         }
 
         const wb = XLSX.utils.book_new();
