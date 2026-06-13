@@ -676,10 +676,10 @@
         </div>
         <!-- Search + filter -->
         <div class="flex gap-2 flex-wrap">
-            <div class="relative flex-1 min-w-[180px]">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none"></i>
+            <div class="flex items-center gap-2 flex-1 min-w-[180px] bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus-within:border-white/30 transition">
+                <i class="fa-solid fa-magnifying-glass text-white/40 text-sm shrink-0"></i>
                 <input id="inv-search" type="text" placeholder="Cari produk..." oninput="renderInventory()"
-                    class="pl-9 pr-3 py-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30">
+                    class="bg-transparent border-0 outline-none flex-1 min-w-0 text-sm text-white placeholder-white/40">
             </div>
             <select id="inv-cat-filter" onchange="renderInventory()" class="!py-2 !px-3 !text-xs !w-auto shrink-0">
                 <option value="">Semua Kategori</option>
@@ -746,10 +746,10 @@
                     class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 hover:bg-indigo-500/20 transition shrink-0">
                     <i class="fa-solid fa-square-check"></i> <span id="order-bulk-label">Pilih Banyak</span>
                 </button>
-                <div class="relative w-full sm:w-64 shrink-0">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none"></i>
+                <div class="flex items-center gap-2 w-full sm:w-64 shrink-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus-within:border-white/30 transition">
+                    <i class="fa-solid fa-magnifying-glass text-white/40 text-sm shrink-0"></i>
                     <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="orderPage=1;renderOrders()"
-                        class="pl-9 pr-3 py-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30">
+                        class="bg-transparent border-0 outline-none flex-1 min-w-0 text-sm text-white placeholder-white/40">
                 </div>
             </div>
         </div>
@@ -2528,23 +2528,35 @@ async function exportReportExcel() {
         const list = rows || [];
 
         // Header rows
+        // Catatan: kolom "Harga Satuan" = harga base + bordir/unit (sudah include),
+        // sesuai cara DB menyimpan oi.price. "Bordir" + "Bordir/unit (Rp)" memberi
+        // signal eksplisit ke reader supaya tahu mana porsi yang dari bordir.
         const header = [
             ['Wearscrubs — Report Penjualan'],
             [`Periode: ${from} s/d ${to}`],
             [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Discount: Rp ${Number(salesKpi.discount||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
-            [],
-            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales'],
+            ['Catatan: Harga Satuan = harga base + bordir/unit (sudah include). Lihat kolom Bordir & Bordir/unit utk porsi bordir.'],
+            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Bordir/unit (Rp)','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales'],
         ];
 
-        let totQty=0, totSubtotal=0, totDisc=0, totSales=0;
+        let totQty=0, totBordir=0, totSubtotal=0, totDisc=0, totSales=0;
         const dataRows = list.map(r => {
             const qty = Number(r.quantity || 0);
-            const unit = Number(r.unit_price || 0);
+            const unit = Number(r.unit_price || 0);          // base + bordir (cara DB)
+            const bNama = !!r.bordir_nama;
+            const bLogo = !!r.bordir_logo;
+            const bordirLabel = (bNama && bLogo) ? 'Nama + Logo' : bNama ? 'Nama' : bLogo ? 'Logo' : '—';
+            // Bordir Rp/unit: gunakan nilai aktual di DB; kalau NULL (data lama
+            // pre-override), fall back ke default 20rb nama / 30rb logo.
+            const bNamaRp = bNama ? Number(r.bordir_nama_price ?? 20000) : 0;
+            const bLogoRp = bLogo ? Number(r.bordir_logo_price ?? 30000) : 0;
+            const bordirPerUnit = bNamaRp + bLogoRp;
+            const bordirLineTotal = bordirPerUnit * qty;     // utk agregat di TOTAL row
             const subtotal = unit * qty;
             const discPct = Number(r.discount_percent || 0);
             const discAmt = Math.round(subtotal * discPct / 100);
             const totalLine = subtotal - discAmt;
-            totQty += qty; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
+            totQty += qty; totBordir += bordirLineTotal; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
             const dt = r.paid_at ? new Date(r.paid_at) : null;
             const dtStr = dt ? `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
             let nameTag = r.product_name || '';
@@ -2563,6 +2575,8 @@ async function exportReportExcel() {
                 r.color || '',
                 r.size || '',
                 qty,
+                bordirLabel,
+                bordirPerUnit || '',     // kosong kalau tidak ada bordir (anti-noise visual)
                 unit,
                 subtotal,
                 discPct,
@@ -2571,7 +2585,10 @@ async function exportReportExcel() {
             ];
         });
 
-        const totalRow = ['TOTAL','','','','','','','','','', totQty, '', totSubtotal, '', totDisc, totSales];
+        // TOTAL row — bordir col text dibiarkan kosong; bordir/unit kolom diisi
+        // TOTAL agregat bordir-Rp (= sum bordirPerUnit * qty) supaya angka
+        // bordir-only mudah dilihat di sidebar Excel.
+        const totalRow = ['TOTAL','','','','','','','','','', totQty, '', totBordir, '', totSubtotal, '', totDisc, totSales];
 
         const aoa = [...header, ...dataRows];
         if (dataRows.length === 0) {
@@ -2582,36 +2599,35 @@ async function exportReportExcel() {
 
         const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-        // Column widths (chars)
+        // Column widths (18 cols)
         ws['!cols'] = [
             {wch:18},{wch:16},{wch:24},{wch:18},{wch:32},{wch:14},{wch:12},{wch:14},{wch:14},{wch:8},
-            {wch:6},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14}
+            {wch:6},{wch:12},{wch:14},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14}
         ];
 
-        // Merge header rows across 16 cols
+        // Merge header rows across 18 cols
         ws['!merges'] = [
-            {s:{r:0,c:0}, e:{r:0,c:15}},
-            {s:{r:1,c:0}, e:{r:1,c:15}},
-            {s:{r:2,c:0}, e:{r:2,c:15}},
+            {s:{r:0,c:0}, e:{r:0,c:17}},
+            {s:{r:1,c:0}, e:{r:1,c:17}},
+            {s:{r:2,c:0}, e:{r:2,c:17}},
+            {s:{r:3,c:0}, e:{r:3,c:17}},
         ];
 
-        // Number format for currency & qty cols pada data + total
-        const dataStart = 5; // row index 5 = first data row (0-based, after 5 header rows)
-        const lastRow = aoa.length - 1; // total row (or empty msg row)
+        // Number format — column indexes (0-based) untuk currency & integer.
+        // Qty:10  Bordir/unit:12  Harga:13  Subtotal:14  Disc%:15  DiscRp:16  Total:17
+        const dataStart = 5; // 5 baris header
+        const lastRow = aoa.length - 1;
         const fmtRp = '#,##0';
-        const fmtPct = '0';
+        const fmtInt = '0';
         for (let r = dataStart; r <= lastRow; r++) {
-            // Qty col K (index 10)
             const cellQty = XLSX.utils.encode_cell({r, c:10});
-            if (ws[cellQty]) ws[cellQty].z = fmtPct;
-            // Currency cols: L M O P (11,12,14,15)
-            [11,12,14,15].forEach(c => {
+            if (ws[cellQty]) ws[cellQty].z = fmtInt;
+            [12,13,14,16,17].forEach(c => {
                 const a = XLSX.utils.encode_cell({r, c});
-                if (ws[a]) ws[a].z = fmtRp;
+                if (ws[a] && typeof ws[a].v === 'number') ws[a].z = fmtRp;
             });
-            // Disc % col N (13)
-            const cellPct = XLSX.utils.encode_cell({r, c:13});
-            if (ws[cellPct]) ws[cellPct].z = fmtPct;
+            const cellPct = XLSX.utils.encode_cell({r, c:15});
+            if (ws[cellPct]) ws[cellPct].z = fmtInt;
         }
 
         const wb = XLSX.utils.book_new();
