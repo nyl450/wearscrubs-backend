@@ -124,9 +124,10 @@ const CITY_RATES = {
   "Pegunungan Bintang": 189000, "Yahukimo": 190000, "Puncak Jaya": 180000, "Yalimo": 180000,
   "Lanny Jaya": 190000, "Mappi": 185000, "Asmat": 185000, "Boven Digoel": 190000,
 
-  // Maluku Utara (8 dari 9 kota — Halmahera Selatan BELUM user revisi)
+  // Maluku Utara (9 kota — Halmahera Selatan ditambah di batch-5)
   "Ternate": 100000, "Tidore Kepulauan": 135000, "Halmahera Barat": 130000,
   "Halmahera Tengah": 145000, "Halmahera Timur": 140000, "Halmahera Utara": 140000,
+  "Halmahera Selatan": 140000,
   "Kepulauan Sula": 135000, "Pulau Taliabu": 135000,
 
   // Maluku (10 kota) — sebelumnya zona 5 (31rb)
@@ -152,25 +153,36 @@ const CITY_RATES = {
   "Palu": 65000, "Donggala": 75000, "Parigi Moutong": 75000, "Poso": 75000,
   "Morowali": 75000, "Tojo Una-Una": 75000, "Banggai": 75000, "Sigi": 75000,
 
-  // Sulawesi Utara (8 dari 10 kota — Minahasa + Minahasa Utara BELUM user revisi)
+  // Sulawesi Utara (10 kota — Minahasa + Minahasa Utara ditambah di batch-5)
   "Manado": 65000, "Bitung": 75000, "Tomohon": 75000, "Kotamobagu": 75000,
+  "Minahasa": 80000, "Minahasa Utara": 80000,
   "Minahasa Selatan": 75000, "Bolaang Mongondow": 75000,
   "Kepulauan Sangihe": 75000, "Kepulauan Talaud": 75000,
 
-  // Sulawesi Selatan (17 dari 22 kota — Sidrap/Bantaeng/Jeneponto/Takalar/Selayar BELUM revisi)
+  // Sulawesi Selatan (22 kota — 5 ditambah di batch-5: Sidrap/Bantaeng/Jeneponto/Takalar/Selayar)
   "Makassar": 40000, "Parepare": 55000, "Palopo": 65000, "Gowa": 65000,
   "Maros": 65000, "Pangkajene": 65000, "Barru": 65000, "Bone": 65000,
-  "Soppeng": 65000, "Wajo": 65000, "Pinrang": 65000, "Enrekang": 65000,
+  "Soppeng": 65000, "Wajo": 65000, "Sidrap": 60000,
+  "Pinrang": 65000, "Enrekang": 65000,
   "Luwu": 65000, "Luwu Utara": 65000, "Luwu Timur": 65000,
+  "Bantaeng": 55000, "Jeneponto": 60000, "Takalar": 60000, "Selayar": 70000,
   "Bulukumba": 65000, "Sinjai": 65000,
 
-  // Kalimantan Utara (4 dari 5 kota — Nunukan BELUM user revisi)
-  "Tarakan": 75000, "Bulungan": 75000, "Malinau": 75000, "Tana Tidung": 80000,
+  // Sulawesi Barat (4 kota — batch-5)
+  "Mamuju": 60000, "Mamasa": 60000, "Polewali Mandar": 65000, "Pasangkayu": 60000,
 
-  // Kalimantan Selatan (8 dari 9 kota — Tabalong BELUM user revisi)
+  // Kalimantan Utara (5 kota — Nunukan ditambah di batch-5)
+  "Tarakan": 75000, "Nunukan": 105000, "Bulungan": 75000, "Malinau": 75000, "Tana Tidung": 80000,
+
+  // Kalimantan Selatan (9 kota — Tabalong ditambah di batch-5)
   "Banjarmasin": 45000, "Banjarbaru": 50000, "Kabupaten Banjar": 55000, "Barito Kuala": 60000,
   "Hulu Sungai Selatan": 55000, "Hulu Sungai Tengah": 60000, "Hulu Sungai Utara": 55000,
-  "Tapin": 55000,
+  "Tabalong": 60000, "Tapin": 55000,
+
+  // Kalimantan Timur (10 kota — batch-5)
+  "Samarinda": 50000, "Balikpapan": 50000, "Bontang": 55000,
+  "Kutai Kartanegara": 70000, "Kutai Barat": 75000, "Kutai Timur": 85000,
+  "Berau": 85000, "Penajam Paser Utara": 55000, "Paser": 80000, "Mahakam Ulu": 75000,
 
   // Kalimantan Tengah (6 kota) — sebelumnya zona 4 (28rb)
   "Palangkaraya": 45000, "Kotawaringin Barat": 55000, "Kotawaringin Timur": 55000,
