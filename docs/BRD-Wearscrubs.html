@@ -172,11 +172,11 @@
     <dl class="meta">
       <div>
         <dt>Versi Dokumen</dt>
-        <dd>1.0</dd>
+        <dd>1.1</dd>
       </div>
       <div>
         <dt>Tanggal Terbit</dt>
-        <dd>9 Juni 2026</dd>
+        <dd>13 Juni 2026</dd>
       </div>
       <div>
         <dt>Pemilik Produk</dt>
@@ -484,7 +484,7 @@
   <p>Customer journey dibagi 5 step linear untuk mengurangi kognitif load dan abandonment:</p>
   <div class="flow">
     <div class="step"><b>Step 1 — Data Pelanggan:</b> nama, nomor WhatsApp (validasi format 08xxx / 62xxx, 9-15 digit), alamat lengkap.</div>
-    <div class="step"><b>Step 2 — Pengiriman:</b> pilih kota tujuan dari dropdown 400 kota. Berat dihitung otomatis (qty / 3 kg). Ongkir ter-compute 5-zona (Jabodetabek 10rb · Banten/Jabar 12rb · Jateng-DIY-Jatim-Bali 20rb · Sumatra/Kalimantan/NTB/NTT 28rb · Sulawesi/Maluku/Papua 31rb per kg). Kurir auto-pilih berdasar zona.</div>
+    <div class="step"><b>Step 2 — Pengiriman:</b> pilih kota tujuan dari dropdown 380+ kota Indonesia. Berat dihitung otomatis (qty / 3 kg). Ongkir di-resolve via <code>CITY_RATES</code> (override per-kota; 100% kota Indonesia di 38 provinsi sudah ber-tarif spesifik dari owner), dengan <code>ZONE_RATES</code> 5-zona sebagai fallback murni. Kurir auto-pilih berdasar zona kota. Rule "Kabupaten ikut induk" untuk kabupaten satelit kota inti.</div>
     <div class="step"><b>Step 3 — Metode Pembayaran:</b> Transfer Bank (BCA) atau QRIS. Panel kondisional menampilkan nomor rekening atau gambar QRIS WS sesuai pilihan.</div>
     <div class="step"><b>Step 4 — Review &amp; Konfirmasi:</b> ringkasan order, total, ongkir, grand total. Customer cek dulu sebelum submit.</div>
     <div class="step"><b>Step 5 — Submit:</b> POST ke <code>/api/orders</code>. Backend validate &amp; insert dalam transaksi atomik. Customer dapat order code, dan instruksi pembayaran (transfer 2x24 jam atau auto-cancel).</div>
@@ -501,7 +501,7 @@
       <tr><td>News</td><td><code>news.html</code></td><td>Artikel gaya hidup medis (kartu Lumio-style).</td></tr>
       <tr><td>FAQ</td><td><code>FAQ.html</code></td><td>8 Q&amp;A: order, ukuran, bordir, bayar, kirim, lacak, tukar, kontak. Embed <code>FAQPage</code> JSON-LD.</td></tr>
       <tr><td>Syarat &amp; Ketentuan</td><td><code>syarat.html</code></td><td>Return policy, garansi, klausul tukar size.</td></tr>
-      <tr><td>Shipping Info</td><td><code>shipping.html</code></td><td>Tabel zona ongkir 5-zona, estimasi waktu, kurir.</td></tr>
+      <tr><td>Shipping Info</td><td><code>shipping.html</code></td><td>Penjelasan tarif per-kota (CITY_RATES) + fallback 5-zona, estimasi waktu, kurir.</td></tr>
       <tr><td>Privacy</td><td><code>privacy.html</code></td><td>Kebijakan privasi data customer.</td></tr>
       <tr><td>Contact</td><td><code>contact.html</code></td><td>Kontak WhatsApp, alamat fisik.</td></tr>
     </tbody>
@@ -543,7 +543,10 @@
   <p>Permission staff disimpan di kolom <code>allowed_menus</code> JSON. Auto-redirect: kalau staff tidak punya akses ke menu Overview (default landing), sistem akan auto-redirect ke menu pertama yang diizinkan.</p>
 
   <h2>5.2 Overview Dashboard</h2>
-  <p>Landing setelah login. Menampilkan ringkasan harian/mingguan: total pesanan masuk, omzet hari ini, jumlah pesanan butuh aksi (menunggu bayar, menunggu kemas, dll), badge notifikasi di sidebar untuk Pre-Order, Refund pending, dan Exchange pending.</p>
+  <p>Landing setelah login. Menampilkan ringkasan harian/mingguan: total pesanan masuk, "Uang Masuk (Kotor)" hari ini (termasuk ongkir, sebelum refund — beda dengan Net Sales di Report yang sudah dikurangi diskon &amp; refund), jumlah pesanan butuh aksi (menunggu bayar, menunggu kemas, dll), badge notifikasi di sidebar untuk Pre-Order, Refund pending, dan Exchange pending.</p>
+  <div class="box">
+    <strong>Catatan terminologi:</strong> label "Total Pendapatan" sebelumnya membingungkan karena beda formula dengan Net Sales di Report. Kini diberi nama eksplisit <code>Uang Masuk (Kotor)</code> dengan subtitle "Termasuk ongkir, sebelum refund · cek Report utk Net Sales".
+  </div>
 
   <h2>5.3 Manajemen Produk</h2>
   <ul>
@@ -589,6 +592,18 @@
   <h2>5.5 Manajemen Pesanan</h2>
   <p>Modul utama. Setiap pesanan ditampilkan sebagai card dengan informasi pelanggan, item, total, status, dan tombol action kontekstual.</p>
 
+  <h3>Tab Layout (Redesign Juni 2026)</h3>
+  <p>Tab utama disusun ulang berdasar urgensi, default landing langsung ke yang butuh aksi:</p>
+  <ul>
+    <li><strong>Perlu Aksi</strong> (default) — sub-tab: Belum Bayar · Minta Logo · Review Bordir · <strong>Tunggu PO</strong> · <strong>Tunggu Custom</strong> (predicate scan items unfulfilled per kategori).</li>
+    <li><strong>Proses</strong> — order yang sedang berjalan (confirmed/bordir/packed/shipped).</li>
+    <li><strong>Arsip</strong> — done + cancelled.</li>
+    <li><strong>Semua</strong> — escape hatch tanpa filter.</li>
+  </ul>
+
+  <h3>Helper Scroll &amp; Flash Highlight</h3>
+  <p>Tombol gate amber ("Bayar Selisih Dulu", "Review Bordir Dulu", "Tandai Custom Siap Dulu") membuka modal lalu memanggil <code>scrollToModalAnchor()</code> — menggunakan <code>modal.scrollTo(offsetTop)</code> (bukan <code>scrollIntoView</code> yang gagal di nested scroll Safari/Chrome) + class <code>.flash-highlight</code> CSS pulse 1.5 detik sky cyan untuk menarik mata admin ke section relevan.</p>
+
   <h3>Status Pesanan (State Machine)</h3>
   <div class="flow">
     <div class="step"><b>pending</b> — Order baru masuk, menunggu konfirmasi bayar.</div>
@@ -608,10 +623,12 @@
       <tr><td>Order baru, butuh konfirmasi bayar</td><td>"Konfirmasi Pembayaran" (hijau)</td></tr>
       <tr><td>Ada bordir non-website, belum approved</td><td>"🔍 Review Bordir Dulu" (amber, hard-block)</td></tr>
       <tr><td>Selisih bordir tambahan outstanding</td><td>"💰 Bayar Selisih Dulu" (amber)</td></tr>
-      <tr><td>Status confirmed, siap dikemas</td><td>"Kemas Barang" (biru)</td></tr>
+      <tr><td>Status confirmed, ada custom belum siap</td><td>"✨ Tandai Custom Siap Dulu" (sky cyan, scroll ke section Item)</td></tr>
+      <tr><td>Status confirmed, ada PO belum fulfilled</td><td>"📦 Tunggu PO" (sky cyan)</td></tr>
+      <tr><td>Status confirmed, custom &amp; PO clear → siap dikemas</td><td>"Kemas Barang" (biru)</td></tr>
       <tr><td>Status packed, siap kirim</td><td>"Input Resi / Kirim" (biru)</td></tr>
       <tr><td>Status shipped, customer terima</td><td>"Tandai Diterima" (hijau)</td></tr>
-      <tr><td>Status bordir, semua approved + lunas</td><td>"🧵 Tandai Bordir Selesai" (purple)</td></tr>
+      <tr><td>Status bordir, semua approved + lunas + tidak ada PO</td><td>"🧵 Tandai Bordir Selesai" (purple)</td></tr>
     </tbody>
   </table>
 
@@ -680,13 +697,26 @@
     <li>Section Review Bordir aktif → istri Setujui / Tolak.</li>
   </ol>
 
-  <h3>Gate Tombol "Tandai Bordir Selesai" — 3 State</h3>
+  <h3>Gate Tombol "Tandai Bordir Selesai" — 4 State (priority order)</h3>
+  <p>Backend bordir-done reject 409 kalau ada item PO katalog yang belum fulfilled (custom_size &amp; custom_product tidak di-block — bisa parallel dengan bordir). Frontend mengikuti urutan prioritas berikut:</p>
   <table>
-    <thead><tr><th>Kondisi</th><th>Tampilan</th><th>Aksi Klik</th></tr></thead>
+    <thead><tr><th>Prioritas</th><th>Kondisi</th><th>Tampilan</th><th>Aksi Klik</th></tr></thead>
     <tbody>
-      <tr><td>Selisih bordir outstanding</td><td>"💰 Bayar Selisih Dulu" amber</td><td>Scroll ke banner outstanding</td></tr>
-      <tr><td>Selisih lunas, bordir belum approved</td><td>"🔍 Review Bordir Dulu" amber</td><td>Scroll ke section Review Bordir</td></tr>
-      <tr><td>Approved + lunas</td><td>"🧵 Tandai Bordir Selesai" purple</td><td>Modal upload bukti normal</td></tr>
+      <tr><td>1</td><td>PO katalog unfulfilled</td><td>"📦 Tunggu PO" sky cyan</td><td>Scroll ke section Item Pesanan</td></tr>
+      <tr><td>2</td><td>Selisih bordir outstanding</td><td>"💰 Bayar Selisih Dulu" amber</td><td>Scroll ke banner outstanding</td></tr>
+      <tr><td>3</td><td>Selisih lunas, bordir belum approved</td><td>"🔍 Review Bordir Dulu" amber</td><td>Scroll ke section Review Bordir</td></tr>
+      <tr><td>4</td><td>PO clear + selisih lunas + approved</td><td>"🧵 Tandai Bordir Selesai" purple</td><td>Modal upload bukti normal</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Gate Tombol "Kemas Barang" — 3 State (priority order)</h3>
+  <p>Setelah <code>confirmed</code> + bordir clear (kalau ada), tombol kemas masih bisa di-block sampai semua item siap fisik. Backend pack endpoint memvalidasi 3 hal: PO katalog ter-fulfill, custom_size ter-fulfill, custom_product ter-fulfill.</p>
+  <table>
+    <thead><tr><th>Prioritas</th><th>Kondisi</th><th>Tampilan</th><th>Aksi Klik</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Ada custom (size/product) belum siap</td><td>"✨ Tandai Custom Siap Dulu" sky cyan</td><td>Scroll ke section Item Pesanan + flash highlight</td></tr>
+      <tr><td>2</td><td>Custom clear, PO katalog belum fulfilled</td><td>"📦 Tunggu PO" sky cyan</td><td>Scroll ke section Item Pesanan</td></tr>
+      <tr><td>3</td><td>Custom &amp; PO clear</td><td>"Kemas Barang" biru</td><td>Modal upload bukti kemas (foto opsional)</td></tr>
     </tbody>
   </table>
 
@@ -998,7 +1028,16 @@ git -C "D:/ws/wearscrubs-backend" push origin main
 # 3. Railway auto-deploy terpicu webhook (~1-2 menit)
 # 4. Verifikasi di wearscrubs.id</code></pre>
 
-  <h2>9.5 Monitoring &amp; Logs</h2>
+  <h2>9.5 Optimasi Storage — Audit Photo WebP</h2>
+  <p>Sejak Juni 2026, semua foto bukti yang di-upload admin (bukti bayar, bukti packing, bukti bordir, bukti refund) otomatis di-resize ke max 1920px + dikonversi ke WebP quality 85 via library <code>sharp</code> sebelum di-upload ke bucket privat. Hasil: penghematan ~85% per foto, signifikan untuk batas Supabase Free 1GB.</p>
+  <ul>
+    <li>Implementasi di helper <code>uploadToSupabase(buf, path, opts)</code> dengan flag <code>opts.optimize=true</code>.</li>
+    <li>Scope: 7 call site di endpoint orders &amp; refunds.</li>
+    <li><strong>TIDAK dikompres:</strong> foto produk (fidelity katalog) &amp; logo bordir customer (presisi cetak).</li>
+    <li>Graceful fallback: kalau <code>sharp</code> gagal init, upload lanjut dengan file mentah (no crash).</li>
+  </ul>
+
+  <h2>9.6 Monitoring &amp; Logs</h2>
   <ul>
     <li><strong>Railway logs</strong> via dashboard Railway (real-time stdout/stderr).</li>
     <li><strong>Supabase logs</strong> via dashboard Supabase (query log + error).</li>
@@ -1022,9 +1061,9 @@ git -C "D:/ws/wearscrubs-backend" push origin main
         <td>James sudah email <code>tech@kiriminaja.com</code>, menunggu staging key. Ongkir 5-zona interim LIVE sebagai jembatan. Tidak blok go-live.</td>
       </tr>
       <tr>
-        <td>Smoke-test upload bukti bayar (validasi signed URL bucket privat)</td>
-        <td>Recommended 1× test</td>
-        <td>Pastikan foto tampil setelah upload di detail order.</td>
+        <td>Smoke-test upload bukti bayar (validasi signed URL bucket privat + WebP optimize)</td>
+        <td>✅ DONE (13 Juni 2026)</td>
+        <td>Verified — foto tampil di detail order, pipeline WebP + signed URL berjalan.</td>
       </tr>
     </tbody>
   </table>
@@ -1058,6 +1097,9 @@ git -C "D:/ws/wearscrubs-backend" push origin main
     <li><strong>Edit pesanan tidak include items &amp; diskon.</strong> Anti-drift sumber kebenaran.</li>
     <li><strong>Window tukar size 3-hari TIDAK ditegakkan.</strong> Sengaja sebagai gimmick goodwill (keputusan owner).</li>
     <li><strong>Bukti bayar tetap wajib upload.</strong> Bukti packing &amp; bordir-selesai OPSIONAL (hemat storage).</li>
+    <li><strong>Invoice wording:</strong> baris bordir tertulis "Bordir Nama/Logo" — bukan "Jasa Bordir Nama/Logo" (lebih ringkas, customer langsung paham).</li>
+    <li><strong>Rename DB color / sku / key wajib scan SEMUA tabel termasuk JSON column.</strong> Lesson: rename <code>old-pink</code> → <code>pink</code> sempat miss <code>products.colors</code> (JSON text) → halaman produk broken. Selalu <code>UPDATE … REPLACE</code> di kolom JSON + sediakan backward-compat alias untuk transisi.</li>
+    <li><strong>PO katalog memblok bordir-done.</strong> Custom size/product TIDAK memblok bordir (bisa parallel) — karena bordir dilakukan tukang berbeda dengan jahit-custom; menunggu salah satu = waste.</li>
   </ul>
 </section>
 
@@ -1091,7 +1133,37 @@ git -C "D:/ws/wearscrubs-backend" push origin main
     </tbody>
   </table>
 
-  <h2 style="margin-top:12mm;">Akhir Dokumen</h2>
+  <h2 style="margin-top:12mm;">Changelog</h2>
+  <table>
+    <thead><tr><th>Versi</th><th>Tanggal</th><th>Perubahan</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>1.1</strong></td>
+        <td>13 Juni 2026</td>
+        <td>
+          Update sprint 9-10 Juni (19 commits, <code>cd53823</code> → <code>15975b7</code>):
+          <ul>
+            <li>§4.5/§4.6 — ongkir <strong>CITY_RATES 380+ kota Indonesia 100%</strong> override per-kota; 5-zona jadi fallback murni.</li>
+            <li>§5.2 — Overview rename "Total Pendapatan" → "Uang Masuk (Kotor)" dengan subtitle clarification vs Net Sales.</li>
+            <li>§5.5 — Tab Manajemen Pesanan redesign (default <strong>Perlu Aksi</strong>, sub-tab Tunggu PO/Custom); helper <code>scrollToModalAnchor</code> + flash highlight.</li>
+            <li>§5.5 — Visual gate ditambah label "✨ Tandai Custom Siap Dulu" + "📦 Tunggu PO" untuk konteks confirmed.</li>
+            <li>§5.7 — Gate "Tandai Bordir Selesai" upgrade dari 3-state ke <strong>4-state</strong> (PO unfulfilled jadi prioritas tertinggi).</li>
+            <li>§5.7 — Gate "Kemas Barang" eksplisit jadi <strong>3-state</strong> (Custom &gt; PO &gt; Kemas).</li>
+            <li>§9.5 — Tambah Audit Photo WebP optimization (~85% hemat storage).</li>
+            <li>§10.1 — Smoke-test upload bukti bayar ditandai DONE.</li>
+            <li>§10.4 — Decision log: invoice copy "Bordir Nama/Logo" (bukan "Jasa Bordir"); rename DB color/sku/key wajib scan JSON columns (lesson <code>products.colors</code>).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>1.0</strong></td>
+        <td>9 Juni 2026</td>
+        <td>Versi awal — 11 bab penuh: profil bisnis, arsitektur, modul publik &amp; admin, workflow E2E, keamanan, SEO, infra, roadmap, glosarium.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 style="margin-top:8mm;">Akhir Dokumen</h2>
   <p>BRD ini bersifat hidup — akan diupdate seiring evolusi platform. Versi terkini selalu tersedia di repo Wearscrubs di folder <code>docs/</code>.</p>
   <p style="margin-top:6mm; font-size:10pt; color:#888;">© 2026 Wearscrubs · Dokumen internal. Disusun bersama ARK (Claude) — asisten teknis platform Wearscrubs.</p>
 </section>
