@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
@@ -675,10 +676,10 @@
         </div>
         <!-- Search + filter -->
         <div class="flex gap-2 flex-wrap">
-            <div class="relative flex-1 min-w-[160px]">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
+            <div class="relative flex-1 min-w-[180px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none"></i>
                 <input id="inv-search" type="text" placeholder="Cari produk..." oninput="renderInventory()"
-                    class="pl-8 pr-3 py-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30">
+                    class="pl-9 pr-3 py-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30">
             </div>
             <select id="inv-cat-filter" onchange="renderInventory()" class="!py-2 !px-3 !text-xs !w-auto shrink-0">
                 <option value="">Semua Kategori</option>
@@ -745,10 +746,10 @@
                     class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 hover:bg-indigo-500/20 transition shrink-0">
                     <i class="fa-solid fa-square-check"></i> <span id="order-bulk-label">Pilih Banyak</span>
                 </button>
-                <div class="relative">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-xs"></i>
+                <div class="relative w-full sm:w-64 shrink-0">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none"></i>
                     <input id="order-search" type="text" placeholder="Cari nama / kode order..." oninput="orderPage=1;renderOrders()"
-                        class="pl-8 pr-4 py-1.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 w-52">
+                        class="pl-9 pr-3 py-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30">
                 </div>
             </div>
         </div>
@@ -1124,11 +1125,16 @@
             </div>
         </div>
 
-        <!-- Tab -->
-        <div class="flex flex-wrap gap-1.5">
+        <!-- Tab + Export -->
+        <div class="flex flex-wrap items-center gap-1.5">
             <button data-rtab="sales" onclick="reportTab('sales')" class="report-tab">Sales</button>
             <button data-rtab="type" onclick="reportTab('type')" class="report-tab">Sales Type</button>
             <button data-rtab="items" onclick="reportTab('items')" class="report-tab">Items Sales</button>
+            <button id="report-export-btn" onclick="exportReportExcel()"
+                class="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-400/30 text-green-300 hover:bg-green-500/20 transition shrink-0"
+                title="Export ke Excel (sesuai tanggal yang diterapkan)">
+                <i class="fa-solid fa-file-excel"></i> Export Excel
+            </button>
         </div>
 
         <!-- Tab: Sales -->
@@ -2493,6 +2499,130 @@ async function loadReport() {
     } catch (e) {
         console.error('loadReport failed', e);
         alert('Gagal memuat report: ' + (e?.message || e));
+    }
+}
+
+// ─── REPORT EXPORT EXCEL ─────────────────────────────────────────────────────
+// Format: per-transaction rows (1 row = 1 order_item), mirip kolom Items Sales
+// tapi granular per-transaksi + kolom Disc per-line.
+// Total summary di baris bawah (Qty, Subtotal, Disc, Total Sales).
+function repSourceLabelSafe(src) {
+    try { return repSourceLabel(src); } catch { return src || ''; }
+}
+async function exportReportExcel() {
+    const from = document.getElementById('report-from')?.value;
+    const to   = document.getElementById('report-to')?.value;
+    if (!from || !to) { alert('Pilih rentang tanggal dulu lalu klik Terapkan.'); return; }
+    if (typeof XLSX === 'undefined') { alert('Library Excel belum termuat — coba refresh halaman.'); return; }
+
+    const btn = document.getElementById('report-export-btn');
+    const origHTML = btn?.innerHTML;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan…'; }
+
+    try {
+        const qs = `?from=${from}&to=${to}`;
+        const [salesKpi, rows] = await Promise.all([
+            apiFetch('/api/reports/sales' + qs),
+            apiFetch('/api/reports/items-detail' + qs),
+        ]);
+        const list = rows || [];
+
+        // Header rows
+        const header = [
+            ['Wearscrubs — Report Penjualan'],
+            [`Periode: ${from} s/d ${to}`],
+            [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Discount: Rp ${Number(salesKpi.discount||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
+            [],
+            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales'],
+        ];
+
+        let totQty=0, totSubtotal=0, totDisc=0, totSales=0;
+        const dataRows = list.map(r => {
+            const qty = Number(r.quantity || 0);
+            const unit = Number(r.unit_price || 0);
+            const subtotal = unit * qty;
+            const discPct = Number(r.discount_percent || 0);
+            const discAmt = Math.round(subtotal * discPct / 100);
+            const totalLine = subtotal - discAmt;
+            totQty += qty; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
+            const dt = r.paid_at ? new Date(r.paid_at) : null;
+            const dtStr = dt ? `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
+            let nameTag = r.product_name || '';
+            if (r.is_custom_product) nameTag = '[CUSTOM PRODUCT] ' + nameTag;
+            else if (r.is_custom_size) nameTag = '[CUSTOM SIZE] ' + nameTag;
+            if (r.is_po) nameTag = '[PO] ' + nameTag;
+            return [
+                dtStr,
+                r.order_code || '',
+                r.customer_name || '',
+                repSourceLabelSafe(r.order_source),
+                nameTag,
+                r.sku || '',
+                r.category || '',
+                r.variant_type || '',
+                r.color || '',
+                r.size || '',
+                qty,
+                unit,
+                subtotal,
+                discPct,
+                discAmt,
+                totalLine,
+            ];
+        });
+
+        const totalRow = ['TOTAL','','','','','','','','','', totQty, '', totSubtotal, '', totDisc, totSales];
+
+        const aoa = [...header, ...dataRows];
+        if (dataRows.length === 0) {
+            aoa.push(['(Tidak ada transaksi pada periode ini)']);
+        } else {
+            aoa.push(totalRow);
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Column widths (chars)
+        ws['!cols'] = [
+            {wch:18},{wch:16},{wch:24},{wch:18},{wch:32},{wch:14},{wch:12},{wch:14},{wch:14},{wch:8},
+            {wch:6},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14}
+        ];
+
+        // Merge header rows across 16 cols
+        ws['!merges'] = [
+            {s:{r:0,c:0}, e:{r:0,c:15}},
+            {s:{r:1,c:0}, e:{r:1,c:15}},
+            {s:{r:2,c:0}, e:{r:2,c:15}},
+        ];
+
+        // Number format for currency & qty cols pada data + total
+        const dataStart = 5; // row index 5 = first data row (0-based, after 5 header rows)
+        const lastRow = aoa.length - 1; // total row (or empty msg row)
+        const fmtRp = '#,##0';
+        const fmtPct = '0';
+        for (let r = dataStart; r <= lastRow; r++) {
+            // Qty col K (index 10)
+            const cellQty = XLSX.utils.encode_cell({r, c:10});
+            if (ws[cellQty]) ws[cellQty].z = fmtPct;
+            // Currency cols: L M O P (11,12,14,15)
+            [11,12,14,15].forEach(c => {
+                const a = XLSX.utils.encode_cell({r, c});
+                if (ws[a]) ws[a].z = fmtRp;
+            });
+            // Disc % col N (13)
+            const cellPct = XLSX.utils.encode_cell({r, c:13});
+            if (ws[cellPct]) ws[cellPct].z = fmtPct;
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Items Detail');
+        const fname = `wearscrubs-report_${from}_to_${to}.xlsx`;
+        XLSX.writeFile(wb, fname);
+    } catch (e) {
+        console.error('exportReportExcel failed', e);
+        alert('Gagal export Excel: ' + (e?.message || e));
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
     }
 }
 

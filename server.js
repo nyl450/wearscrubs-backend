@@ -1950,6 +1950,43 @@ app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/items-detail — per-transaction breakdown utk export Excel
+// Setiap row = 1 order_item. Disertakan disc per-line (dihitung dari discount_percent order).
+app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, res) => {
+    try {
+        const r = reportRange(req);
+        if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
+        const rows = await dbAll(
+            `SELECT o.paid_at,
+                    o.order_code,
+                    o.customer_name,
+                    o.order_source,
+                    COALESCE(o.discount_percent, 0)::int AS discount_percent,
+                    COALESCE(p.name, oi.custom_product_name) AS product_name,
+                    p.sku AS sku,
+                    COALESCE(p.category, oi.custom_product_category) AS category,
+                    oi.variant_type,
+                    oi.color,
+                    oi.size,
+                    oi.quantity::int AS quantity,
+                    oi.price::bigint AS unit_price,
+                    oi.is_bonus,
+                    oi.is_custom_size,
+                    oi.is_custom_product,
+                    oi.is_po
+               FROM order_items oi
+               JOIN orders o ON o.id = oi.order_id
+               LEFT JOIN products p ON p.id = oi.product_id
+              WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+                AND oi.is_bonus = FALSE
+                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+              ORDER BY o.paid_at ASC, o.order_code ASC`,
+            [r.from, r.to]
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/reports/items — barang terjual (exclude bonus/gift) dalam periode
 app.get('/api/reports/items', requireMenu('report','view'), async (req, res) => {
     try {
