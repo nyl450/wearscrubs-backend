@@ -856,6 +856,11 @@
                   <option value="collaboration_event">Collaboration Event (Consignment)</option>
                 </select>
               </div>
+              <div>
+                <label class="wa-field-label">Tanggal Order <span class="wa-optional">(utk invoice)</span></label>
+                <input type="date" id="wa-invoice-date" />
+                <p class="text-[10px] text-white/30 mt-1">Default hari ini. Ubah kalau customer minta tanggal khusus di invoice.</p>
+              </div>
               <div id="wa-billing-to-wrap" class="hidden sm:col-span-2">
                 <label class="wa-field-label">Ditagihkan Ke / Bill To (Partner) <span class="text-red-400">*</span></label>
                 <input type="text" id="wa-billing-to" placeholder="Nama pihak ke-2 / partner yang ditagih" />
@@ -8403,6 +8408,13 @@ async function waInitModule() {
         waAddItem();
     }
     document.getElementById('wa-shipping-cost').oninput = waUpdateTotal;
+    // Default tanggal order = hari ini (admin bisa override kalau customer minta tgl khusus).
+    // Set only kalau field masih kosong supaya tidak menimpa input admin yg lagi edit form.
+    const dateEl = document.getElementById('wa-invoice-date');
+    if (dateEl && !dateEl.value) {
+        const t = new Date();
+        dateEl.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    }
 }
 
 function waAddItem() {
@@ -9128,6 +9140,7 @@ async function waSubmitOrder() {
     const notes           = document.getElementById('wa-notes').value.trim();
     const orderSource     = document.getElementById('wa-order-source')?.value || 'whatsapp';
     const billingTo       = document.getElementById('wa-billing-to')?.value.trim() || '';
+    const invoiceDate     = document.getElementById('wa-invoice-date')?.value || '';
 
     if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
         alert('Lengkapi data pelanggan terlebih dahulu.'); return;
@@ -9325,7 +9338,7 @@ async function waSubmitOrder() {
         const res = await fetch(API + '/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
-            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: orderSource, payment_method: paymentMethod, discount_percent: waSelectedDiscount, billing_to: billingTo, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone, customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost, shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes, order_source: orderSource, payment_method: paymentMethod, discount_percent: waSelectedDiscount, billing_to: billingTo, invoice_date: invoiceDate || null, items, embroidery_details: embroideryDetails.length ? embroideryDetails : null })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
@@ -9533,6 +9546,12 @@ function waResetForm() {
         const srcEl = document.getElementById('wa-order-source'); if (srcEl) srcEl.value = 'whatsapp';
         const billEl = document.getElementById('wa-billing-to'); if (billEl) billEl.value = '';
         if (typeof waOnSourceChange === 'function') waOnSourceChange();
+        // Reset tanggal order → hari ini (anti customer-request lama nyangkut di order berikutnya).
+        const dateEl = document.getElementById('wa-invoice-date');
+        if (dateEl) {
+            const t = new Date();
+            dateEl.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+        }
         // Reset blok hasil ke kondisi default (pesan WA + tombol kirim tampil lagi).
         const instr = document.getElementById('wa-result-instruction'); if (instr) instr.innerHTML = '';
         ['wa-result-wa-block','wa-result-send-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); });
@@ -9760,7 +9779,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             </div>
             <div class="invoice-meta">
                 <p><strong>Invoice Number:</strong> ${esc(order.order_code||'-')}</p>
-                <p><strong>Invoice Date:</strong> ${fmtDate(order.created_at)}</p>
+                <p><strong>Invoice Date:</strong> ${fmtDate(order.invoice_date || order.created_at)}</p>
                 ${order.order_source ? `<p><strong>Sumber Order:</strong> ${esc(repSourceLabel(order.order_source))}</p>` : ''}
                 ${order.payment_method ? `<p><strong>Metode Bayar:</strong> ${esc(order.payment_method)}</p>` : ''}
                 ${order.billing_to ? `<p><strong>Ditagihkan ke (Partner):</strong> ${esc(order.billing_to)}</p>` : ''}

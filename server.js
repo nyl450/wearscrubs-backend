@@ -581,6 +581,12 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS additional_amount_due INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS additional_paid_at TIMESTAMP DEFAULT NULL`);
 
+    // ── Migrate: invoice_date override ────────────────────────────────────────
+    // Admin Kasir kadang perlu set tanggal khusus di invoice (customer request,
+    // mis. backdated invoice utk event yg lalu). Kalau NULL, invoice fallback ke
+    // created_at — perilaku lama tidak berubah utk order existing.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_date TIMESTAMPTZ DEFAULT NULL`);
+
     // ── Migrate: Temporary Order (loan/trial) feature ─────────────────────────
     // Customer pinjam barang sementara — bisa Size Trial (coba muat), Endorsement
     // (foto/video), atau Other (sponsorship/sample reseller). Stock potong saat kirim
@@ -2160,7 +2166,8 @@ app.post('/api/orders', async (req, res) => {
             order_source,    // 'website' atau 'whatsapp', default 'website'
             payment_method,  // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
             discount_percent,// 0, 5, atau 30 — hanya untuk WA order
-            billing_to       // nama partner yang ditagih (collaboration_event), admin-only
+            billing_to,      // nama partner yang ditagih (collaboration_event), admin-only
+            invoice_date     // override tanggal invoice (admin-only, opsional)
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
@@ -2305,6 +2312,15 @@ app.post('/api/orders', async (req, res) => {
             ? billing_to.trim().slice(0, 120)
             : null;
 
+        // invoice_date: admin override utk tanggal yg tampil di invoice (customer request,
+        // mis. backdated). YYYY-MM-DD dari client. Public callers DI-IGNORE (anti-tamper
+        // — supaya tidak bisa backdate sale di public checkout). Format invalid → NULL.
+        let safeInvoiceDate = null;
+        if (isAdmin && typeof invoice_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(invoice_date)) {
+            const d = new Date(invoice_date + 'T00:00:00Z');
+            if (!isNaN(d.getTime())) safeInvoiceDate = d.toISOString();
+        }
+
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED
         // server-side from city + qty (same rule as /api/shipping-cost) so the client
         // can't tamper the amount (e.g. send 0).
@@ -2362,8 +2378,8 @@ app.post('/api/orders', async (req, res) => {
                 `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
-                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
+                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
@@ -2376,7 +2392,8 @@ app.post('/api/orders', async (req, res) => {
                  discountAmount,
                  discountLabel,
                  logoAlreadyProvided,
-                 safeBillingTo]
+                 safeBillingTo,
+                 safeInvoiceDate]
             );
             const newOrderId = orderResult.rows[0].id;
 
