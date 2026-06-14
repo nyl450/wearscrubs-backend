@@ -495,6 +495,10 @@
             <button onclick="showModule('manual-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="manual-order">
                 <i class="fa-solid fa-cash-register w-4 text-xs"></i> Kasir
             </button>
+            <button onclick="showModule('temp-order')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="temp-order">
+                <i class="fa-solid fa-handshake w-4 text-xs"></i> Temporary Order
+                <span id="temporder-sidebar-badge" class="hidden ml-auto bg-cyan-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
+            </button>
             <button onclick="showModule('preorder')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="preorder">
                 <i class="fa-solid fa-clock w-4 text-xs"></i> Pre-Order
                 <span id="preorder-sidebar-badge" class="hidden ml-auto bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"></span>
@@ -759,6 +763,7 @@
         <div class="flex gap-2 overflow-x-auto pb-1 -mb-1" style="-webkit-overflow-scrolling:touch; scrollbar-width:none;">
             <button onclick="filterOrders('action_needed')" data-tab="action_needed" class="order-tab-btn active text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-black whitespace-nowrap shrink-0">🔴 Perlu Aksi <span id="order-count-action_needed" class="hidden ml-1 bg-red-400/20 text-red-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
             <button onclick="filterOrders('in_progress')" data-tab="in_progress" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🟡 Proses <span id="order-count-in_progress" class="hidden ml-1 bg-yellow-400/20 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
+            <button onclick="filterOrders('temporary_order')" data-tab="temporary_order" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">🤝 Temporary Order <span id="order-count-temporary_order" class="hidden ml-1 bg-cyan-400/20 text-cyan-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
             <button onclick="filterOrders('archive')" data-tab="archive" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">✓ Arsip <span id="order-count-archive" class="hidden ml-1 bg-white/10 text-white/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full">0</span></button>
             <button onclick="filterOrders('all')" data-tab="all" class="order-tab-btn text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 whitespace-nowrap shrink-0">Semua <span id="order-count-all" class="ml-1 text-[9px] font-bold opacity-50">0</span></button>
         </div>
@@ -1081,6 +1086,42 @@
         </div>
         <div id="preorder-list" class="space-y-2.5"></div>
         <div id="preorder-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada Pre-Order menunggu. 🎉</div>
+    </div>
+
+    <!-- ═══ TEMPORARY ORDER (LOAN / TRIAL) ═════════════════════════════════ -->
+    <div id="module-temp-order" class="hidden p-4 md:p-6 space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+                <h2 class="text-xl font-bold">Temporary Order</h2>
+                <p class="text-xs text-white/40 mt-0.5">Customer pinjam barang sementara — Size Trial / Endorsement / Other. Stok ter-deduct saat dikirim, balik otomatis saat barang terima.</p>
+            </div>
+            <button onclick="openCreateTempOrder()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition shrink-0">
+                <i class="fa-solid fa-plus"></i> Create New
+            </button>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+            <div class="bg-darkcard border border-cyan-400/20 rounded-2xl p-3">
+                <div id="tmp-stat-onprogress" class="text-xl font-bold text-cyan-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">On Progress</div>
+            </div>
+            <div class="bg-darkcard border border-amber-400/20 rounded-2xl p-3">
+                <div id="tmp-stat-payment" class="text-xl font-bold text-amber-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Payment</div>
+            </div>
+            <div class="bg-darkcard border border-green-400/20 rounded-2xl p-3">
+                <div id="tmp-stat-return" class="text-xl font-bold text-green-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Return</div>
+            </div>
+        </div>
+        <!-- Type filter chips -->
+        <div class="flex flex-wrap gap-1.5">
+            <button onclick="setTempOrderTypeFilter('all')" data-tof="all" class="tof-btn text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/20 text-white">All</button>
+            <button onclick="setTempOrderTypeFilter('size_trial')" data-tof="size_trial" class="tof-btn text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/5 text-white/50 hover:bg-white/10">🧪 Size Trial</button>
+            <button onclick="setTempOrderTypeFilter('endorsement')" data-tof="endorsement" class="tof-btn text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/5 text-white/50 hover:bg-white/10">📸 Endorsement</button>
+            <button onclick="setTempOrderTypeFilter('other')" data-tof="other" class="tof-btn text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/5 text-white/50 hover:bg-white/10">📦 Other</button>
+        </div>
+        <div id="temporder-list" class="space-y-2.5"></div>
+        <div id="temporder-empty" class="hidden text-center py-12 text-white/30 text-sm">Belum ada temporary order. Klik "Create New" untuk mulai.</div>
     </div>
 
     <!-- ═══ REPORT ═════════════════════════════════════════════════════════ -->
@@ -2022,6 +2063,110 @@
     </div>
 </div>
 
+<!-- TEMPORARY ORDER — CREATE MODAL -->
+<div id="tmpord-create-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1001] hidden items-center justify-center p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard">
+        <h3 class="font-bold">🤝 Create Temporary Order</h3>
+        <button onclick="closeCreateTempOrder()" class="text-white/40 hover:text-white"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <form id="tmpord-create-form" onsubmit="event.preventDefault(); submitTempOrder();" class="p-6 space-y-4">
+        <!-- Type & Notes -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Type *</label>
+                <select name="trial_type" required class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+                    <option value="size_trial">🧪 Size Trial</option>
+                    <option value="endorsement">📸 Endorsement</option>
+                    <option value="other">📦 Other</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Notes (opsional)</label>
+                <input name="notes" type="text" placeholder="IG handle, jadwal balik, dll" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+            </div>
+        </div>
+        <!-- Customer info -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Nama Customer *</label>
+                <input name="customer_name" type="text" required class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">No HP / WA *</label>
+                <input name="customer_phone" type="text" required placeholder="08xxx atau 62xxx" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+            </div>
+        </div>
+        <div>
+            <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Alamat *</label>
+            <textarea name="customer_address" required rows="2" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm resize-none"></textarea>
+        </div>
+        <!-- Courier & shipping -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Kota Tujuan</label>
+                <input name="shipping_city" type="text" placeholder="Jakarta Selatan…" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Kurir</label>
+                <select name="shipping_courier" id="tmpord-courier" onchange="onTmpOrderCourierChange()" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+                    <option value="Kirim sendiri">Kirim sendiri (Free)</option>
+                    <option value="Diambil di event / walkin">Pickup di tempat (Free)</option>
+                    <option value="JNE">JNE</option>
+                    <option value="J&amp;T">J&amp;T</option>
+                    <option value="Lion Parcel">Lion Parcel</option>
+                    <option value="SiCepat">SiCepat</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1 font-bold">Ongkir (Rp)</label>
+                <input name="shipping_cost" id="tmpord-shipcost" type="number" min="0" value="0" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm">
+            </div>
+        </div>
+        <!-- Items -->
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <label class="text-[10px] uppercase tracking-wider text-white/40 font-bold">Item Pinjaman</label>
+                <button type="button" onclick="addTempOrderItemRow()" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 transition">
+                    <i class="fa-solid fa-plus"></i> Tambah Item
+                </button>
+            </div>
+            <div id="tmpord-items-wrap" class="space-y-2"></div>
+            <p class="text-[10px] text-white/30 mt-2">⚠ Bordir, custom size, custom product, dan PO TIDAK diizinkan di temporary order.</p>
+        </div>
+        <!-- Submit -->
+        <div class="flex gap-2 pt-2 border-t border-white/10">
+            <button type="button" onclick="closeCreateTempOrder()" class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold">Batal</button>
+            <button type="submit" id="tmpord-submit-btn" class="flex-1 px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold">
+                <i class="fa-solid fa-paper-plane"></i> Kirim Pinjaman
+            </button>
+        </div>
+    </form>
+</div>
+</div>
+
+<!-- TEMPORARY ORDER — FINALIZE MODAL -->
+<div id="tmpord-finalize-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1001] hidden items-center justify-center p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center sticky top-0 bg-darkcard">
+        <h3 class="font-bold">📋 Finalize Trial</h3>
+        <button onclick="closeFinalizeModal()" class="text-white/40 hover:text-white"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div id="tmpord-finalize-body" class="p-6 space-y-3"></div>
+</div>
+</div>
+
+<!-- TEMPORARY ORDER — RECEIVE RETURNS MODAL -->
+<div id="tmpord-receive-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1001] hidden items-center justify-center p-4">
+<div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md">
+    <div class="px-6 py-4 border-b border-darkborder flex justify-between items-center">
+        <h3 class="font-bold">↩️ Terima Barang Kembali</h3>
+        <button onclick="closeReceiveModal()" class="text-white/40 hover:text-white"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div id="tmpord-receive-body" class="p-6 space-y-3"></div>
+</div>
+</div>
+
 <!-- PHOTO UPLOAD MODAL -->
 <div id="photo-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
 <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md">
@@ -2387,6 +2532,7 @@ function showModule(name) {
     if (name === 'refund')        loadRefunds();
     if (name === 'exchange')      loadExchanges();
     if (name === 'preorder')      loadPreOrders();
+    if (name === 'temp-order')    loadTempOrders();
     if (name === 'report')        reportInit();
     markViewOnly(name);
 }
@@ -2418,7 +2564,7 @@ function repSourceLabel(s) {
 }
 // Badge sumber order — dipakai konsisten di daftar pesanan, detail, & riwayat pembeli.
 // Sebelumnya cuma bedakan whatsapp vs "Web", jadi event_offline/offline keliru tampil Web.
-function orderSourceBadge(s) {
+function orderSourceBadge(s, trialType) {
     const map = {
         website:       { icon: 'fa-solid fa-globe',        label: 'Web',           cls: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
         whatsapp:      { icon: 'fa-brands fa-whatsapp',     label: 'WA',            cls: 'bg-green-500/15 text-green-400 border-green-500/20' },
@@ -2426,6 +2572,16 @@ function orderSourceBadge(s) {
         offline:       { icon: 'fa-solid fa-shop',          label: 'Walk-in',       cls: 'bg-purple-500/15 text-purple-300 border-purple-500/20' },
         collaboration_event: { icon: 'fa-solid fa-handshake', label: 'Collab',      cls: 'bg-pink-500/15 text-pink-300 border-pink-500/20' },
     };
+    // Trial badge — eksplisit terlihat type-nya (Size Trial / Endorsement / Other)
+    if (s === 'test_size') {
+        const tmap = {
+            size_trial:  { label: '🧪 SIZE TRIAL',  cls: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+            endorsement: { label: '📸 ENDORSEMENT', cls: 'bg-pink-500/15 text-pink-300 border-pink-500/30' },
+            other:       { label: '📦 OTHER LOAN',  cls: 'bg-gray-500/15 text-gray-300 border-gray-500/30' },
+        };
+        const t = tmap[trialType] || tmap.other;
+        return `<span class="status-badge border ${t.cls}">${t.label}</span>`;
+    }
     const m = map[s] || { icon: 'fa-solid fa-tag', label: esc(s || '—'), cls: 'bg-white/10 text-white/40 border-white/10' };
     return `<span class="status-badge border ${m.cls}"><i class="${m.icon} mr-1"></i>${m.label}</span>`;
 }
@@ -2728,6 +2884,363 @@ function updatePreOrderBadge(count) {
     if (!badge) return;
     if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); }
     else badge.classList.add('hidden');
+}
+
+// ─── TEMPORARY ORDER (LOAN / TRIAL) ──────────────────────────────────────────
+let tempOrders = [];
+let tempOrderTypeFilter = 'all';
+let tempOrderInventoryCache = [];   // cache /api/inventory/all utk dropdown items
+const TRIAL_FREE_COURIERS_FE = ['Kirim sendiri', 'Diambil di event / walkin'];
+
+function trialTypeBadge(t) {
+    const map = {
+        size_trial:  { icon: '🧪', label: 'SIZE TRIAL', cls: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+        endorsement: { icon: '📸', label: 'ENDORSEMENT', cls: 'bg-pink-500/15 text-pink-300 border-pink-500/30' },
+        other:       { icon: '📦', label: 'OTHER', cls: 'bg-gray-500/15 text-gray-300 border-gray-500/30' },
+    };
+    const m = map[t] || map.other;
+    return `<span class="text-[10px] font-bold px-2 py-0.5 rounded border ${m.cls}">${m.icon} ${m.label}</span>`;
+}
+
+function trialStatusLabel(s) {
+    return ({ test_sent: '🚚 On Progress', test_pending_pay: '💳 Payment', test_pending_return: '↩️ Return', done: '✓ Done', cancelled: '❌ Cancelled' })[s] || s;
+}
+
+function trialDayN(sentAt) {
+    if (!sentAt) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(sentAt).getTime()) / 86400000));
+}
+
+function trialDayClass(d) { return d >= 14 ? 'text-red-400' : d >= 7 ? 'text-orange-300' : 'text-white/50'; }
+
+async function loadTempOrders() {
+    const listEl = document.getElementById('temporder-list');
+    const emptyEl = document.getElementById('temporder-empty');
+    if (listEl) listEl.innerHTML = '<div class="text-center py-8 text-white/30 text-sm">Memuat…</div>';
+    try {
+        // Fetch all orders, filter trial. (Reuse existing endpoint — no separate "list"
+        // endpoint utk hindari duplikasi logic; backend GET /api/orders sudah cukup.)
+        const allOrders = await apiFetch('/api/orders');
+        tempOrders = allOrders.filter(o => o.order_source === 'test_size');
+        // Stats: count by status
+        const cntProg = tempOrders.filter(o => o.order_status === 'test_sent').length;
+        const cntPay  = tempOrders.filter(o => o.order_status === 'test_pending_pay').length;
+        const cntRet  = tempOrders.filter(o => o.order_status === 'test_pending_return').length;
+        const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        setTxt('tmp-stat-onprogress', cntProg);
+        setTxt('tmp-stat-payment', cntPay);
+        setTxt('tmp-stat-return', cntRet);
+        // Sidebar badge = active total (sent + pending_pay + pending_return)
+        const badge = document.getElementById('temporder-sidebar-badge');
+        const active = cntProg + cntPay + cntRet;
+        if (badge) {
+            if (active > 0) { badge.textContent = active; badge.classList.remove('hidden'); }
+            else badge.classList.add('hidden');
+        }
+        renderTempOrderList();
+    } catch (e) {
+        console.error('loadTempOrders failed', e);
+        if (listEl) listEl.innerHTML = `<p class="text-red-400 text-xs">Gagal memuat: ${esc(e?.message || e)}</p>`;
+    }
+}
+
+function setTempOrderTypeFilter(t) {
+    tempOrderTypeFilter = t;
+    document.querySelectorAll('.tof-btn').forEach(b => {
+        const a = b.dataset.tof === t;
+        b.className = `tof-btn text-[11px] font-bold px-2.5 py-1 rounded-lg ${a ? 'bg-white/20 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`;
+    });
+    renderTempOrderList();
+}
+
+function renderTempOrderList() {
+    const listEl = document.getElementById('temporder-list');
+    const emptyEl = document.getElementById('temporder-empty');
+    if (!listEl) return;
+    // Hanya tampil active orders di module utama (done/cancelled di Manajemen Pesanan Arsip).
+    let rows = tempOrders.filter(o => ['test_sent','test_pending_pay','test_pending_return'].includes(o.order_status));
+    if (tempOrderTypeFilter !== 'all') rows = rows.filter(o => o.trial_type === tempOrderTypeFilter);
+    if (!rows.length) {
+        listEl.innerHTML = '';
+        if (emptyEl) emptyEl.classList.remove('hidden');
+        return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+    listEl.innerHTML = rows.map(o => {
+        const day = trialDayN(o.test_sent_at);
+        const itemSummary = (o.items || []).map(i =>
+            `<div class="text-xs text-white/60">• ${esc(i.product_name || '')} (${esc(i.color || '')}${i.variant_type && i.variant_type !== 'null' ? ', ' + esc(i.variant_type) : ''}, ${esc(i.size || '')}) ×${i.quantity}${i.is_test_returned ? ' <span class="text-amber-300">[RETURN]</span>' : (o.order_status !== 'test_sent' ? ' <span class="text-green-300">[KEEP]</span>' : '')}</div>`
+        ).join('');
+        // Tombol aksi sesuai status:
+        let actionBtn = '';
+        if (o.order_status === 'test_sent') {
+            actionBtn = `<button onclick="openFinalizeTrialModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold"><i class="fa-solid fa-clipboard-check"></i> Finalize</button>`;
+        } else if (o.order_status === 'test_pending_pay') {
+            actionBtn = `<span class="text-xs text-amber-300 font-bold">💳 Tunggu Bayar Rp ${Number(o.total_amount).toLocaleString('id-ID')}</span>
+                         <button onclick="openOrderDetail(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold ml-2">Konfirmasi Bayar</button>`;
+        } else if (o.order_status === 'test_pending_return') {
+            actionBtn = `<button onclick="openReceiveReturnsModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold"><i class="fa-solid fa-rotate-left"></i> Terima Barang</button>`;
+        }
+        return `
+        <div class="bg-darkcard border border-white/10 rounded-2xl p-4 space-y-2">
+            <div class="flex items-start justify-between gap-2 flex-wrap">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        ${trialTypeBadge(o.trial_type)}
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-white/5 text-white/60">${trialStatusLabel(o.order_status)}</span>
+                        <span class="font-mono font-bold text-xs">${esc(o.order_code)}</span>
+                    </div>
+                    <p class="text-sm font-bold">${esc(o.customer_name)}</p>
+                    <p class="text-[11px] text-white/40">${esc(o.customer_phone)} · ${esc(o.shipping_city || '-')} · ${esc(o.shipping_courier || '-')}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] text-white/30">Day</p>
+                    <p class="text-lg font-bold ${trialDayClass(day)}">${day}</p>
+                </div>
+            </div>
+            <div class="space-y-0.5 pt-1 border-t border-white/5">${itemSummary}</div>
+            <div class="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-white/5">
+                <button onclick="openOrderDetail(${o.id})" class="text-[11px] text-white/40 hover:text-white"><i class="fa-solid fa-external-link"></i> Detail</button>
+                <div class="flex items-center gap-2">${actionBtn}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ── CREATE TEMPORARY ORDER ──
+async function openCreateTempOrder() {
+    // Reset form
+    document.getElementById('tmpord-create-form')?.reset();
+    document.getElementById('tmpord-items-wrap').innerHTML = '';
+    // Load inventory cache (sekali per buka modal — fresh stock data)
+    try {
+        tempOrderInventoryCache = await apiFetch('/api/inventory/all');
+    } catch (e) {
+        alert('Gagal load inventory: ' + (e?.message || e)); return;
+    }
+    // Add 1 empty row
+    addTempOrderItemRow();
+    document.getElementById('tmpord-create-modal').classList.remove('hidden');
+    document.getElementById('tmpord-create-modal').classList.add('flex');
+}
+
+function closeCreateTempOrder() {
+    document.getElementById('tmpord-create-modal').classList.add('hidden');
+    document.getElementById('tmpord-create-modal').classList.remove('flex');
+}
+
+function onTmpOrderCourierChange() {
+    const courier = document.getElementById('tmpord-courier').value;
+    const ship = document.getElementById('tmpord-shipcost');
+    if (TRIAL_FREE_COURIERS_FE.includes(courier)) {
+        ship.value = 0;
+        ship.disabled = true;
+        ship.classList.add('opacity-40');
+    } else {
+        ship.disabled = false;
+        ship.classList.remove('opacity-40');
+    }
+}
+
+function addTempOrderItemRow() {
+    const wrap = document.getElementById('tmpord-items-wrap');
+    const idx = wrap.children.length;
+    const row = document.createElement('div');
+    row.className = 'tmpord-item-row flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl p-2';
+    // Build select options: each option = one inventory variant with stock > 0
+    const opts = tempOrderInventoryCache
+        .filter(inv => Number(inv.stock) > 0)
+        .map(inv => {
+            const v = inv.variant_type && inv.variant_type !== 'null' ? ` · ${inv.variant_type}` : '';
+            const val = JSON.stringify({ product_id: inv.product_id, size: inv.size, color: inv.color, variant_type: inv.variant_type, stock: inv.stock });
+            return `<option value='${esc(val).replace(/'/g, "&apos;")}'>${esc(inv.product_name)} · ${esc(inv.color)}${v} · ${esc(inv.size)} (stok: ${inv.stock})</option>`;
+        }).join('');
+    row.innerHTML = `
+        <select class="tmpord-item-variant flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs" required>
+            <option value="">-- Pilih item --</option>
+            ${opts}
+        </select>
+        <input type="number" min="1" value="1" class="tmpord-item-qty w-16 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs" required>
+        <button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 text-xs px-2"><i class="fa-solid fa-trash"></i></button>
+    `;
+    wrap.appendChild(row);
+}
+
+async function submitTempOrder() {
+    const form = document.getElementById('tmpord-create-form');
+    const fd = new FormData(form);
+    const items = [];
+    document.querySelectorAll('.tmpord-item-row').forEach(row => {
+        const sel = row.querySelector('.tmpord-item-variant');
+        const qty = row.querySelector('.tmpord-item-qty');
+        if (!sel.value) return;
+        try {
+            const parsed = JSON.parse(sel.value);
+            const qtyN = parseInt(qty.value || 1);
+            if (qtyN > Number(parsed.stock)) {
+                throw new Error(`Qty ${qtyN} > stok ${parsed.stock} untuk varian terpilih`);
+            }
+            items.push({
+                product_id: parsed.product_id,
+                size: parsed.size,
+                color: parsed.color,
+                variant_type: parsed.variant_type,
+                quantity: qtyN
+            });
+        } catch (e) { alert(e.message); throw e; }
+    });
+    if (!items.length) { alert('Tambah minimal 1 item dulu'); return; }
+    const payload = {
+        customer_name: fd.get('customer_name'),
+        customer_phone: fd.get('customer_phone'),
+        customer_address: fd.get('customer_address'),
+        shipping_city: fd.get('shipping_city') || '',
+        shipping_courier: fd.get('shipping_courier'),
+        shipping_cost: parseInt(fd.get('shipping_cost') || 0),
+        notes: fd.get('notes') || '',
+        trial_type: fd.get('trial_type'),
+        items
+    };
+    const btn = document.getElementById('tmpord-submit-btn');
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengirim…';
+    try {
+        const res = await apiFetch('/api/temp-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        closeCreateTempOrder();
+        alert(`✅ Temporary Order ${res.order_code} berhasil dibuat. Stok ter-deduct.`);
+        loadTempOrders();
+    } catch (e) {
+        alert('Gagal: ' + (e?.message || e));
+    } finally {
+        btn.disabled = false; btn.innerHTML = orig;
+    }
+}
+
+// ── FINALIZE TRIAL MODAL ──
+function openFinalizeTrialModal(orderId) {
+    const o = tempOrders.find(x => x.id === orderId);
+    if (!o) { alert('Order tidak ditemukan di cache, refresh dulu'); return; }
+    const body = document.getElementById('tmpord-finalize-body');
+    const ongkirCharge = TRIAL_FREE_COURIERS_FE.includes((o.shipping_courier || '').trim()) ? 0 : Number(o.shipping_cost || 0);
+    const itemsHtml = (o.items || []).map(it => {
+        const variantLine = `${esc(it.product_name)} · ${esc(it.color)}${it.variant_type && it.variant_type !== 'null' ? ' · ' + esc(it.variant_type) : ''} · ${esc(it.size)} ×${it.quantity}`;
+        return `
+        <div class="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
+            <p class="text-xs font-bold">${variantLine}</p>
+            <p class="text-[10px] text-white/40">Harga: Rp ${Number(it.price).toLocaleString('id-ID')} × ${it.quantity} = Rp ${(Number(it.price) * Number(it.quantity)).toLocaleString('id-ID')}</p>
+            <div class="flex gap-2 text-xs">
+                <label class="flex items-center gap-1.5 cursor-pointer flex-1 bg-green-500/5 border border-green-500/20 rounded-lg px-2 py-1.5 hover:bg-green-500/10">
+                    <input type="radio" name="dec-${it.id}" value="keep" class="finalize-dec" data-item-id="${it.id}" data-price="${it.price}" data-qty="${it.quantity}" onchange="updateFinalizePreview(${o.id})">
+                    <span class="text-green-300 font-bold">✓ Keep</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer flex-1 bg-amber-500/5 border border-amber-500/20 rounded-lg px-2 py-1.5 hover:bg-amber-500/10">
+                    <input type="radio" name="dec-${it.id}" value="return" class="finalize-dec" data-item-id="${it.id}" data-price="${it.price}" data-qty="${it.quantity}" onchange="updateFinalizePreview(${o.id})">
+                    <span class="text-amber-300 font-bold">↩ Return</span>
+                </label>
+            </div>
+        </div>`;
+    }).join('');
+    body.innerHTML = `
+        <p class="text-xs text-white/60">${esc(o.customer_name)} · <span class="font-mono">${esc(o.order_code)}</span></p>
+        <div class="space-y-2">${itemsHtml}</div>
+        <div class="bg-cyan-500/5 border border-cyan-400/20 rounded-xl p-3 space-y-1 text-xs">
+            <div class="flex justify-between"><span class="text-white/50">Subtotal Kept:</span><span class="font-bold" id="finalize-kept-total">Rp 0</span></div>
+            <div class="flex justify-between"><span class="text-white/50">Ongkir ${ongkirCharge === 0 ? '(Free)' : ''}:</span><span class="font-bold">Rp ${ongkirCharge.toLocaleString('id-ID')}</span></div>
+            <div class="flex justify-between pt-1 border-t border-white/10"><span class="text-white/70">Total Tagihan:</span><span class="font-bold text-cyan-300 text-base" id="finalize-grand-total">Rp ${ongkirCharge.toLocaleString('id-ID')}</span></div>
+            <p class="text-[10px] text-white/40 mt-1" id="finalize-route-info">${ongkirCharge > 0 ? '→ Masuk Payment (ada tagihan ongkir)' : '→ Masuk Return (gratis + 0 kept)'}</p>
+        </div>
+        <div class="flex gap-2 pt-2">
+            <button onclick="closeFinalizeModal()" class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold">Batal</button>
+            <button onclick="submitFinalizeTrial(${o.id}, ${ongkirCharge})" class="flex-1 px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold">Lanjutkan</button>
+        </div>
+    `;
+    // Default all to "keep" supaya preview tampil benar
+    body.querySelectorAll('input.finalize-dec[value="keep"]').forEach(r => r.checked = true);
+    updateFinalizePreview(orderId);
+    document.getElementById('tmpord-finalize-modal').classList.remove('hidden');
+    document.getElementById('tmpord-finalize-modal').classList.add('flex');
+}
+
+function updateFinalizePreview(orderId) {
+    const o = tempOrders.find(x => x.id === orderId);
+    if (!o) return;
+    const ongkirCharge = TRIAL_FREE_COURIERS_FE.includes((o.shipping_courier || '').trim()) ? 0 : Number(o.shipping_cost || 0);
+    let keptTotal = 0;
+    document.querySelectorAll('input.finalize-dec:checked').forEach(r => {
+        if (r.value === 'keep') {
+            keptTotal += Number(r.dataset.price) * Number(r.dataset.qty);
+        }
+    });
+    const grand = keptTotal + ongkirCharge;
+    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setTxt('finalize-kept-total', 'Rp ' + keptTotal.toLocaleString('id-ID'));
+    setTxt('finalize-grand-total', 'Rp ' + grand.toLocaleString('id-ID'));
+    const info = document.getElementById('finalize-route-info');
+    if (info) info.textContent = grand > 0 ? '→ Masuk Payment (perlu konfirmasi bayar)' : '→ Masuk Return langsung (gak ada tagihan)';
+}
+
+function closeFinalizeModal() {
+    document.getElementById('tmpord-finalize-modal').classList.add('hidden');
+    document.getElementById('tmpord-finalize-modal').classList.remove('flex');
+}
+
+async function submitFinalizeTrial(orderId) {
+    const decisions = [];
+    document.querySelectorAll('input.finalize-dec:checked').forEach(r => {
+        decisions.push({ item_id: Number(r.dataset.itemId), action: r.value });
+    });
+    if (!decisions.length) { alert('Belum ada keputusan per item'); return; }
+    try {
+        const res = await apiFetch(`/api/temp-orders/${orderId}/finalize`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decisions })
+        });
+        closeFinalizeModal();
+        alert(`✅ Finalize OK. Status: ${trialStatusLabel(res.next_status)}. Total tagihan: Rp ${Number(res.total).toLocaleString('id-ID')}`);
+        loadTempOrders();
+    } catch (e) { alert('Gagal: ' + (e?.message || e)); }
+}
+
+// ── RECEIVE RETURNS MODAL ──
+function openReceiveReturnsModal(orderId) {
+    const o = tempOrders.find(x => x.id === orderId);
+    if (!o) return;
+    const returnedItems = (o.items || []).filter(i => i.is_test_returned);
+    const keptItems = (o.items || []).filter(i => !i.is_test_returned);
+    const body = document.getElementById('tmpord-receive-body');
+    body.innerHTML = `
+        <p class="text-xs text-white/60">${esc(o.customer_name)} · <span class="font-mono">${esc(o.order_code)}</span></p>
+        <div class="bg-amber-500/5 border border-amber-400/20 rounded-xl p-3 space-y-1 text-xs">
+            <p class="font-bold text-amber-300">↩ Item yang dikembalikan (akan restore stok):</p>
+            ${returnedItems.map(i => `<p>• ${esc(i.product_name)} · ${esc(i.color)} · ${esc(i.size)} ×${i.quantity}</p>`).join('')}
+        </div>
+        ${keptItems.length ? `
+        <div class="bg-green-500/5 border border-green-400/20 rounded-xl p-3 space-y-1 text-xs">
+            <p class="font-bold text-green-300">✓ Item yang dipertahankan (tetap di customer):</p>
+            ${keptItems.map(i => `<p>• ${esc(i.product_name)} · ${esc(i.color)} · ${esc(i.size)} ×${i.quantity}</p>`).join('')}
+        </div>` : `<p class="text-[11px] text-white/50 italic">Semua dibalikin → trial akan ditutup sebagai <span class="text-red-300 font-bold">cancelled</span>.</p>`}
+        <p class="text-[10px] text-white/40">Klik konfirmasi hanya kalau barang sudah fisik di tangan kamu.</p>
+        <div class="flex gap-2 pt-2">
+            <button onclick="closeReceiveModal()" class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold">Batal</button>
+            <button onclick="confirmReceiveReturns(${o.id})" class="flex-1 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-bold">Terima &amp; Selesai</button>
+        </div>
+    `;
+    document.getElementById('tmpord-receive-modal').classList.remove('hidden');
+    document.getElementById('tmpord-receive-modal').classList.add('flex');
+}
+
+function closeReceiveModal() {
+    document.getElementById('tmpord-receive-modal').classList.add('hidden');
+    document.getElementById('tmpord-receive-modal').classList.remove('flex');
+}
+
+async function confirmReceiveReturns(orderId) {
+    try {
+        const res = await apiFetch(`/api/temp-orders/${orderId}/receive-returns`, { method: 'PUT' });
+        closeReceiveModal();
+        alert(`✅ Selesai. Status final: ${res.final_status === 'done' ? 'DONE (ada item kept)' : 'CANCELLED (semua dibalikin)'}`);
+        loadTempOrders();
+    } catch (e) { alert('Gagal: ' + (e?.message || e)); }
 }
 
 // ─── OVERVIEW ────────────────────────────────────────────────────────────────
@@ -3345,18 +3858,33 @@ function resolveColor(colorId) {
         || { label: colorId, hex: '#888' };
 }
 
+let cachedLoanCounts = {};      // map `${pid}|${size}|${color}|${vtype}` → {qty_out, order_count}
 async function loadInventory() {
     try {
-        // Parallel fetch — inventory + reservations
-        const [inv, reservations] = await Promise.all([
+        // Parallel fetch — inventory + reservations + active loan counts
+        const [inv, reservations, loans] = await Promise.all([
             apiFetch('/api/inventory/all'),
-            apiFetch('/api/inventory/reservations').catch(() => ({}))
+            apiFetch('/api/inventory/reservations').catch(() => ({})),
+            apiFetch('/api/temp-orders/active-counts').catch(() => [])
         ]);
         cachedInventoryAll = inv;
         cachedReservations = reservations || {};
+        // Build O(1) lookup keyed sama dgn reservations untuk reuse pattern.
+        cachedLoanCounts = {};
+        for (const r of (loans || [])) {
+            const k = `${r.product_id}|${r.size}|${r.color}|${r.variant_type}`;
+            cachedLoanCounts[k] = { qty_out: r.qty_out, order_count: r.order_count };
+        }
         // Apply persisted view mode (via setInvView so bulk-button visibility syncs too)
         setInvView(invViewMode);
     } catch(e) { toast('Gagal load inventori: ' + e.message, true); }
+}
+
+function loanBadgeForVariant(pid, size, color, vtype) {
+    const k = `${pid}|${size}|${color}|${vtype || 'null'}`;
+    const l = cachedLoanCounts[k];
+    if (!l || !l.qty_out) return '';
+    return `<span class="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-400/25" title="${l.qty_out} item lagi keluar (loan) di ${l.order_count} order"><span>🧪</span> ${l.qty_out} keluar</span>`;
 }
 
 function setInvView(mode) {
@@ -3757,6 +4285,7 @@ function renderInventory() {
                         onblur="invSaveOnBlur(this)">
                     <span class="${stockClass} text-xs flex-1 min-w-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
                     ${poBadge}
+                    ${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}
                     ${rejectBadge}
                     <div class="flex gap-1.5 shrink-0">
                         <button onclick="openReceiveStock(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
@@ -4576,43 +5105,50 @@ function applyDateFilter(orders) {
     });
 }
 
-// Predicates per status — single source of truth shared by counts + filter + subtabs
+// Predicates per status — single source of truth shared by counts + filter + subtabs.
+// Trial orders (order_source='test_size') punya state machine sendiri (test_sent /
+// test_pending_pay / test_pending_return) — semua predicate "regular" exclude trial
+// supaya tidak nyampur di group Proses/Perlu Aksi.
+const isNotTrial = o => o.order_source !== 'test_size';
 const ORDER_PREDS = {
-    pending:   o => o.payment_status === 'pending' && o.order_status !== 'cancelled',
-    paid:      o => o.payment_status === 'paid'    && o.order_status !== 'cancelled',
+    pending:   o => o.payment_status === 'pending' && o.order_status !== 'cancelled' && isNotTrial(o),
+    paid:      o => o.payment_status === 'paid'    && o.order_status !== 'cancelled' && isNotTrial(o),
     bordir:    o => o.order_status === 'bordir',
     packed:    o => o.order_status === 'packed',
     shipped:   o => o.order_status === 'shipped',
     done:      o => o.order_status === 'done',
     cancelled: o => o.order_status === 'cancelled',
-    // Sub-predicates utk Perlu Aksi
-    minta_logo:    o => o.has_bordir_logo && !o.bordir_logo_requested && o.payment_status === 'paid' && o.order_status !== 'cancelled',
-    review_bordir: o => o.payment_status === 'paid' && (o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status === 'pending' && o.order_status !== 'cancelled',
-    // Sub-predicates utk Proses (PO/Custom unfulfilled)
+    // Sub-predicates utk Perlu Aksi (regular orders only)
+    minta_logo:    o => isNotTrial(o) && o.has_bordir_logo && !o.bordir_logo_requested && o.payment_status === 'paid' && o.order_status !== 'cancelled',
+    review_bordir: o => isNotTrial(o) && o.payment_status === 'paid' && (o.has_bordir_logo || o.has_bordir_nama) && o.bordir_status === 'pending' && o.order_status !== 'cancelled',
+    // Sub-predicates utk Proses (PO/Custom unfulfilled) — exclude trial
     tunggu_po: o =>
-        o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
+        isNotTrial(o) && o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
         (o.items || []).some(i => i.is_po && !i.po_fulfilled),
     tunggu_custom: o =>
-        o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
+        isNotTrial(o) && o.payment_status === 'paid' && ['confirmed','bordir'].includes(o.order_status) &&
         (o.items || []).some(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled),
-    // Action-oriented predicates utk sub-tab Proses.
-    // "Dikemas" = aksi BERIKUTNYA admin = kemas (status confirmed, tidak ada blocker
-    // PO/custom). Exclude order yg masih tunggu_po/tunggu_custom — biar tidak dobel
-    // hitung & label jelas: kalau ada item belum siap, masuk Tunggu PO/Custom dulu.
+    // Action-oriented predicates utk sub-tab Proses — exclude trial.
     to_pack: o =>
-        o.payment_status === 'paid' && o.order_status === 'confirmed' &&
+        isNotTrial(o) && o.payment_status === 'paid' && o.order_status === 'confirmed' &&
         !(o.items || []).some(i =>
             (i.is_po || i.is_custom_size || i.is_custom_product) && !i.po_fulfilled
         ),
-    // "Dikirim" = aksi BERIKUTNYA = isi resi + kirim (status packed).
-    to_ship:    o => o.order_status === 'packed',
-    // "Diterima" = aksi BERIKUTNYA = tandai customer terima (status shipped).
-    to_receive: o => o.order_status === 'shipped',
+    to_ship:    o => isNotTrial(o) && o.order_status === 'packed',
+    to_receive: o => isNotTrial(o) && o.order_status === 'shipped',
+    // Trial sub-predicates (Temporary Order group)
+    loan_on_progress: o => o.order_source === 'test_size' && o.order_status === 'test_sent',
+    loan_payment:     o => o.order_source === 'test_size' && o.order_status === 'test_pending_pay',
+    loan_return:      o => o.order_source === 'test_size' && o.order_status === 'test_pending_return',
     // Group predicates
     action_needed: o =>
         ORDER_PREDS.pending(o) || ORDER_PREDS.minta_logo(o) || ORDER_PREDS.review_bordir(o),
     in_progress: o =>
-        o.payment_status === 'paid' && ['confirmed','bordir','packed','shipped'].includes(o.order_status),
+        isNotTrial(o) && o.payment_status === 'paid' && ['confirmed','bordir','packed','shipped'].includes(o.order_status),
+    // Group baru utk Temporary Order: semua trial active (sebelum done/cancelled).
+    // Done/cancelled trial tetap masuk Arsip universal (with type badge).
+    temporary_order: o =>
+        o.order_source === 'test_size' && ['test_sent','test_pending_pay','test_pending_return'].includes(o.order_status),
     archive: o => o.order_status === 'done' || o.order_status === 'cancelled',
 };
 
@@ -4631,6 +5167,11 @@ const SUBTABS = {
         { key: 'to_ship',       label: '🚚 Dikirim',       color: 'indigo' },
         { key: 'to_receive',    label: '📬 Diterima',      color: 'green' },
     ],
+    temporary_order: [
+        { key: 'loan_on_progress', label: '🚚 On Progress', color: 'cyan' },
+        { key: 'loan_payment',     label: '💳 Payment',     color: 'amber' },
+        { key: 'loan_return',      label: '↩️ Return',      color: 'green' },
+    ],
     archive: [
         { key: 'done',      label: '✔ Selesai',     color: 'green' },
         { key: 'cancelled', label: '❌ Dibatalkan', color: 'red' },
@@ -4642,10 +5183,11 @@ let currentSubFilter = null;   // null = group total, or specific status key
 function updateOrderTabCounts() {
     const dateScoped = applyDateFilter(cachedOrders);
     const counts = {
-        all:           dateScoped.length,
-        action_needed: dateScoped.filter(ORDER_PREDS.action_needed).length,
-        in_progress:   dateScoped.filter(ORDER_PREDS.in_progress).length,
-        archive:       dateScoped.filter(ORDER_PREDS.archive).length,
+        all:             dateScoped.length,
+        action_needed:   dateScoped.filter(ORDER_PREDS.action_needed).length,
+        in_progress:     dateScoped.filter(ORDER_PREDS.in_progress).length,
+        temporary_order: dateScoped.filter(ORDER_PREDS.temporary_order).length,
+        archive:         dateScoped.filter(ORDER_PREDS.archive).length,
     };
     Object.entries(counts).forEach(([tab, count]) => {
         const badge = document.getElementById('order-count-' + tab);
@@ -4788,7 +5330,7 @@ function renderOrders() {
                 ${o.payment_status==='pending' ? '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">⏳ Belum Bayar</span>' : ''}
                 ${o.payment_status==='paid'    ? '<span class="status-badge border bg-green-500/10 text-green-400 border-green-500/20">✅ Lunas</span>' : ''}
                 ${bordirBadge}${logoBadge}${poBadge}${customBadge}
-                ${orderSourceBadge(o.order_source)}
+                ${orderSourceBadge(o.order_source, o.trial_type)}
             </div>
             <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-darkborder ${orderBulkMode ? 'hidden' : ''}">
                 <button onclick="event.stopPropagation();viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">📋 Detail</button>
@@ -5717,7 +6259,7 @@ async function viewOrder(id) {
         <div class="flex flex-wrap gap-2">
             ${statusBadge(o.order_status)}
             ${o.payment_status==='paid' ? '<span class="status-badge border bg-green-500/10 text-green-400 border-green-500/20">✅ Lunas</span>' : '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">⏳ Belum Bayar</span>'}
-            ${orderSourceBadge(o.order_source)}
+            ${orderSourceBadge(o.order_source, o.trial_type)}
             ${o.payment_method ? `<span class="status-badge border bg-white/5 text-white/60 border-white/10"><i class="fa-solid fa-money-bill-wave mr-1"></i>${esc(o.payment_method)}</span>` : ''}
             ${hasBordir ? `<span class="status-badge border bg-purple-500/10 text-purple-300 border-purple-500/20">${o.has_bordir_logo ? '🎨' : ''}${o.has_bordir_nama ? '✏️' : ''} Bordir</span>` : ''}
         </div>
@@ -7356,6 +7898,7 @@ const MENU_DEFS = [
     { key: 'popular',      label: 'Popular',        icon: 'fa-star',         editable: true },
     { key: 'orders',       label: 'Pesanan',        icon: 'fa-bag-shopping', editable: true },
     { key: 'manual-order', label: 'Kasir', icon: 'fa-cash-register',    editable: true },
+    { key: 'temp-order',   label: 'Temporary Order', icon: 'fa-handshake',   editable: true },
     { key: 'preorder',     label: 'Pre-Order',      icon: 'fa-clock',        editable: false },
     { key: 'refund',       label: 'Refund',         icon: 'fa-rotate-left',  editable: true },
     { key: 'exchange',     label: 'Tukar Size',     icon: 'fa-right-left',   editable: true },
