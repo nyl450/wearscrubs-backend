@@ -3008,10 +3008,16 @@ function renderTempOrderList() {
 }
 
 // ── CREATE TEMPORARY ORDER ──
+// Cascade dropdown ala Kasir: Produk → Warna → Variant → Ukuran → Qty.
+// Sumber data: /api/inventory/all (sudah include product_name, sku, category, stock).
+// Hierarki dibangun on-demand di setiap cascade step, filter stock>0 di tiap level.
+let tempOrderRowIdx = 0;
+
 async function openCreateTempOrder() {
     // Reset form
     document.getElementById('tmpord-create-form')?.reset();
     document.getElementById('tmpord-items-wrap').innerHTML = '';
+    tempOrderRowIdx = 0;
     // Load inventory cache (sekali per buka modal — fresh stock data)
     try {
         tempOrderInventoryCache = await apiFetch('/api/inventory/all');
@@ -3042,28 +3048,180 @@ function onTmpOrderCourierChange() {
     }
 }
 
+// Build unique product list (only products with at least one in-stock variant).
+function tmpGetProducts() {
+    const seen = new Map();
+    tempOrderInventoryCache.forEach(inv => {
+        if (Number(inv.stock) > 0 && !seen.has(inv.product_id)) {
+            seen.set(inv.product_id, { id: inv.product_id, name: inv.product_name, category: inv.category });
+        }
+    });
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function tmpGetColors(pid) {
+    const colors = new Set();
+    tempOrderInventoryCache.forEach(inv => {
+        if (inv.product_id == pid && Number(inv.stock) > 0) colors.add(inv.color);
+    });
+    return [...colors].sort();
+}
+
+function tmpGetVariants(pid, color) {
+    const variants = new Set();
+    tempOrderInventoryCache.forEach(inv => {
+        if (inv.product_id == pid && inv.color === color && Number(inv.stock) > 0) {
+            variants.add(inv.variant_type || 'null');
+        }
+    });
+    return [...variants].sort();
+}
+
+function tmpGetSizes(pid, color, vtype) {
+    const sizes = [];
+    tempOrderInventoryCache.forEach(inv => {
+        if (inv.product_id == pid && inv.color === color &&
+            (inv.variant_type || 'null') === vtype && Number(inv.stock) > 0) {
+            sizes.push({ size: inv.size, stock: Number(inv.stock) });
+        }
+    });
+    // Sort: S, M, L, XL, XXL, lalu sisanya
+    const order = { 'S': 1, 'M': 2, 'L': 3, 'XL': 4, 'XXL': 5 };
+    sizes.sort((a, b) => (order[a.size] || 99) - (order[b.size] || 99));
+    return sizes;
+}
+
 function addTempOrderItemRow() {
     const wrap = document.getElementById('tmpord-items-wrap');
-    const idx = wrap.children.length;
+    const idx = ++tempOrderRowIdx;
+    const products = tmpGetProducts();
+    const prodOpts = products.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
     const row = document.createElement('div');
-    row.className = 'tmpord-item-row flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl p-2';
-    // Build select options: each option = one inventory variant with stock > 0
-    const opts = tempOrderInventoryCache
-        .filter(inv => Number(inv.stock) > 0)
-        .map(inv => {
-            const v = inv.variant_type && inv.variant_type !== 'null' ? ` · ${inv.variant_type}` : '';
-            const val = JSON.stringify({ product_id: inv.product_id, size: inv.size, color: inv.color, variant_type: inv.variant_type, stock: inv.stock });
-            return `<option value='${esc(val).replace(/'/g, "&apos;")}'>${esc(inv.product_name)} · ${esc(inv.color)}${v} · ${esc(inv.size)} (stok: ${inv.stock})</option>`;
-        }).join('');
+    row.className = 'tmpord-item-row bg-white/5 border border-white/10 rounded-xl p-3 space-y-2';
+    row.dataset.idx = idx;
     row.innerHTML = `
-        <select class="tmpord-item-variant flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs" required>
-            <option value="">-- Pilih item --</option>
-            ${opts}
-        </select>
-        <input type="number" min="1" value="1" class="tmpord-item-qty w-16 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs" required>
-        <button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 text-xs px-2"><i class="fa-solid fa-trash"></i></button>
+        <div class="flex items-start gap-2">
+            <div class="flex-1">
+                <label class="block text-[9px] uppercase tracking-wider text-white/40 mb-1 font-bold">Produk *</label>
+                <select id="tmp-prod-${idx}" onchange="tmpOnProductChange(${idx})" required
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">-- pilih produk --</option>
+                    ${prodOpts}
+                </select>
+            </div>
+            <button type="button" onclick="this.closest('.tmpord-item-row').remove()" class="mt-5 text-red-400 hover:text-red-300 text-xs px-2"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div>
+                <label class="block text-[9px] uppercase tracking-wider text-white/40 mb-1 font-bold">Warna *</label>
+                <select id="tmp-color-${idx}" onchange="tmpOnColorChange(${idx})" disabled required
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs disabled:opacity-40">
+                    <option value="">--</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[9px] uppercase tracking-wider text-white/40 mb-1 font-bold">Variant</label>
+                <select id="tmp-variant-${idx}" onchange="tmpOnVariantChange(${idx})" disabled
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs disabled:opacity-40">
+                    <option value="">--</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[9px] uppercase tracking-wider text-white/40 mb-1 font-bold">Ukuran *</label>
+                <select id="tmp-size-${idx}" onchange="tmpOnSizeChange(${idx})" disabled required
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs disabled:opacity-40">
+                    <option value="">--</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[9px] uppercase tracking-wider text-white/40 mb-1 font-bold">Qty *</label>
+                <input type="number" id="tmp-qty-${idx}" min="1" value="1" required
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs">
+            </div>
+        </div>
+        <p id="tmp-stock-info-${idx}" class="hidden text-[10px] font-semibold"></p>
     `;
     wrap.appendChild(row);
+}
+
+function tmpOnProductChange(idx) {
+    const pid = document.getElementById(`tmp-prod-${idx}`).value;
+    const colorSel = document.getElementById(`tmp-color-${idx}`);
+    const variantSel = document.getElementById(`tmp-variant-${idx}`);
+    const sizeSel = document.getElementById(`tmp-size-${idx}`);
+    // Reset cascade downward
+    variantSel.innerHTML = '<option value="">--</option>';
+    variantSel.disabled = true;
+    sizeSel.innerHTML = '<option value="">--</option>';
+    sizeSel.disabled = true;
+    document.getElementById(`tmp-stock-info-${idx}`).classList.add('hidden');
+    if (!pid) {
+        colorSel.innerHTML = '<option value="">--</option>';
+        colorSel.disabled = true;
+        return;
+    }
+    const colors = tmpGetColors(pid);
+    colorSel.innerHTML = '<option value="">-- pilih warna --</option>' +
+        colors.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    colorSel.disabled = false;
+}
+
+function tmpOnColorChange(idx) {
+    const pid = document.getElementById(`tmp-prod-${idx}`).value;
+    const color = document.getElementById(`tmp-color-${idx}`).value;
+    const variantSel = document.getElementById(`tmp-variant-${idx}`);
+    const sizeSel = document.getElementById(`tmp-size-${idx}`);
+    sizeSel.innerHTML = '<option value="">--</option>';
+    sizeSel.disabled = true;
+    document.getElementById(`tmp-stock-info-${idx}`).classList.add('hidden');
+    if (!color) {
+        variantSel.innerHTML = '<option value="">--</option>';
+        variantSel.disabled = true;
+        return;
+    }
+    const variants = tmpGetVariants(pid, color);
+    // Kalau produk tidak punya variant_type (semua 'null'), auto-select & skip — UX
+    // sama spt produk single-variant (cap, dll).
+    if (variants.length === 1 && variants[0] === 'null') {
+        variantSel.innerHTML = `<option value="null" selected>(tanpa variant)</option>`;
+        variantSel.disabled = true;
+        tmpOnVariantChange(idx);
+        return;
+    }
+    variantSel.innerHTML = '<option value="">-- pilih variant --</option>' +
+        variants.map(v => `<option value="${esc(v)}">${esc(v === 'null' ? '(tanpa variant)' : v)}</option>`).join('');
+    variantSel.disabled = false;
+}
+
+function tmpOnVariantChange(idx) {
+    const pid = document.getElementById(`tmp-prod-${idx}`).value;
+    const color = document.getElementById(`tmp-color-${idx}`).value;
+    const variant = document.getElementById(`tmp-variant-${idx}`).value;
+    const sizeSel = document.getElementById(`tmp-size-${idx}`);
+    document.getElementById(`tmp-stock-info-${idx}`).classList.add('hidden');
+    if (!variant) {
+        sizeSel.innerHTML = '<option value="">--</option>';
+        sizeSel.disabled = true;
+        return;
+    }
+    const sizes = tmpGetSizes(pid, color, variant);
+    sizeSel.innerHTML = '<option value="">-- pilih ukuran --</option>' +
+        sizes.map(s => `<option value="${esc(s.size)}" data-stock="${s.stock}">${esc(s.size)} (stok: ${s.stock})</option>`).join('');
+    sizeSel.disabled = false;
+}
+
+function tmpOnSizeChange(idx) {
+    const sizeSel = document.getElementById(`tmp-size-${idx}`);
+    const info = document.getElementById(`tmp-stock-info-${idx}`);
+    if (!sizeSel.value) { info.classList.add('hidden'); return; }
+    const stock = parseInt(sizeSel.options[sizeSel.selectedIndex].dataset.stock || 0);
+    info.textContent = `Stok tersedia: ${stock}`;
+    info.className = `text-[10px] font-semibold ${stock < 3 ? 'text-amber-300' : 'text-green-300'}`;
+    info.classList.remove('hidden');
+    // Cap qty input by stock
+    const qtyInput = document.getElementById(`tmp-qty-${idx}`);
+    qtyInput.max = stock;
+    if (parseInt(qtyInput.value || 1) > stock) qtyInput.value = stock;
 }
 
 async function submitTempOrder() {
@@ -3071,25 +3229,20 @@ async function submitTempOrder() {
     const fd = new FormData(form);
     const items = [];
     document.querySelectorAll('.tmpord-item-row').forEach(row => {
-        const sel = row.querySelector('.tmpord-item-variant');
-        const qty = row.querySelector('.tmpord-item-qty');
-        if (!sel.value) return;
-        try {
-            const parsed = JSON.parse(sel.value);
-            const qtyN = parseInt(qty.value || 1);
-            if (qtyN > Number(parsed.stock)) {
-                throw new Error(`Qty ${qtyN} > stok ${parsed.stock} untuk varian terpilih`);
-            }
-            items.push({
-                product_id: parsed.product_id,
-                size: parsed.size,
-                color: parsed.color,
-                variant_type: parsed.variant_type,
-                quantity: qtyN
-            });
-        } catch (e) { alert(e.message); throw e; }
+        const idx = row.dataset.idx;
+        const pid = document.getElementById(`tmp-prod-${idx}`)?.value;
+        const color = document.getElementById(`tmp-color-${idx}`)?.value;
+        const variant = document.getElementById(`tmp-variant-${idx}`)?.value;
+        const size = document.getElementById(`tmp-size-${idx}`)?.value;
+        const qty = parseInt(document.getElementById(`tmp-qty-${idx}`)?.value || 1);
+        const sizeSel = document.getElementById(`tmp-size-${idx}`);
+        const stock = sizeSel?.value ? parseInt(sizeSel.options[sizeSel.selectedIndex].dataset.stock || 0) : 0;
+        if (!pid || !color || !variant || !size) return; // skip row tidak lengkap
+        if (qty < 1) { alert(`Qty item harus minimal 1`); throw new Error('invalid qty'); }
+        if (qty > stock) { alert(`Qty ${qty} > stok tersedia ${stock} utk varian terpilih`); throw new Error('stock'); }
+        items.push({ product_id: parseInt(pid), size, color, variant_type: variant, quantity: qty });
     });
-    if (!items.length) { alert('Tambah minimal 1 item dulu'); return; }
+    if (!items.length) { alert('Lengkapi minimal 1 item (produk, warna, variant, ukuran)'); return; }
     const payload = {
         customer_name: fd.get('customer_name'),
         customer_phone: fd.get('customer_phone'),
