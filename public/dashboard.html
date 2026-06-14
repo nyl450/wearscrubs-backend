@@ -9607,9 +9607,16 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         const customTag = item.is_custom_size ? ' <span style="background:#e0f2fe;color:#075985;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM</span>' : '';
         const cprodTag = item.is_custom_product ? ' <span style="background:#f3e8ff;color:#6b21a8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM PRODUCT</span>' : '';
         const poTag = item.is_po ? ` <span style="background:#ffedd5;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">PRE-ORDER${item.po_fulfilled ? ' ✓' : ''}</span>` : '';
-        // Variant type (Lengan Pendek/Panjang dll) — skip kalau null/empty (produk single-variant
-        // mis. Cap). Disisipkan sebelum size supaya urutan: warna · variant · size.
-        const vt = item.variant_type && item.variant_type !== 'null' ? ` <span style="color:#6b7280">·</span> ${esc(item.variant_type)}` : '';
+        // Variant type — DB simpan short form 'pendek'/'panjang', tampilkan full
+        // "Lengan Pendek"/"Lengan Panjang" di invoice biar customer paham (bukan disingkat).
+        // Fallback: capitalize value lain (mis. variant produk masa depan). Skip kalau null/empty
+        // (produk single-variant mis. Cap).
+        const vtRaw = item.variant_type && item.variant_type !== 'null' ? item.variant_type : '';
+        const vtFull = vtRaw === 'pendek' ? 'Lengan Pendek'
+                     : vtRaw === 'panjang' ? 'Lengan Panjang'
+                     : vtRaw ? vtRaw.charAt(0).toUpperCase() + vtRaw.slice(1)
+                     : '';
+        const vt = vtFull ? ` <span style="color:#6b7280">·</span> ${esc(vtFull)}` : '';
         itemRowsHTML += `<tr>
             <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong>${vt} Size: ${esc(item.size || '')}${customTag}${cprodTag}${poTag}${bonusTag}</td>
             <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
