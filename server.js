@@ -117,8 +117,8 @@ function requireAuth(roles = []) {
 
 // ─── Per-menu permissions (admin = full; staff = map {menu: 'view'|'edit'}) ─────
 // Canonical menu keys. EDITABLE = menus that have write actions (can be 'edit').
-const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','preorder','refund','exchange','report'];
-const EDITABLE_MENUS = ['products','inventory','popular','orders','manual-order','refund','exchange'];
+const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','temp-order','preorder','refund','exchange','report'];
+const EDITABLE_MENUS = ['products','inventory','popular','orders','manual-order','temp-order','refund','exchange'];
 
 // Normalize a user's stored permission into a map {menu:'view'|'edit'}.
 // Returns null for admin (full access sentinel). Legacy formats degrade to least
@@ -580,6 +580,31 @@ async function initDB() {
     // jadi nilai final supaya laporan/invoice konsisten.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS additional_amount_due INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS additional_paid_at TIMESTAMP DEFAULT NULL`);
+
+    // ── Migrate: Temporary Order (loan/trial) feature ─────────────────────────
+    // Customer pinjam barang sementara — bisa Size Trial (coba muat), Endorsement
+    // (foto/video), atau Other (sponsorship/sample reseller). Stock potong saat kirim
+    // via movement_type='test_out'; balik via 'test_return'. Status alur:
+    //   test_sent → test_pending_pay → test_pending_return → done/cancelled
+    // is_test_returned di order_items mark item yg balik (vs kept).
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS test_sent_at TIMESTAMPTZ DEFAULT NULL`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS test_decision_at TIMESTAMPTZ DEFAULT NULL`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS test_returned_at TIMESTAMPTZ DEFAULT NULL`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS trial_type TEXT DEFAULT NULL`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_test_returned BOOLEAN DEFAULT FALSE`);
+
+    // Order status: add test_sent / test_pending_pay / test_pending_return
+    await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_status_check`).catch(() => {});
+    await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_status_check CHECK(order_status IN ('waiting_payment','confirmed','bordir','packed','shipped','done','cancelled','test_sent','test_pending_pay','test_pending_return'))`).catch(() => {});
+
+    // Order source: add test_size
+    await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_source_check`).catch(() => {});
+    await dbRun(`ALTER TABLE orders ADD CONSTRAINT orders_order_source_check CHECK(order_source IN ('website','whatsapp','event_offline','offline','collaboration_event','test_size'))`).catch(() => {});
+
+    // Stock movement: add test_out / test_return
+    await dbRun(`ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check`);
+    await dbRun(`ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_movement_type_check
+        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal','exchange_replacement_out','exchange_return_in','order_edit_adjust','test_out','test_return'))`);
 
     // ── Migrate: paid_at timestamp (basis tanggal untuk laporan sales) ────────────
     // Diisi NOW() saat confirm-payment. Backfill order paid LAMA dari updated_at
@@ -1983,6 +2008,7 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
                LEFT JOIN products p ON p.id = oi.product_id
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND oi.is_bonus = FALSE
+                AND COALESCE(oi.is_test_returned, FALSE) = FALSE
                 AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
               ORDER BY o.paid_at ASC, o.order_code ASC`,
             [r.from, r.to]
@@ -2006,6 +2032,7 @@ app.get('/api/reports/items', requireMenu('report','view'), async (req, res) => 
                JOIN products p ON p.id = oi.product_id
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND oi.is_bonus = FALSE
+                AND COALESCE(oi.is_test_returned, FALSE) = FALSE
                 AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
               GROUP BY p.id, p.name, p.sku, p.category, p.price
               ORDER BY total_sales DESC`,
@@ -2493,18 +2520,26 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                 );
             }
 
+            // Temporary order (trial/loan) — stock SUDAH terdeduct saat trial dikirim
+            // (movement_type='test_out' di POST /api/temp-orders). Confirm-payment di sini
+            // hanya finalize status: tagihan diterima, transisi ke pending_return atau done.
+            // Skip stock deduction + skip aggregation di bawah.
+            const isTrialOrder = order.order_source === 'test_size';
+
             // Aggregate per physical variant first — bordir splits (plain + nama + logo)
             // share one inventory row, so summing avoids missing the true total demand.
             const variantTotals = new Map();
-            for (const it of items) {
-                // Custom-size lines have no inventory row → never deduct (and skip the
-                // hard stock check below, which would otherwise throw a false 409).
-                // Pre-Order lines are deferred: stock is allocated/deducted later at
-                // receive (FIFO), not here — so skip them at confirm too.
-                if (it.is_custom_size || it.is_po || it.is_custom_product) continue;
-                const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
-                if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
-                variantTotals.get(k).quantity += it.quantity;
+            if (!isTrialOrder) {
+                for (const it of items) {
+                    // Custom-size lines have no inventory row → never deduct (and skip the
+                    // hard stock check below, which would otherwise throw a false 409).
+                    // Pre-Order lines are deferred: stock is allocated/deducted later at
+                    // receive (FIFO), not here — so skip them at confirm too.
+                    if (it.is_custom_size || it.is_po || it.is_custom_product) continue;
+                    const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
+                    if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
+                    variantTotals.get(k).quantity += it.quantity;
+                }
             }
 
             // Deduct inventory + log order_out. FOR UPDATE locks the row until COMMIT.
@@ -2537,6 +2572,8 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
             }
 
             // Determine next status:
+            // - Trial order → routing khusus: kalau ada item yg dibalikin → test_pending_return
+            //   (admin tunggu fisik barang balik), kalau semua kept → langsung done.
             // - bordir → 'bordir' (perlu proses 1 minggu)
             // - pickup di tempat + no bordir → langsung 'done' (barang sudah diambil
             //   customer di event/walk-in — tak perlu Kemas/Kirim). Audit step 'done'
@@ -2544,7 +2581,13 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
             // - else → 'confirmed' (siap dikemas)
             const hasBordir = order.has_bordir_logo || order.has_bordir_nama;
             const isPickup = (order.shipping_courier || '').trim() === PICKUP_COURIER;
-            const ns = hasBordir ? 'bordir' : (isPickup ? 'done' : 'confirmed');
+            let ns;
+            if (isTrialOrder) {
+                const hasReturns = items.some(it => it.is_test_returned === true);
+                ns = hasReturns ? 'test_pending_return' : 'done';
+            } else {
+                ns = hasBordir ? 'bordir' : (isPickup ? 'done' : 'confirmed');
+            }
             await client.query(
                 `UPDATE orders SET payment_status = 'paid', order_status = $1, paid_at = NOW(), updated_at = NOW() WHERE id = $2`,
                 [ns, order.id]
@@ -2799,6 +2842,14 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         // kurir/customer, restore +qty akan menciptakan stok hantu. Cancel hanya sampai 'packed'.
         if (order.order_status === 'shipped')
             return res.status(400).json({ error: 'Pesanan sudah dikirim — tidak bisa dibatalkan. Jika barang kembali (retur), tangani via stok manual / Tukar Size.' });
+        // Trial di test_pending_return: customer sudah bayar utk kept items, returned items
+        // tinggal dikonfirmasi terima. Cancel di sini ambigu — pakai endpoint receive-returns
+        // utk closing yg proper (atau revisi keep/return via flow lain).
+        if (order.order_source === 'test_size' && order.order_status === 'test_pending_return')
+            return res.status(400).json({ error: 'Trial di status test_pending_return — gunakan "Terima Barang" utk menutup. Cancel di sini akan menabrak record bayar yg sudah masuk.' });
+        // Trial flag — restore stock dgn movement 'test_return' (bukan order_cancel_restore)
+        // dan skip refund auto-create (trial belum ada pembayaran nyata sampai test_pending_pay paid).
+        const isTrialOrder = order.order_source === 'test_size';
 
         const { cancel_reason, set_bordir_status } = req.body;
         // Audit hook: caller (mis. flow "Tolak Bordir") boleh sekalian set bordir_status
@@ -2814,9 +2865,12 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true })
             : null;
 
-        // Atomic: stock restore (if paid) + photo + cancel update — all-or-nothing
+        // Atomic: stock restore (if paid OR trial) + photo + cancel update — all-or-nothing.
+        // Trial: stock dipotong di test_sent (sebelum payment), jadi restore dipicu oleh
+        // isTrialOrder, BUKAN payment_status. Movement type 'test_return' utk audit clarity.
         await withTransaction(async (client) => {
-            if (order.payment_status === 'paid') {
+            const shouldRestoreStock = isTrialOrder || order.payment_status === 'paid';
+            if (shouldRestoreStock) {
                 const itemsRes = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
                 for (const item of itemsRes.rows) {
                     // Custom-size / Custom-Product lines were never deducted at confirm →
@@ -2836,13 +2890,15 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                         [item.quantity, item.product_id, item.size, item.color, item.variant_type]
                     );
                     const stockAfter = stockBefore + item.quantity;
+                    const moveType = isTrialOrder ? 'test_return' : 'order_cancel_restore';
+                    const noteTxt = isTrialOrder ? `Trial cancelled ${order.order_code}` : `Pembatalan ${order.order_code}`;
                     await client.query(
                         `INSERT INTO stock_movements
                          (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
-                         VALUES ($1,$2,$3,$4,'order_cancel_restore',$5,$6,$7,$8,$9,$10)`,
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
                         [item.product_id, item.size, item.color, item.variant_type,
-                         item.quantity, stockBefore, stockAfter,
-                         `Pembatalan ${order.order_code}`, order.id, user.username]
+                         moveType, item.quantity, stockBefore, stockAfter,
+                         noteTxt, order.id, user.username]
                     );
                 }
             }
@@ -2868,7 +2924,10 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
             // Auto-create refund entry if order was paid — only if not already exists
             // (defensive: re-cancellation shouldn't duplicate). Refund proof from cancel
             // is the initial proof; admin can mark transferred later with another proof.
-            if (order.payment_status === 'paid') {
+            // Trial cancellation di-skip: cancel di trial hanya allowed di test_sent atau
+            // test_pending_pay (status 'paid' di-block via guard di atas), jadi payment_status
+            // pasti 'pending' — gak ada uang masuk, gak perlu refund record.
+            if (order.payment_status === 'paid' && !isTrialOrder) {
                 const existing = await client.query(
                     'SELECT id FROM refunds WHERE order_id = $1 AND refund_type = $2',
                     [order.id, 'cancellation']
@@ -4253,6 +4312,354 @@ app.put('/api/orders/:id/items/:itemId/fulfill-po', requireMenu('orders','edit')
         await dbRun('UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1', [item.id]);
         await dbRun('UPDATE orders SET updated_at = NOW() WHERE id = $1', [order.id]);
         res.json({ message: 'Item custom ditandai siap — pesanan sekarang bisa dikemas' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// ─── TEMPORARY ORDER (LOAN / TRIAL) ───────────────────────────────────────────
+// Customer pinjam barang sementara — Size Trial / Endorsement / Other.
+// Lifecycle:
+//   POST /api/temp-orders → status='test_sent' (stock potong via 'test_out')
+//   PUT  .../finalize     → per-item keep/return → 'test_pending_pay' or 'test_pending_return'
+//   PUT  /api/orders/:id/confirm-payment → existing endpoint, branching test_size handled inline
+//   PUT  .../receive-returns → restore stock → 'done' (≥1 kept) or 'cancelled' (0 kept)
+// is_test_returned di order_items = TRUE artinya item dibalikin customer (bukan keep).
+
+const TRIAL_TYPES = ['size_trial', 'endorsement', 'other'];
+const TRIAL_FREE_COURIERS = ['Kirim sendiri', PICKUP_COURIER];
+
+function isTrialFreeCourier(c) {
+    return TRIAL_FREE_COURIERS.includes((c || '').trim());
+}
+
+// POST /api/temp-orders — create new temporary order (admin only)
+app.post('/api/temp-orders', requireMenu('temp-order','edit'), async (req, res) => {
+    try {
+        const {
+            customer_name, customer_phone, customer_address, items, notes,
+            shipping_city, shipping_cost,
+            shipping_courier, shipping_weight_kg,
+            trial_type
+        } = req.body;
+        if (!items || items.length === 0) return res.status(400).json({ error: 'Daftar item kosong' });
+        if (!TRIAL_TYPES.includes(trial_type)) return res.status(400).json({ error: 'Type wajib: size_trial / endorsement / other' });
+
+        // Validate customer identity (same as /api/orders).
+        const custNameTrim = (customer_name || '').trim();
+        const custAddrTrim = (customer_address || '').trim();
+        const custPhoneDigits = (customer_phone || '').replace(/\D/g, '');
+        if (!custNameTrim) return res.status(400).json({ error: 'Nama pelanggan wajib diisi' });
+        if (!custAddrTrim) return res.status(400).json({ error: 'Alamat pelanggan wajib diisi' });
+        if (custPhoneDigits.length < 9 || custPhoneDigits.length > 15 || !/^(0|62|8)/.test(custPhoneDigits))
+            return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (08xxx / 62xxx)' });
+
+        // Reject disallowed item flags (anti-tamper). Temp order DISABLE:
+        // - bordir (nama/logo)  ← trial cuma utk fit-check, bordir dipesan ulang nanti
+        // - custom_size / custom_product  ← off-catalog, gak bisa balik ke stock
+        // - is_po  ← trial butuh barang fisik real, gak boleh PO
+        for (const item of items) {
+            if (item.bordir_nama || item.bordir_logo)
+                return res.status(400).json({ error: 'Temporary order tidak mengizinkan bordir' });
+            if (item.is_custom_size || item.is_custom_product)
+                return res.status(400).json({ error: 'Temporary order tidak mengizinkan custom size / custom product' });
+            if (item.is_po)
+                return res.status(400).json({ error: 'Temporary order tidak mengizinkan Pre-Order — stok harus tersedia' });
+            const q = Number(item.quantity);
+            if (!Number.isInteger(q) || q < 1)
+                return res.status(400).json({ error: 'Quantity setiap item harus bilangan bulat minimal 1' });
+        }
+
+        // Stock check — aggregate per variant (sama mekanik /api/orders).
+        const variantTotals = new Map();
+        for (const item of items) {
+            const k = `${item.product_id}|${item.size}|${item.color}|${item.variant_type || 'null'}`;
+            variantTotals.set(k, (variantTotals.get(k) || 0) + Number(item.quantity || 0));
+        }
+        for (const [k, totalQty] of variantTotals) {
+            const [pid, size, color, vtype] = k.split('|');
+            const product = await dbGet('SELECT * FROM products WHERE id = $1', [pid]);
+            if (!product) return res.status(400).json({ error: `Produk ID ${pid} tidak ditemukan` });
+            const inv = await dbGet(
+                'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+                [pid, size, color, vtype]
+            );
+            const available = inv ? Number(inv.stock) : 0;
+            if (available < totalQty) {
+                return res.status(400).json({
+                    error: `Stok ${product.name} (${color}, ${vtype}, ${size}) tidak cukup. Tersisa ${available}, diminta ${totalQty}`
+                });
+            }
+        }
+
+        // Compute prices & details.
+        let productTotal = 0;
+        const itemDetails = [];
+        for (const item of items) {
+            const product = await dbGet('SELECT * FROM products WHERE id = $1', [item.product_id]);
+            if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
+            const priceByType = safeJSON(product.price_by_type, null);
+            const catalogPrice = (priceByType && item.variant_type && priceByType[item.variant_type] != null)
+                ? Number(priceByType[item.variant_type]) : Number(product.price);
+            itemDetails.push({
+                product_id: product.id,
+                product_name: product.name,
+                size: item.size, color: item.color,
+                variant_type: item.variant_type || 'null',
+                quantity: item.quantity,
+                price: catalogPrice
+            });
+            productTotal += catalogPrice * item.quantity;
+        }
+
+        // Shipping cost. Free couriers (Kirim sendiri / Pickup) → always 0.
+        const courier = (shipping_courier || '').trim() || 'Kirim sendiri';
+        const weightKg = parseFloat(shipping_weight_kg || 0);
+        const shipCost = isTrialFreeCourier(courier) ? 0 : Math.max(0, parseInt(shipping_cost || 0));
+
+        // Provisional total (full items + ongkir) — DI-RECOMPUTE saat finalize sesuai
+        // keep/return + sesuai courier policy. Disimpan sebagai initial estimate.
+        const provisionalTotal = productTotal + shipCost;
+        const orderCode = generateOrderCode('test_size');
+
+        // Atomic: insert order + items + stock deduction (test_out) — all-or-nothing.
+        const orderId = await withTransaction(async (client) => {
+            const ord = await client.query(
+                `INSERT INTO orders
+                 (order_code, customer_name, customer_phone, customer_address,
+                  shipping_city, shipping_courier, shipping_weight_kg, shipping_cost,
+                  total_amount, notes, order_source, order_status,
+                  trial_type, test_sent_at, payment_status)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'test_size','test_sent',
+                         $11, NOW(), 'pending') RETURNING id`,
+                [orderCode, custNameTrim, customer_phone, custAddrTrim,
+                 shipping_city || '', courier, weightKg, shipCost,
+                 provisionalTotal, notes || '', trial_type]
+            );
+            const newOrderId = ord.rows[0].id;
+            for (const it of itemDetails) {
+                await client.query(
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, is_test_returned)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7, FALSE)`,
+                    [newOrderId, it.product_id, it.size, it.color, it.variant_type, it.quantity, it.price]
+                );
+            }
+            // Deduct stock per variant + log 'test_out' (FOR UPDATE lock anti race).
+            for (const [k, totalQty] of variantTotals) {
+                const [pid, size, color, vtype] = k.split('|');
+                const inv = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [pid, size, color, vtype]
+                );
+                const stockBefore = inv.rows[0] ? parseInt(inv.rows[0].stock) : 0;
+                if (stockBefore < totalQty) {
+                    const e = new Error(`Stok ${color}/${vtype}/${size} kehabisan saat lock (race) — coba lagi`);
+                    e.statusCode = 409; throw e;
+                }
+                const stockAfter = stockBefore - totalQty;
+                await client.query(
+                    `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                    [totalQty, pid, size, color, vtype]
+                );
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'test_out',$5,$6,$7,$8,$9,$10)`,
+                    [pid, size, color, vtype, -totalQty, stockBefore, stockAfter,
+                     `Temp Order ${orderCode} (${trial_type})`, newOrderId, req.user.username]
+                );
+            }
+            return newOrderId;
+        });
+
+        res.json({ success: true, order_id: orderId, order_code: orderCode });
+    } catch (err) {
+        const sc = err.statusCode || 500;
+        res.status(sc).json({ error: err.message });
+    }
+});
+
+// PUT /api/temp-orders/:id/finalize — admin marks per-item keep / return
+// Body: { decisions: [{item_id, action: 'keep'|'return'}, ...] }
+// Transition routing:
+//   - Total tagihan > 0  → 'test_pending_pay' (perlu konfirmasi pembayaran)
+//   - Total tagihan = 0  → 'test_pending_return' langsung (gak ada yg ditagih)
+//   - 0 kept + 0 ongkir  → 'test_pending_return' (free customer keep nothing)
+app.put('/api/temp-orders/:id/finalize', requireMenu('temp-order','edit'), async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const { decisions } = req.body;
+        if (!Array.isArray(decisions) || !decisions.length)
+            return res.status(400).json({ error: 'Decisions kosong' });
+
+        const order = await dbGet('SELECT * FROM orders WHERE id=$1', [orderId]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.order_source !== 'test_size')
+            return res.status(400).json({ error: 'Bukan temporary order' });
+        if (order.order_status !== 'test_sent')
+            return res.status(400).json({ error: `Status saat ini "${order.order_status}", finalize hanya saat test_sent` });
+
+        const items = await dbAll('SELECT * FROM order_items WHERE order_id=$1', [orderId]);
+        const itemById = new Map(items.map(it => [it.id, it]));
+
+        // Validate decisions: every item_id must exist in order, every action valid.
+        for (const d of decisions) {
+            if (!itemById.has(Number(d.item_id)))
+                return res.status(400).json({ error: `Item ID ${d.item_id} tidak ada di pesanan ini` });
+            if (!['keep','return'].includes(d.action))
+                return res.status(400).json({ error: `Action ${d.action} invalid (keep / return)` });
+        }
+        // Ensure all items in order are covered (avoid silent half-decision).
+        const decidedIds = new Set(decisions.map(d => Number(d.item_id)));
+        for (const it of items) {
+            if (!decidedIds.has(it.id))
+                return res.status(400).json({ error: `Item ${it.id} belum diberi keputusan keep/return` });
+        }
+
+        // Compute new total: kept items × price + ongkir_conditional.
+        // Ongkir di-charge kalau: courier paid (bukan Kirim sendiri / Pickup) AND
+        // setidaknya ada barang yg keluar (semua trial kan udah keluar, jadi ongkir
+        // selalu di-tagih kalau paid courier).
+        const keptIds = new Set(decisions.filter(d => d.action === 'keep').map(d => Number(d.item_id)));
+        const keptItems = items.filter(it => keptIds.has(it.id));
+        const keptTotal = keptItems.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
+        const ongkirCharge = isTrialFreeCourier(order.shipping_courier) ? 0 : Number(order.shipping_cost || 0);
+        const newTotal = keptTotal + ongkirCharge;
+
+        // Routing: ada yg ditagih → test_pending_pay; tagihan 0 → langsung test_pending_return.
+        const nextStatus = newTotal > 0 ? 'test_pending_pay' : 'test_pending_return';
+
+        await withTransaction(async (client) => {
+            // Update per-item is_test_returned flag.
+            for (const d of decisions) {
+                await client.query(
+                    `UPDATE order_items SET is_test_returned = $1 WHERE id = $2`,
+                    [d.action === 'return', Number(d.item_id)]
+                );
+            }
+            // Recompute total + update status + log decision time.
+            // Ongkir di-zero-kan kalau gak ditagih (transparency di DB).
+            await client.query(
+                `UPDATE orders SET
+                    total_amount = $1,
+                    shipping_cost = $2,
+                    order_status = $3,
+                    test_decision_at = NOW(),
+                    updated_at = NOW()
+                 WHERE id = $4`,
+                [newTotal, ongkirCharge, nextStatus, orderId]
+            );
+        });
+
+        res.json({ success: true, next_status: nextStatus, total: newTotal });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/temp-orders/:id/receive-returns — admin terima fisik barang yg dikembalikan
+// Restore stock utk semua item is_test_returned=TRUE via 'test_return' movement.
+// Final state: 'done' (ada ≥1 kept) atau 'cancelled' (0 kept = semua dibalikin).
+app.put('/api/temp-orders/:id/receive-returns', requireMenu('temp-order','edit'), async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const order = await dbGet('SELECT * FROM orders WHERE id=$1', [orderId]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.order_source !== 'test_size')
+            return res.status(400).json({ error: 'Bukan temporary order' });
+        if (order.order_status !== 'test_pending_return')
+            return res.status(400).json({ error: `Status saat ini "${order.order_status}", receive-returns hanya saat test_pending_return` });
+
+        const items = await dbAll('SELECT * FROM order_items WHERE order_id=$1', [orderId]);
+        const returnedItems = items.filter(it => it.is_test_returned);
+        const keptItems = items.filter(it => !it.is_test_returned);
+        if (!returnedItems.length)
+            return res.status(400).json({ error: 'Tidak ada item yg dikembalikan — gak perlu receive-returns' });
+
+        const finalStatus = keptItems.length > 0 ? 'done' : 'cancelled';
+
+        await withTransaction(async (client) => {
+            // Aggregate returned qty per variant (multiple lines bisa share inventory row).
+            const variantTotals = new Map();
+            for (const it of returnedItems) {
+                const k = `${it.product_id}|${it.size}|${it.color}|${it.variant_type}`;
+                if (!variantTotals.has(k)) variantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: it.variant_type, quantity: 0 });
+                variantTotals.get(k).quantity += Number(it.quantity);
+            }
+            // Restore inventory + log 'test_return'.
+            for (const v of variantTotals.values()) {
+                const inv = await client.query(
+                    'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                    [v.product_id, v.size, v.color, v.variant_type]
+                );
+                const stockBefore = inv.rows[0] ? parseInt(inv.rows[0].stock) : 0;
+                const stockAfter = stockBefore + v.quantity;
+                await client.query(
+                    `UPDATE inventory SET stock = stock + $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                    [v.quantity, v.product_id, v.size, v.color, v.variant_type]
+                );
+                await client.query(
+                    `INSERT INTO stock_movements
+                     (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                     VALUES ($1,$2,$3,$4,'test_return',$5,$6,$7,$8,$9,$10)`,
+                    [v.product_id, v.size, v.color, v.variant_type, v.quantity, stockBefore, stockAfter,
+                     `Temp Order ${order.order_code} return`, order.id, req.user.username]
+                );
+            }
+            await client.query(
+                `UPDATE orders SET order_status = $1, test_returned_at = NOW(), updated_at = NOW() WHERE id = $2`,
+                [finalStatus, orderId]
+            );
+            // Audit row utk timeline (sama pattern dgn 'done' di confirm-payment).
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1, 'test_return', NULL, $2, $3)`,
+                [orderId, `${returnedItems.length} item dikembalikan, ${keptItems.length} dipertahankan`, req.user.username]
+            );
+        });
+
+        res.json({ success: true, final_status: finalStatus });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/temp-orders/active-counts — agregat qty item yg lagi keluar utk trial
+// Per varian. Output dipakai badge "🧪 N keluar" di card inventory.
+// Hanya item yg masih out (NOT is_test_returned, status sebelum done/cancelled).
+app.get('/api/temp-orders/active-counts', requireAuth(), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT oi.product_id, oi.size, oi.color, oi.variant_type,
+                    SUM(oi.quantity)::int AS qty_out,
+                    COUNT(DISTINCT o.id)::int AS order_count
+               FROM order_items oi
+               JOIN orders o ON o.id = oi.order_id
+              WHERE o.order_source = 'test_size'
+                AND o.order_status IN ('test_sent','test_pending_pay','test_pending_return')
+                AND oi.is_test_returned = FALSE
+                AND oi.product_id IS NOT NULL
+              GROUP BY oi.product_id, oi.size, oi.color, oi.variant_type`
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/temp-orders/by-variant — list order yg punya varian ini lagi keluar
+app.get('/api/temp-orders/by-variant', requireAuth(), async (req, res) => {
+    try {
+        const { product_id, color, variant_type, size } = req.query;
+        if (!product_id) return res.status(400).json({ error: 'product_id wajib' });
+        const rows = await dbAll(
+            `SELECT o.id, o.order_code, o.customer_name, o.trial_type, o.order_status,
+                    o.test_sent_at, oi.quantity
+               FROM order_items oi
+               JOIN orders o ON o.id = oi.order_id
+              WHERE o.order_source = 'test_size'
+                AND o.order_status IN ('test_sent','test_pending_pay','test_pending_return')
+                AND oi.is_test_returned = FALSE
+                AND oi.product_id = $1
+                AND oi.size = $2
+                AND oi.color = $3
+                AND oi.variant_type = $4
+              ORDER BY o.test_sent_at ASC`,
+            [product_id, size || '', color || '', variant_type || 'null']
+        );
+        res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
