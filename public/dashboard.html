@@ -2697,20 +2697,24 @@ async function exportReportExcel() {
         const list = rows || [];
 
         // Header rows + col definition.
-        // Mental model: Harga Satuan = produk MURNI (tanpa bordir). Disc % di-apply
-        // ke subtotal produk. Bordir ditambahkan SETELAH disc (labor service, tidak
-        // ikut didiskon). Total = Subtotal − Disc + Bordir × Qty.
-        // DB menyimpan oi.price = base + bordir/unit, jadi base diturunkan via:
+        // Mental model (revisi): Bordir IKUT consignment/discount, ongkir TIDAK.
+        // - Harga Satuan = produk MURNI (info; base per unit, tanpa bordir)
+        // - Bordir       = type + Rp/unit (info; di samping kiri Harga Satuan)
+        // - Subtotal     = (Harga Satuan + Bordir/unit) × Qty  ← termasuk bordir
+        // - Disc %       = persentase order
+        // - Disc Rp      = Subtotal × Disc%  ← bordir IKUT di-discount
+        // - Total Sales  = Subtotal − Disc Rp  ← match dgn DB & invoice
+        // DB simpan oi.price = base + bordir/unit, jadi base diturunkan via:
         //   base_per_unit = oi.price − bordir_per_unit.
         const header = [
             ['Wearscrubs — Report Penjualan'],
             [`Periode: ${from} s/d ${to}`],
             [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Discount: Rp ${Number(salesKpi.discount||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
-            ['Logika: Harga Satuan = produk saja · Subtotal = Harga × Qty · Disc % dipotong dari Subtotal (bordir TIDAK ikut didiskon) · Total = Subtotal − Disc + (Bordir × Qty).'],
-            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Bordir','Total Sales'],
+            ['Logika: Subtotal = (Harga Satuan + Bordir/unit) × Qty · Disc % dipotong dari Subtotal (BORDIR IKUT consignment) · Total = Subtotal − Disc. Ongkir tidak dihitung per-baris.'],
+            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales'],
         ];
 
-        let totQty=0, totSubtotal=0, totDisc=0, totBordir=0, totSales=0;
+        let totQty=0, totBordir=0, totSubtotal=0, totDisc=0, totSales=0;
         const dataRows = list.map(r => {
             const qty = Number(r.quantity || 0);
             const unitCombined = Number(r.unit_price || 0); // DB: base + bordir/unit
@@ -2722,11 +2726,13 @@ async function exportReportExcel() {
             const bLogoRp = bLogo ? Number(r.bordir_logo_price ?? 30000) : 0;
             const bordirPerUnit = bNamaRp + bLogoRp;
             const basePerUnit = Math.max(0, unitCombined - bordirPerUnit); // harga produk murni
-            const subtotal = basePerUnit * qty;
+            // Subtotal INCLUDES bordir (gross line, sebelum discount).
+            const subtotal = (basePerUnit + bordirPerUnit) * qty;
             const discPct = Number(r.discount_percent || 0);
             const discAmt = Math.round(subtotal * discPct / 100);
             const bordirLineTotal = bordirPerUnit * qty;
-            const totalLine = subtotal - discAmt + bordirLineTotal;
+            // Total = Subtotal − Disc (sesuai DB & invoice flow).
+            const totalLine = subtotal - discAmt;
 
             // Bordir column: gabung type + Rp/unit dalam satu sel.
             let bordirText = '—';
@@ -2734,7 +2740,7 @@ async function exportReportExcel() {
             else if (bNama)     bordirText = `Nama - Rp ${bNamaRp.toLocaleString('id-ID')}`;
             else if (bLogo)     bordirText = `Logo - Rp ${bLogoRp.toLocaleString('id-ID')}`;
 
-            totQty += qty; totSubtotal += subtotal; totDisc += discAmt; totBordir += bordirLineTotal; totSales += totalLine;
+            totQty += qty; totBordir += bordirLineTotal; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
 
             const dt = r.paid_at ? new Date(r.paid_at) : null;
             const dtStr = dt ? `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
@@ -2743,30 +2749,30 @@ async function exportReportExcel() {
             else if (r.is_custom_size) nameTag = '[CUSTOM SIZE] ' + nameTag;
             if (r.is_po) nameTag = '[PO] ' + nameTag;
             return [
-                dtStr,
-                r.order_code || '',
-                r.customer_name || '',
-                repSourceLabelSafe(r.order_source),
-                nameTag,
-                r.sku || '',
-                r.category || '',
-                r.variant_type || '',
-                r.color || '',
-                r.size || '',
-                qty,
-                basePerUnit,
-                subtotal,
-                discPct,
-                discAmt,
-                bordirText,
-                totalLine,
+                dtStr,                              // 0
+                r.order_code || '',                 // 1
+                r.customer_name || '',              // 2
+                repSourceLabelSafe(r.order_source), // 3
+                nameTag,                            // 4
+                r.sku || '',                        // 5
+                r.category || '',                   // 6
+                r.variant_type || '',               // 7
+                r.color || '',                      // 8
+                r.size || '',                       // 9
+                qty,                                // 10
+                bordirText,                         // 11 — kiri Harga Satuan
+                basePerUnit,                        // 12 — Harga Satuan
+                subtotal,                           // 13 — Subtotal (includes bordir)
+                discPct,                            // 14
+                discAmt,                            // 15
+                totalLine,                          // 16
             ];
         });
 
         // TOTAL row — kolom Bordir diisi total bordir Rp agregat (text "Rp X").
-        const totalRow = ['TOTAL','','','','','','','','','', totQty, '', totSubtotal, '', totDisc,
+        const totalRow = ['TOTAL','','','','','','','','','', totQty,
             totBordir > 0 ? `Rp ${totBordir.toLocaleString('id-ID')}` : '—',
-            totSales];
+            '', totSubtotal, '', totDisc, totSales];
 
         const aoa = [...header, ...dataRows];
         if (dataRows.length === 0) {
@@ -2778,9 +2784,10 @@ async function exportReportExcel() {
         const ws = XLSX.utils.aoa_to_sheet(aoa);
 
         // Column widths (17 cols)
+        // Bordir (11) lebih lebar — text panjang ("Nama+Logo - Rp 20.000+30.000")
         ws['!cols'] = [
             {wch:18},{wch:16},{wch:24},{wch:18},{wch:32},{wch:14},{wch:12},{wch:14},{wch:14},{wch:8},
-            {wch:6},{wch:14},{wch:14},{wch:7},{wch:14},{wch:26},{wch:14}
+            {wch:6},{wch:26},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14}
         ];
 
         // Merge header rows across 17 cols (idx 0..16)
@@ -2791,8 +2798,7 @@ async function exportReportExcel() {
             {s:{r:3,c:0}, e:{r:3,c:16}},
         ];
 
-        // Number format — Qty:10  Harga:11  Subtotal:12  Disc%:13  DiscRp:14  Total:16
-        // Kolom Bordir (15) text/mixed → no number format.
+        // Number format — Qty:10  Bordir(text):11  Harga:12  Subtotal:13  Disc%:14  DiscRp:15  Total:16
         const dataStart = 5;
         const lastRow = aoa.length - 1;
         const fmtRp = '#,##0';
@@ -2800,11 +2806,11 @@ async function exportReportExcel() {
         for (let r = dataStart; r <= lastRow; r++) {
             const cellQty = XLSX.utils.encode_cell({r, c:10});
             if (ws[cellQty] && typeof ws[cellQty].v === 'number') ws[cellQty].z = fmtInt;
-            [11,12,14,16].forEach(c => {
+            [12,13,15,16].forEach(c => {
                 const a = XLSX.utils.encode_cell({r, c});
                 if (ws[a] && typeof ws[a].v === 'number') ws[a].z = fmtRp;
             });
-            const cellPct = XLSX.utils.encode_cell({r, c:13});
+            const cellPct = XLSX.utils.encode_cell({r, c:14});
             if (ws[cellPct] && typeof ws[cellPct].v === 'number') ws[cellPct].z = fmtInt;
         }
 
