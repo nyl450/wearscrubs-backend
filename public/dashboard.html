@@ -866,7 +866,7 @@
               </div>
               <div>
                 <label class="wa-field-label">Tanggal Order <span class="wa-optional">(utk invoice)</span></label>
-                <input type="date" id="wa-invoice-date" />
+                <input type="date" id="wa-invoice-date" class="date-fluid" />
                 <p class="text-[10px] text-white/30 mt-1">Default hari ini. Ubah kalau customer minta tanggal khusus di invoice.</p>
               </div>
               <div id="wa-billing-to-wrap" class="hidden sm:col-span-2">
@@ -9643,11 +9643,16 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const shippingCity = order.shipping_city || '';
     const total = order.total_amount || 0;
 
-    // Diskon rows
+    // Diskon rows.
+    // PENTING: discount_amount disimpan di DB sebagai 30% dari (base + bordir) — bordir
+    // ikut kepotong consignment, ongkir tidak. Supaya math di invoice transparan, kita
+    // tampilkan urutan: item base → bordir → Subtotal (Produk + Bordir) → Discount → Ongkir → Total.
+    // Subtotal di invoice = sum(base * qty) + sum(bordir * qty) = base discount applies to.
     const discountAmt = order.discount_amount || 0;
     const discountLbl = order.discount_label || '';
+    const grossSubtotal = productSubtotal + totalBordirNamaCost + totalBordirLogoCost;
     const subtotalRowHTML = discountAmt > 0
-        ? `<tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal Produk</td><td>${fmtRp(productSubtotal)}</td></tr>`
+        ? `<tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal (Produk + Bordir)</td><td>${fmtRp(grossSubtotal)}</td></tr>`
         : '';
     const discountRowHTML = discountAmt > 0
         ? `<tr class="totals-row" style="color:#16a34a;"><td colspan="3" style="text-align:right;font-weight:500;">🏷️ ${discountLbl}</td><td style="font-weight:600;">-${fmtRp(discountAmt)}</td></tr>`
@@ -9814,9 +9819,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 <thead><tr><th>Description</th><th>Unit Price</th><th>Qty</th><th>Amount</th></tr></thead>
                 <tbody>
                     ${itemRowsHTML}
+                    ${bordirLineRowsHTML}
                     ${subtotalRowHTML}
                     ${discountRowHTML}
-                    ${bordirLineRowsHTML}
                     ${ongkirRow}
                     <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Total Pembayaran</td><td>${fmtRp(total)}</td></tr>
                 </tbody>
