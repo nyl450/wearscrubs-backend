@@ -213,10 +213,18 @@
         .invoice-billed .customer-info strong, .invoice-billed .invoice-meta strong { color: #1a1a1a; font-weight: 600; }
         .invoice-table-wrap { padding: 0 40px 24px; }
         .invoice-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .invoice-table { table-layout: fixed; }
         .invoice-table thead th { background: #f5f5f5; padding: 10px 14px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #666; border-bottom: 2px solid #e5e5e5; }
         .invoice-table thead th:not(:first-child) { text-align: right; }
-        .invoice-table tbody td { padding: 11px 14px; border-bottom: 1px solid #f0f0f0; color: #2d2d2d; vertical-align: top; }
-        .invoice-table tbody td:not(:first-child) { text-align: right; }
+        /* Lock width kanan & nowrap supaya Unit Price/Qty/Amount tidak ke-dorong 2 baris
+           saat description panjang. col Description ambil sisanya. */
+        .invoice-table col.col-desc  { width: auto; }
+        .invoice-table col.col-price { width: 110px; }
+        .invoice-table col.col-qty   { width: 50px; }
+        .invoice-table col.col-amt   { width: 110px; }
+        .invoice-table tbody td { padding: 11px 14px; border-bottom: 1px solid #f0f0f0; color: #2d2d2d; vertical-align: top; word-wrap: break-word; }
+        .invoice-table tbody td:not(:first-child) { text-align: right; white-space: nowrap; }
+        .invoice-table thead th:not(:first-child) { white-space: nowrap; }
         .invoice-table .bordir-row td { padding: 4px 14px 4px 28px; font-size: 12px; color: #888; border-bottom: none; }
         .invoice-table .totals-row td { border-bottom: none; padding: 8px 14px; font-size: 13px; color: #444; }
         .invoice-table tfoot .grand-total td { font-size: 15px; font-weight: 700; color: #1a1a1a; padding-top: 12px; border-top: 2px solid #1a1a1a; }
@@ -9797,6 +9805,12 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         </div>
         <div class="invoice-table-wrap">
             <table class="invoice-table">
+                <colgroup>
+                    <col class="col-desc">
+                    <col class="col-price">
+                    <col class="col-qty">
+                    <col class="col-amt">
+                </colgroup>
                 <thead><tr><th>Description</th><th>Unit Price</th><th>Qty</th><th>Amount</th></tr></thead>
                 <tbody>
                     ${itemRowsHTML}
