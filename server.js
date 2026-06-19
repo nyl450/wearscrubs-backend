@@ -2588,6 +2588,49 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                 );
             }
 
+            // ── PO PAID-AFTER-RECEIVE FIX ─────────────────────────────────────
+            // Skenario: stok PO datang SEBELUM customer bayar. Endpoint receive
+            // cuma fulfill PO yg sudah paid (FIFO), jadi order ini di-skip.
+            // Saat customer akhirnya bayar, tanpa block ini, item PO tetap stuck
+            // (`is_po=true && po_fulfilled=false`) padahal stok sudah tersedia,
+            // gate "Tunggu PO" gak akan lepas. Bug aslinya: 19 Jun 2026, order
+            // WS-WA-20260528-9582 Susan — fixed via SQL manual + block ini.
+            //
+            // Logic: untuk setiap is_po item, kalau stok sekarang ≥ qty → fulfill
+            // inline (deduct + mark + log). Kalau belum cukup, biarkan stuck
+            // sampai receive berikutnya (FIFO sequence tetap dijaga).
+            // Skip trial (gak punya is_po) + custom (manual fulfill via UI).
+            if (!isTrialOrder) {
+                for (const it of items) {
+                    if (!it.is_po || it.po_fulfilled) continue;
+                    if (it.is_custom_size || it.is_custom_product) continue;
+                    const invPO = await client.query(
+                        'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                        [it.product_id, it.size, it.color, it.variant_type]
+                    );
+                    const poBefore = invPO.rows[0] ? parseInt(invPO.rows[0].stock) : 0;
+                    if (poBefore < it.quantity) continue;
+                    const poAfter = poBefore - it.quantity;
+                    await client.query(
+                        'UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
+                        [it.quantity, it.product_id, it.size, it.color, it.variant_type]
+                    );
+                    await client.query(
+                        'UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1',
+                        [it.id]
+                    );
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                         VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+                        [it.product_id, it.size, it.color, it.variant_type,
+                         -it.quantity, poBefore, poAfter,
+                         `PO terpenuhi (paid-after-receive) ${order.order_code}`,
+                         order.id, req.user.username]
+                    );
+                }
+            }
+
             // Determine next status:
             // - Trial order → routing khusus: kalau ada item yg dibalikin → test_pending_return
             //   (admin tunggu fisik barang balik), kalau semua kept → langsung done.
