@@ -2996,7 +2996,7 @@ function renderTempOrderList() {
             actionBtn = `<button onclick="openFinalizeTrialModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold"><i class="fa-solid fa-clipboard-check"></i> Finalize</button>`;
         } else if (o.order_status === 'test_pending_pay') {
             actionBtn = `<span class="text-xs text-amber-300 font-bold">💳 Tunggu Bayar Rp ${Number(o.total_amount).toLocaleString('id-ID')}</span>
-                         <button onclick="openOrderDetail(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold ml-2">Konfirmasi Bayar</button>`;
+                         <button onclick="viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold ml-2">Konfirmasi Bayar</button>`;
         } else if (o.order_status === 'test_pending_return') {
             actionBtn = `<button onclick="openReceiveReturnsModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold"><i class="fa-solid fa-rotate-left"></i> Terima Barang</button>`;
         }
@@ -3019,7 +3019,7 @@ function renderTempOrderList() {
             </div>
             <div class="space-y-0.5 pt-1 border-t border-white/5">${itemSummary}</div>
             <div class="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-white/5">
-                <button onclick="openOrderDetail(${o.id})" class="text-[11px] text-white/40 hover:text-white"><i class="fa-solid fa-external-link"></i> Detail</button>
+                <button onclick="viewOrder(${o.id})" class="text-[11px] text-white/40 hover:text-white"><i class="fa-solid fa-external-link"></i> Detail</button>
                 <div class="flex items-center gap-2">${actionBtn}</div>
             </div>
         </div>`;
