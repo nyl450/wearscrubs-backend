@@ -6321,9 +6321,23 @@ async function viewOrder(id) {
         </div>` : '';
 
         // ── Action buttons (inside modal) ──────────────────────────────────────
+        // Trial order (Temporary Order / Size Trial / Endorsement / Other) punya
+        // state machine sendiri: test_sent → finalize → test_pending_pay → confirm
+        // payment → done  |  test_pending_return → receive returns → done.
+        // Tombol generic "Konfirmasi Bayar" TIDAK boleh muncul untuk trial dgn
+        // status test_sent (karena finalize per-item belum dijalankan) atau
+        // test_pending_return (karena gak ada yg di-keep). Hanya test_pending_pay
+        // yg legit confirm payment — dan tombolnya tetap pakai openConfirmPayment.
+        const isTrial = o.order_source === 'test_size';
         const actionBtns = o.order_status === 'cancelled' ? '' : `
         <div class="flex flex-wrap gap-2 pt-4 border-t border-darkborder">
-            ${o.payment_status==='pending' ? (
+            ${isTrial && o.order_status === 'test_sent'
+                ? `<button onclick="openFinalizeTrialModal(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-clipboard-check"></i> Finalize (Pilih Keep / Return)</button>`
+                : ''}
+            ${isTrial && o.order_status === 'test_pending_return'
+                ? `<button onclick="openReceiveReturnsModal(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-rotate-left"></i> Terima Barang Kembali</button>`
+                : ''}
+            ${(!isTrial || o.order_status === 'test_pending_pay') && o.payment_status==='pending' ? (
                 // Gate review-bordir-dulu HANYA untuk order yg dibuat via Kasir (admin input,
                 // bayar belakangan): whatsapp/offline/event_offline/collaboration_event. Untuk
                 // order website (customer bayar duluan), gate OFF — admin konfirmasi bayar
@@ -6362,9 +6376,9 @@ async function viewOrder(id) {
             })() : ''}
             ${o.order_status==='packed' ? `<button onclick="openShipOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> Input Resi / Kirim</button>` : ''}
             ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
-            ${o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
-            ${isAdmin && !['cancelled','done','shipped'].includes(o.order_status) && (o.items||[]).length >= 2 ? `<button onclick="openSplitOrderModal()" title="Pisah jadi 2 pesanan (mis. sebagian diambil, sebagian dikirim)" class="text-xs px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/25 flex items-center gap-1.5"><i class="fa-solid fa-arrows-split-up-and-left"></i> Pisah Pesanan</button>` : ''}
-            ${isAdmin && o.payment_status === 'paid' && !['shipped','done','cancelled'].includes(o.order_status) && !Number(o.additional_amount_due || 0) && (o.items||[]).some(i => !i.bordir_nama && !i.bordir_logo) ? `<button onclick="openAddBordirModal()" title="Customer minta tambah bordir setelah bayar" class="text-xs px-4 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 font-bold border border-purple-400/25 flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> Tambah Bordir</button>` : ''}
+            ${!isTrial && o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
+            ${!isTrial && isAdmin && !['cancelled','done','shipped'].includes(o.order_status) && (o.items||[]).length >= 2 ? `<button onclick="openSplitOrderModal()" title="Pisah jadi 2 pesanan (mis. sebagian diambil, sebagian dikirim)" class="text-xs px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/25 flex items-center gap-1.5"><i class="fa-solid fa-arrows-split-up-and-left"></i> Pisah Pesanan</button>` : ''}
+            ${!isTrial && isAdmin && o.payment_status === 'paid' && !['shipped','done','cancelled'].includes(o.order_status) && !Number(o.additional_amount_due || 0) && (o.items||[]).some(i => !i.bordir_nama && !i.bordir_logo) ? `<button onclick="openAddBordirModal()" title="Customer minta tambah bordir setelah bayar" class="text-xs px-4 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 font-bold border border-purple-400/25 flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> Tambah Bordir</button>` : ''}
             ${isAdmin && o.order_status !== 'done' && o.order_status !== 'cancelled' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 mt-2 sm:mt-0 sm:ml-6" title="Batalkan pesanan ini"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
