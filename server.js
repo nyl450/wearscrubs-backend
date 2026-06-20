@@ -754,10 +754,10 @@ async function initDB() {
     // ── Migrate: reject stock support ─────────────────────────────────────────
     await dbRun(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS stock_reject INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS is_reject BOOLEAN DEFAULT FALSE`);
-    // Extend movement_type CHECK to allow reject + exchange movement types
-    await dbRun(`ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check`);
-    await dbRun(`ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_movement_type_check
-        CHECK(movement_type IN ('receive','manual_set','order_out','order_cancel_restore','receive_reject','reject_to_normal','exchange_replacement_out','exchange_return_in','order_edit_adjust'))`);
+    // movement_type CHECK constraint diatur DI ATAS (lihat block "Stock movement:
+    // add test_out / test_return"). Dulu di sini ada ALTER versi 9-values yang
+    // MENIMPA versi 11-values di atas → setiap Railway boot ulang, constraint
+    // hilangkan test_out/test_return → POST /api/temp-orders pecah di production.
 
     // ── Seed default admin ────────────────────────────────────────────────────
     // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
