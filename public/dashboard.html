@@ -954,6 +954,26 @@
                     </select>
                   </div>
                 </div>
+
+                <!-- Custom Color Panel (visible only saat color = __custom__) -->
+                <div id="bulk-custom-color-panel" class="hidden bg-cyan-500/5 border border-cyan-400/25 rounded-lg p-3 space-y-3">
+                  <div class="flex items-start gap-2">
+                    <span class="text-cyan-300 text-base">🎨</span>
+                    <p class="text-[11px] text-cyan-200/90 leading-relaxed">
+                      <strong>Custom Warna</strong> — off-katalog, semua pcs auto Pre-Order (made-to-order). Stok tidak dicek; manual fulfill via tombol "Tandai Siap" di order detail setelah jahit selesai.
+                    </p>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-[10px] text-white/40 uppercase">Nama Warna <span class="text-red-400">*</span></label>
+                      <input id="bulk-custom-color-name" type="text" placeholder="Olive, Maroon Custom, Sage..." oninput="bulkUpdateTotal()" class="bulk-input mt-1">
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-white/40 uppercase">Harga per pcs (Rp) <span class="text-red-400">*</span></label>
+                      <input id="bulk-custom-price" type="number" min="0" step="1000" placeholder="auto-isi dari katalog" oninput="bulkUpdateTotal()" class="bulk-input mt-1">
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- 2 · BORDIR SETTINGS -->
@@ -10390,8 +10410,13 @@ async function bulkOnProductChange() {
             opt.value = c; opt.textContent = c;
             colorSel.appendChild(opt);
         });
-        // Custom warna BLOCKED di Bulk Phase 1 (off-catalog flow lebih kompleks
-        // — admin pakai Single Line untuk custom color). Tidak append __custom__.
+        // Custom warna: off-katalog made-to-order. Auto Pre-Order via
+        // is_custom_size=true flag — server skip stock check, item masuk
+        // Pre-Order section utk manual fulfill ("Tandai Siap").
+        const customOpt = document.createElement('option');
+        customOpt.value = '__custom__';
+        customOpt.textContent = '✏️ Custom Warna…';
+        colorSel.appendChild(customOpt);
         colorSel.disabled = false;
         if (colors.length === 1) {
             colorSel.value = colors[0];
@@ -10408,9 +10433,13 @@ async function bulkOnProductChange() {
 function bulkOnColorChange() {
     const color = document.getElementById('bulk-color').value;
     const variantSel = document.getElementById('bulk-variant');
+    const customPanel = document.getElementById('bulk-custom-color-panel');
     variantSel.innerHTML = '<option value="">— Pilih Variant —</option>';
     variantSel.disabled = true;
     document.getElementById('bulk-add-row-btn').disabled = true;
+
+    // Show/hide custom color panel
+    if (customPanel) customPanel.classList.toggle('hidden', color !== '__custom__');
 
     if (!color || !bulkInventoryCache) {
         bulkClearAllRows();
@@ -10418,7 +10447,16 @@ function bulkOnColorChange() {
         bulkUpdateTotal();
         return;
     }
-    const variants = [...new Set(bulkInventoryCache.filter(i => i.color === color).map(i => i.variant_type))];
+
+    // Custom color: variants = all variants the product has (across all colors).
+    // Standard color: variants = only those with stock rows for the chosen color.
+    let variants;
+    if (color === '__custom__') {
+        variants = [...new Set(bulkInventoryCache.map(i => i.variant_type))];
+    } else {
+        variants = [...new Set(bulkInventoryCache.filter(i => i.color === color).map(i => i.variant_type))];
+    }
+
     variants.forEach(v => {
         const label = v === 'pendek' ? 'Lengan Pendek' : v === 'panjang' ? 'Lengan Panjang' : v;
         const opt = document.createElement('option');
@@ -10439,24 +10477,56 @@ function bulkOnVariantChange() {
     const v = document.getElementById('bulk-variant').value;
     document.getElementById('bulk-add-row-btn').disabled = !v;
     bulkRefreshAllSizeOptions();
+    // Auto-fill custom price dari catalog base saat variant dipilih (kalau mode custom + price empty)
+    bulkPrefillCustomPrice();
     bulkUpdateStockSummary();
     bulkUpdateTotal();
 }
 
+// Prefill custom price input dgn catalog price_by_type[variant] kalau masih kosong.
+// Convenience — admin tetap bisa override manual.
+function bulkPrefillCustomPrice() {
+    const color = document.getElementById('bulk-color')?.value;
+    if (color !== '__custom__') return;
+    const variant = document.getElementById('bulk-variant')?.value;
+    const priceEl = document.getElementById('bulk-custom-price');
+    if (!priceEl || !bulkSelectedProduct || !variant) return;
+    if (priceEl.value && parseInt(priceEl.value) > 0) return; // user sudah isi manual
+    const catalogPrice = (bulkSelectedProduct.price_by_type && bulkSelectedProduct.price_by_type[variant]) || 0;
+    if (catalogPrice > 0) priceEl.value = catalogPrice;
+}
+
 // Sizes tersedia utk color+variant terpilih, urut S→XXL→4XL dst.
+// Custom color: sizes diambil dari ANY color filtered by variant (sizes shared
+// per variant), deduplicated. Stock irrelevant utk custom (off-katalog).
 function bulkAvailableSizes() {
     if (!bulkInventoryCache) return [];
     const color = document.getElementById('bulk-color').value;
     const variant = document.getElementById('bulk-variant').value;
     if (!color || !variant) return [];
     const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','3XL','4XL','5XL'];
-    return bulkInventoryCache
-        .filter(i => i.color === color && i.variant_type === variant)
-        .sort((a, b) => {
-            const ia = SIZE_ORDER.indexOf(a.size);
-            const ib = SIZE_ORDER.indexOf(b.size);
-            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-        });
+
+    let filtered;
+    if (color === '__custom__') {
+        const seen = new Set();
+        filtered = [];
+        bulkInventoryCache
+            .filter(i => i.variant_type === variant)
+            .forEach(i => {
+                if (!seen.has(i.size)) {
+                    seen.add(i.size);
+                    filtered.push({ size: i.size, stock: 0 }); // stock irrelevant utk custom
+                }
+            });
+    } else {
+        filtered = bulkInventoryCache.filter(i => i.color === color && i.variant_type === variant);
+    }
+
+    return filtered.sort((a, b) => {
+        const ia = SIZE_ORDER.indexOf(a.size);
+        const ib = SIZE_ORDER.indexOf(b.size);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
 }
 
 function bulkRefreshAllSizeOptions() {
@@ -10599,6 +10669,15 @@ function bulkUpdateStockSummary() {
         return;
     }
 
+    // Custom color: bypass stock cards — semua pcs auto Pre-Order (made-to-order).
+    // Backend flag is_custom_size=true → skip stock check + masuk Pre-Order section.
+    if (color === '__custom__') {
+        const customName = document.getElementById('bulk-custom-color-name')?.value.trim() || '(belum diisi)';
+        panel.innerHTML = '<div class="col-span-2 bg-cyan-500/8 border border-cyan-400/25 rounded-lg p-3 flex items-start gap-2"><span class="text-cyan-300 text-base">🎨</span><div><p class="text-[11px] font-bold text-cyan-200">Custom Warna: ' + esc(customName) + '</p><p class="text-[10px] text-cyan-200/80 mt-1">Semua ' + rows.length + ' pcs auto Pre-Order (off-katalog made-to-order). Stok tidak dicek; manual fulfill via "Tandai Siap" di order detail.</p></div></div>';
+        if (banner) banner.classList.add('hidden'); // hide PO banner — custom punya flow sendiri
+        return;
+    }
+
     const needPerSize = {};
     rows.forEach(tr => {
         const size = tr.querySelector('.bulk-cell-size')?.value;
@@ -10654,6 +10733,7 @@ function bulkUpdateTotal() {
     const rows = document.querySelectorAll('#bulk-rows-body tr');
     const n = rows.length;
     const variant = document.getElementById('bulk-variant')?.value;
+    const color = document.getElementById('bulk-color')?.value;
 
     if (!bulkSelectedProduct || !variant || n === 0) {
         card.classList.add('hidden');
@@ -10664,7 +10744,12 @@ function bulkUpdateTotal() {
     card.classList.remove('hidden');
     btn.disabled = false;
 
-    const unitPrice = (bulkSelectedProduct.price_by_type && bulkSelectedProduct.price_by_type[variant]) || 0;
+    // Custom color: pakai harga manual dari input (custom_price). Catalog price_by_type
+    // tidak relevan karena off-katalog (warna tidak terdaftar di product variants).
+    const isCustomColor = color === '__custom__';
+    const unitPrice = isCustomColor
+        ? (parseInt(document.getElementById('bulk-custom-price')?.value) || 0)
+        : ((bulkSelectedProduct.price_by_type && bulkSelectedProduct.price_by_type[variant]) || 0);
     const namaActive = document.getElementById('bulk-bordir-nama').value === 'true';
     const logoActive = document.getElementById('bulk-bordir-logo').value === 'true';
     const namaPrice = 20000;
@@ -10745,28 +10830,49 @@ async function bulkSubmitOrder() {
         return;
     }
 
+    // ── Custom Color validation (kalau aktif) ──
+    const isCustomColor = color === '__custom__';
+    const customColorName = isCustomColor
+        ? document.getElementById('bulk-custom-color-name').value.trim()
+        : '';
+    const customPrice = isCustomColor
+        ? (parseInt(document.getElementById('bulk-custom-price').value) || 0)
+        : 0;
+    if (isCustomColor) {
+        if (!customColorName) {
+            alert('Custom Warna: isi nama warna dulu (mis. "Olive", "Maroon Custom").'); return;
+        }
+        if (customPrice <= 0) {
+            alert('Custom Warna: isi harga per pcs (Rp) dulu.'); return;
+        }
+    }
+
     // ── Aggregate per-size: stock vs need → FIFO PO allocation ──
+    // (Custom color: skip ini, semua pcs otomatis is_custom_size=true di bawah)
     const needPerSize = {};
-    rows.forEach(tr => {
-        const size = tr.querySelector('.bulk-cell-size').value;
-        if (size) needPerSize[size] = (needPerSize[size] || 0) + 1;
-    });
     const stockPerSize = {};
-    Object.keys(needPerSize).forEach(size => {
-        const inv = bulkInventoryCache.find(i => i.color === color && i.variant_type === variant && i.size === size);
-        stockPerSize[size] = inv ? Number(inv.stock) : 0;
-    });
+    if (!isCustomColor) {
+        rows.forEach(tr => {
+            const size = tr.querySelector('.bulk-cell-size').value;
+            if (size) needPerSize[size] = (needPerSize[size] || 0) + 1;
+        });
+        Object.keys(needPerSize).forEach(size => {
+            const inv = bulkInventoryCache.find(i => i.color === color && i.variant_type === variant && i.size === size);
+            stockPerSize[size] = inv ? Number(inv.stock) : 0;
+        });
+    }
 
     // ── Build items[] + embroideryDetails[] ──
     const productName = bulkSelectedProduct.name || 'Produk';
-    const unitPrice = (bulkSelectedProduct.price_by_type && bulkSelectedProduct.price_by_type[variant]) || 0;
+    // Color value yg di-kirim ke server: nama custom (mis. "Olive") atau pilihan katalog
+    const finalColor = isCustomColor ? customColorName : color;
     const namaPrice = 20000;
     const logoPrice = parseInt(document.getElementById('bulk-logo-price').value) || 30000;
     const logoColor = document.getElementById('bulk-logo-color').value.trim() || '';
 
     const items = [];
     const embroideryDetails = [];
-    const allocated = {}; // Track running PO allocation per size (FIFO)
+    const allocated = {}; // Track running PO allocation per size (FIFO) — non-custom only
     const errors = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -10778,12 +10884,17 @@ async function bulkSubmitOrder() {
         if (!size) { errors.push('Baris #' + (i + 1) + ': size kosong.'); continue; }
         if (namaActive && !namaText) { errors.push('Baris #' + (i + 1) + ': nama bordir kosong.'); continue; }
 
-        allocated[size] = (allocated[size] || 0) + 1;
-        const isPO = allocated[size] > (stockPerSize[size] || 0);
+        // Custom color: is_custom_size=true (server skip stock check + masuk Pre-Order
+        // section utk manual fulfill). Catalog color: is_po per FIFO allocation.
+        let isPO = false;
+        if (!isCustomColor) {
+            allocated[size] = (allocated[size] || 0) + 1;
+            isPO = allocated[size] > (stockPerSize[size] || 0);
+        }
 
         items.push({
             product_id:        bulkSelectedProduct.id,
-            color:             color,
+            color:             finalColor,
             variant_type:      variant,
             size:              size,
             quantity:          1,
@@ -10792,13 +10903,13 @@ async function bulkSubmitOrder() {
             bordir_nama_price: namaPrice,
             bordir_logo_price: logoPrice,
             is_bonus:          false,
-            is_custom_size:    false,
-            custom_price:      0,
-            is_po:             isPO,
+            is_custom_size:    isCustomColor,   // ← key flag: custom color → off-katalog
+            custom_price:      isCustomColor ? customPrice : 0,
+            is_po:             isCustomColor ? false : isPO, // custom punya flow sendiri, bukan PO FIFO
         });
 
         if (namaActive || logoActive) {
-            const itemLabel = productName + ' (' + color + ', ' + size + ')';
+            const itemLabel = productName + ' (' + finalColor + ', ' + size + ')';
             if (namaActive) {
                 const namaPayload = { type: 'nama', item_label: itemLabel, value: namaText, color: '', position: namaPos };
                 if (namaLine2) namaPayload.value_line2 = namaLine2;
@@ -10899,6 +11010,10 @@ function bulkResetState() {
     document.getElementById('bulk-logo-preview').innerHTML = '<i class="fa-solid fa-image text-white/30"></i>';
     document.getElementById('bulk-logo-name').textContent = 'Logo dipakai untuk semua pcs · max 1.8MB';
     const logoFile = document.getElementById('bulk-logo-file'); if (logoFile) logoFile.value = '';
+    // Custom color panel reset (nama + harga + panel hidden)
+    document.getElementById('bulk-custom-color-panel')?.classList.add('hidden');
+    const ccName = document.getElementById('bulk-custom-color-name'); if (ccName) ccName.value = '';
+    const ccPrice = document.getElementById('bulk-custom-price'); if (ccPrice) ccPrice.value = '';
     bulkClearAllRows();
     bulkUpdateStockSummary();
     bulkUpdateTotal();
