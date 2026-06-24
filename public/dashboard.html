@@ -292,6 +292,22 @@
     .bulk-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: white; width: 100%; outline: none; transition: border-color 150ms; }
     .bulk-input:focus { border-color: #4ade80; }
     .bulk-input:disabled { opacity: 0.4; cursor: not-allowed; }
+    .bulk-cell-label { display: none; }
+
+    /* Mobile: table -> card layout (each row becomes a vertical card) */
+    @media (max-width: 640px) {
+      #bulk-rows-body tr { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "num actions" "size size" "name name" "line2 line2"; gap: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.02); }
+      #bulk-rows-body td { display: block; padding: 0; }
+      #bulk-rows-body td:nth-child(1) { grid-area: num; font-size: 11px; }
+      #bulk-rows-body td:nth-child(2) { grid-area: size; }
+      #bulk-rows-body td:nth-child(3) { grid-area: name; }
+      #bulk-rows-body td:nth-child(4) { grid-area: line2; }
+      #bulk-rows-body td:nth-child(5) { grid-area: actions; text-align: right; align-self: start; }
+      #bulk-rows-body .bulk-cell-label { display: block; font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; font-weight: 600; }
+      #bulk-rows-body .bulk-input { font-size: 14px; padding: 10px 12px; }
+      /* Hide table header on mobile (cards self-label via .bulk-cell-label) */
+      #kasir-bulk-mode table thead { display: none; }
+    }
     .wa-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 6px; display: block; }
     .wa-optional { font-weight: 400; color: rgba(255,255,255,0.25); }
     .wa-bonus-pill { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px; border-radius: 8px; border: 1px solid rgba(251,191,36,0.18); background: rgba(251,191,36,0.04); cursor: pointer; transition: border-color 0.15s ease-out, background-color 0.15s ease-out; user-select: none; }
@@ -915,14 +931,6 @@
 
             <!-- ─────────── BULK BORDIR MODE (Phase 1 skeleton — wiring next commit) ─────────── -->
             <div id="kasir-bulk-mode" class="hidden space-y-4">
-              <!-- Info banner -->
-              <div class="bg-cyan-500/8 border border-cyan-400/20 rounded-lg p-3 flex items-start gap-2">
-                <i class="fa-solid fa-circle-info text-cyan-300 text-xs mt-0.5"></i>
-                <p class="text-[11px] text-cyan-200/90 leading-relaxed">
-                  <strong>Bulk Bordir</strong> — untuk order banyak dengan nama bordir per-dokter berbeda (mis. 9 atasan, 9 nama beda). 1 panel = 1 produk + N pcs. Auto-PO per size. <span class="text-amber-300">Skeleton mode — submit logic akan di-bind di commit berikutnya.</span>
-                </p>
-              </div>
-
               <!-- 1 · PRODUK CASCADE -->
               <div class="bg-white/2 border border-white/8 rounded-lg p-4 space-y-3">
                 <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">1 · Produk</p>
@@ -10331,14 +10339,25 @@ function bulkAddRow(prefillData) {
 
     const tr = document.createElement('tr');
     tr.className = 'border-t border-white/5 hover:bg-white/2 bulk-row';
+    // Setiap <td> punya <span class="bulk-cell-label"> yg HANYA tampil di mobile
+    // (CSS @media max-width:640px). Desktop layout = pure table, label tersembunyi.
     tr.innerHTML = `
         <td class="p-2 text-white/40 font-mono bulk-row-num">${tbody.children.length + 1}</td>
-        <td class="p-2"><select class="bulk-input bulk-cell-size">${sizeOpts}</select></td>
-        <td class="p-2"><input type="text" placeholder="Drg. Nama Lengkap" class="bulk-input bulk-cell-name"></td>
-        <td class="p-2"><input type="text" placeholder="Sp.PD / dkk" class="bulk-input bulk-cell-line2"></td>
+        <td class="p-2">
+            <span class="bulk-cell-label">Size</span>
+            <select class="bulk-input bulk-cell-size">${sizeOpts}</select>
+        </td>
+        <td class="p-2">
+            <span class="bulk-cell-label">Nama Dokter</span>
+            <input type="text" placeholder="Drg. Nama Lengkap" class="bulk-input bulk-cell-name">
+        </td>
+        <td class="p-2">
+            <span class="bulk-cell-label">Line 2 (opsional)</span>
+            <input type="text" placeholder="Sp.PD / dkk" class="bulk-input bulk-cell-line2">
+        </td>
         <td class="p-2 text-right whitespace-nowrap">
-            <button title="Duplikat baris" onclick="bulkDuplicateRow(this)" class="text-cyan-300/60 hover:text-cyan-300 text-sm mr-2"><i class="fa-solid fa-copy"></i></button>
-            <button title="Hapus baris" onclick="bulkDeleteRow(this)" class="text-red-400/60 hover:text-red-400 text-base">&times;</button>
+            <button title="Duplikat baris" onclick="bulkDuplicateRow(this)" class="text-cyan-300/60 hover:text-cyan-300 text-base mr-2 p-1"><i class="fa-solid fa-copy"></i></button>
+            <button title="Hapus baris" onclick="bulkDeleteRow(this)" class="text-red-400/60 hover:text-red-400 text-xl p-1">&times;</button>
         </td>
     `;
     tbody.appendChild(tr);
