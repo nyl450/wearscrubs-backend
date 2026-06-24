@@ -284,6 +284,14 @@
     .wa-bordir-pill.active .wa-bordir-box::after { display: block; }
     .wa-bordir-text { font-size: 12px; color: rgba(255,255,255,0.6); }
     .wa-bordir-price { font-size: 10px; color: rgba(255,255,255,0.25); margin-left: auto; }
+
+    /* === Bulk Bordir Mode — Phase 1 skeleton === */
+    .kasir-mode-btn { color: rgba(255,255,255,0.5); transition: color 150ms, background-color 150ms; }
+    .kasir-mode-btn.kasir-mode-active { background: rgba(74,222,128,0.15); color: #4ade80; }
+    .kasir-mode-btn:hover:not(.kasir-mode-active) { color: rgba(255,255,255,0.8); }
+    .bulk-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: white; width: 100%; outline: none; transition: border-color 150ms; }
+    .bulk-input:focus { border-color: #4ade80; }
+    .bulk-input:disabled { opacity: 0.4; cursor: not-allowed; }
     .wa-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 6px; display: block; }
     .wa-optional { font-weight: 400; color: rgba(255,255,255,0.25); }
     .wa-bonus-pill { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px; border-radius: 8px; border: 1px solid rgba(251,191,36,0.18); background: rgba(251,191,36,0.04); cursor: pointer; transition: border-color 0.15s ease-out, background-color 0.15s ease-out; user-select: none; }
@@ -883,11 +891,163 @@
 
           <!-- SECTION: Produk Dipesan -->
           <div class="p-5 space-y-3">
-            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Produk Dipesan</p>
-            <div id="wa-items-container" class="space-y-3"></div>
-            <button onclick="waAddItem()" class="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-sm font-medium transition-all flex items-center justify-center gap-2">
-              <i class="fa-solid fa-plus text-xs"></i> Tambah Produk
-            </button>
+            <!-- Header + Mode Toggle -->
+            <div class="flex items-center justify-between flex-wrap gap-3">
+              <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Produk Dipesan</p>
+              <div class="flex items-center gap-1 bg-white/3 border border-white/8 rounded-lg p-0.5">
+                <button onclick="kasirSetMode('single')" id="kasir-mode-single-btn" class="kasir-mode-btn kasir-mode-active px-3 py-1 rounded-md text-xs font-medium">
+                  <i class="fa-solid fa-list-ul text-[10px] mr-1"></i> Single Line
+                </button>
+                <button onclick="kasirSetMode('bulk')" id="kasir-mode-bulk-btn" class="kasir-mode-btn px-3 py-1 rounded-md text-xs font-medium">
+                  <i class="fa-solid fa-table-list text-[10px] mr-1"></i> Bulk Bordir
+                  <span class="text-[9px] text-amber-300 ml-0.5">NEW</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- ─────────── SINGLE LINE MODE (default — existing behavior) ─────────── -->
+            <div id="kasir-single-mode">
+              <div id="wa-items-container" class="space-y-3"></div>
+              <button onclick="waAddItem()" class="mt-3 w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-sm font-medium transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-plus text-xs"></i> Tambah Produk
+              </button>
+            </div>
+
+            <!-- ─────────── BULK BORDIR MODE (Phase 1 skeleton — wiring next commit) ─────────── -->
+            <div id="kasir-bulk-mode" class="hidden space-y-4">
+              <!-- Info banner -->
+              <div class="bg-cyan-500/8 border border-cyan-400/20 rounded-lg p-3 flex items-start gap-2">
+                <i class="fa-solid fa-circle-info text-cyan-300 text-xs mt-0.5"></i>
+                <p class="text-[11px] text-cyan-200/90 leading-relaxed">
+                  <strong>Bulk Bordir</strong> — untuk order banyak dengan nama bordir per-dokter berbeda (mis. 9 atasan, 9 nama beda). 1 panel = 1 produk + N pcs. Auto-PO per size. <span class="text-amber-300">Skeleton mode — submit logic akan di-bind di commit berikutnya.</span>
+                </p>
+              </div>
+
+              <!-- 1 · PRODUK CASCADE -->
+              <div class="bg-white/2 border border-white/8 rounded-lg p-4 space-y-3">
+                <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">1 · Produk</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label class="text-[10px] text-white/40 uppercase">Produk</label>
+                    <select id="bulk-product" onchange="bulkOnProductChange()" class="bulk-input mt-1">
+                      <option value="">— Pilih Produk —</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-white/40 uppercase">Warna</label>
+                    <select id="bulk-color" onchange="bulkOnColorChange()" class="bulk-input mt-1" disabled>
+                      <option value="">— Pilih Warna —</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-white/40 uppercase">Variant</label>
+                    <select id="bulk-variant" onchange="bulkOnVariantChange()" class="bulk-input mt-1" disabled>
+                      <option value="">— Pilih Variant —</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2 · BORDIR SETTINGS -->
+              <div class="bg-white/2 border border-white/8 rounded-lg p-4 space-y-3">
+                <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">2 · Bordir (berlaku semua baris)</p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <label class="wa-bordir-pill" onclick="bulkToggleBordir('nama')">
+                    <span class="wa-bordir-box"></span>
+                    <span class="wa-bordir-text">Bordir Nama</span>
+                    <span class="wa-bordir-price">Rp 20rb/pcs</span>
+                    <input type="hidden" id="bulk-bordir-nama" value="false">
+                  </label>
+                  <label class="wa-bordir-pill" onclick="bulkToggleBordir('logo')">
+                    <span class="wa-bordir-box"></span>
+                    <span class="wa-bordir-text">Bordir Logo</span>
+                    <span class="wa-bordir-price">Rp 30rb/pcs</span>
+                    <input type="hidden" id="bulk-bordir-logo" value="false">
+                  </label>
+                </div>
+
+                <!-- Logo upload panel (visible when bordir logo active) -->
+                <div id="bulk-logo-panel" class="hidden bg-white/3 border border-white/8 rounded-lg p-3 space-y-2">
+                  <div class="flex items-start gap-3">
+                    <div id="bulk-logo-preview" class="w-16 h-16 rounded-md bg-white/5 border border-dashed border-white/15 flex items-center justify-center flex-shrink-0">
+                      <i class="fa-solid fa-image text-white/30"></i>
+                    </div>
+                    <div class="flex-1 space-y-2">
+                      <input type="file" id="bulk-logo-file" accept="image/*" onchange="bulkOnLogoUpload(this)" class="hidden">
+                      <button onclick="document.getElementById('bulk-logo-file').click()" class="text-xs text-cyan-300 hover:text-cyan-200">
+                        <i class="fa-solid fa-upload"></i> Upload Logo
+                      </button>
+                      <p id="bulk-logo-name" class="text-[10px] text-white/40">Logo dipakai untuk semua pcs · max 1.8MB</p>
+                      <div class="grid grid-cols-3 gap-2">
+                        <div>
+                          <label class="text-[9px] text-white/40 uppercase">Posisi</label>
+                          <select id="bulk-logo-pos" class="bulk-input mt-0.5 text-[11px]">
+                            <option value="kiri">Dada Kiri</option>
+                            <option value="kanan">Dada Kanan</option>
+                            <option value="lengan-kiri">Lengan Kiri</option>
+                            <option value="punggung">Punggung</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-white/40 uppercase">Warna</label>
+                          <input id="bulk-logo-color" type="text" placeholder="Sesuai logo" class="bulk-input mt-0.5 text-[11px]">
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-white/40 uppercase">Harga/pcs</label>
+                          <input id="bulk-logo-price" type="number" value="30000" class="bulk-input mt-0.5 text-[11px]">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3 · TABEL PER-ORANG -->
+              <div class="bg-white/2 border border-white/8 rounded-lg p-4 space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                  <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">3 · Daftar Per-Orang · <span class="text-cyan-300/70">1 baris = 1 pcs</span></p>
+                  <p class="text-[11px] text-white/40"><span id="bulk-row-count">0</span> baris · total <span id="bulk-total-pcs" class="text-white font-bold">0 pcs</span></p>
+                </div>
+
+                <div class="overflow-x-auto -mx-1">
+                  <table class="w-full text-xs">
+                    <thead>
+                      <tr class="text-[10px] uppercase text-white/40 tracking-wider">
+                        <th class="text-left p-2 w-8">#</th>
+                        <th class="text-left p-2 w-24">Size</th>
+                        <th class="text-left p-2">Nama (baris 1)</th>
+                        <th class="text-left p-2">Line 2 (opsional)</th>
+                        <th class="w-20"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="bulk-rows-body"></tbody>
+                  </table>
+                </div>
+
+                <div id="bulk-empty-state" class="text-center py-8 text-white/30 text-xs">
+                  Pilih produk + warna + variant dulu untuk mulai tambah baris.
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button id="bulk-add-row-btn" onclick="bulkAddRow()" disabled class="flex-1 py-2 rounded-lg border border-dashed border-white/15 text-xs text-white/50 hover:border-white/30 hover:text-white/80 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                    <i class="fa-solid fa-plus text-[10px]"></i> Tambah Baris
+                  </button>
+                  <p class="text-[10px] text-white/40 italic">💡 Multi-pcs same-name? Klik <i class="fa-solid fa-copy"></i> di baris untuk duplikat.</p>
+                </div>
+              </div>
+
+              <!-- 4 · STOK + TOTAL placeholder (wiring next commit) -->
+              <div class="bg-white/2 border border-white/8 rounded-lg p-4">
+                <p class="text-[10px] font-mono uppercase tracking-wider text-white/40 mb-3">4 · Cek Stok · Total</p>
+                <p class="text-[11px] text-white/40 italic">Stock summary + total breakdown akan muncul di sini setelah baris ditambahkan. <span class="text-amber-300/70">Wiring di commit berikutnya.</span></p>
+              </div>
+
+              <!-- Bulk submit placeholder -->
+              <button id="bulk-submit-btn" disabled class="w-full py-3 rounded-xl bg-green-600/40 text-white/60 font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2">
+                <i class="fa-solid fa-cart-plus"></i> Submit Bulk Order
+                <span class="text-[10px] text-white/50 ml-1">(disabled — wiring next commit)</span>
+              </button>
+            </div>
           </div>
 
           <!-- SECTION: Diskon -->
@@ -10071,6 +10231,175 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BULK BORDIR MODE — Phase 1 skeleton (Commit 1)
+// ───────────────────────────────────────────────────────────────────────────
+// Visual + table mgmt only. Cascade data wiring, stock summary, total
+// breakdown, dan submit handler akan di-bind di Commit 2.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function kasirSetMode(mode) {
+    const single = document.getElementById('kasir-single-mode');
+    const bulk   = document.getElementById('kasir-bulk-mode');
+    const sBtn   = document.getElementById('kasir-mode-single-btn');
+    const bBtn   = document.getElementById('kasir-mode-bulk-btn');
+    if (!single || !bulk) return;
+    if (mode === 'bulk') {
+        single.classList.add('hidden');
+        bulk.classList.remove('hidden');
+        sBtn.classList.remove('kasir-mode-active');
+        bBtn.classList.add('kasir-mode-active');
+        bulkPopulateProducts(); // populate dropdown saat masuk Bulk mode
+    } else {
+        single.classList.remove('hidden');
+        bulk.classList.add('hidden');
+        sBtn.classList.add('kasir-mode-active');
+        bBtn.classList.remove('kasir-mode-active');
+    }
+}
+
+// Reuse waProducts cache yg sudah di-fetch utk single-line Kasir.
+function bulkPopulateProducts() {
+    const sel = document.getElementById('bulk-product');
+    if (!sel) return;
+    if (sel.options.length > 1) return; // sudah populated, skip
+    if (typeof waProducts === 'undefined' || !Array.isArray(waProducts) || waProducts.length === 0) {
+        // waProducts belum dimuat — single Kasir biasanya fetch saat showModule('manual-order').
+        // Kalau kosong, kasih hint admin buka Single mode dulu (yang trigger fetch), atau kita
+        // fetch manual di Commit 2. Untuk skeleton, cukup info di console.
+        console.warn('[bulk] waProducts belum siap. Buka Single Line mode dulu (atau refresh).');
+        return;
+    }
+    waProducts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+    });
+}
+
+function bulkToggleBordir(kind) {
+    const hidden = document.getElementById(`bulk-bordir-${kind}`);
+    if (!hidden) return;
+    const pill   = hidden.closest('.wa-bordir-pill');
+    const active = hidden.value === 'true';
+    hidden.value = active ? 'false' : 'true';
+    pill.classList.toggle('active', !active);
+    if (kind === 'logo') {
+        document.getElementById('bulk-logo-panel').classList.toggle('hidden', active);
+    }
+}
+
+function bulkOnLogoUpload(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 1.8 * 1024 * 1024) {
+        alert('Logo terlalu besar (max 1.8 MB).');
+        input.value = '';
+        return;
+    }
+    document.getElementById('bulk-logo-name').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('bulk-logo-preview').innerHTML =
+            `<img src="${e.target.result}" class="w-full h-full object-contain rounded-md">`;
+    };
+    reader.readAsDataURL(file);
+}
+
+// ── Cascade dropdowns (skeleton — real data wiring di Commit 2) ──────────
+function bulkOnProductChange() {
+    const v = document.getElementById('bulk-product').value;
+    document.getElementById('bulk-color').disabled   = !v;
+    document.getElementById('bulk-variant').disabled = !v;
+    document.getElementById('bulk-add-row-btn').disabled = !v;
+    // Real cascade (populate color/variant options dari product variants): Commit 2
+}
+function bulkOnColorChange()   { /* Commit 2 */ }
+function bulkOnVariantChange() { /* Commit 2 */ }
+
+// ── Row management: add / duplicate / delete + auto-renumber ─────────────
+function bulkAddRow(prefillData) {
+    const tbody = document.getElementById('bulk-rows-body');
+    const empty = document.getElementById('bulk-empty-state');
+    if (empty) empty.classList.add('hidden');
+
+    // Placeholder size options — Commit 2 akan pakai sizes dari selected variant
+    const sizes = ['S', 'M', 'L', 'XL', 'XXL'];
+    const sizeOpts = sizes.map(s => `<option value="${s}">${s}</option>`).join('');
+
+    const tr = document.createElement('tr');
+    tr.className = 'border-t border-white/5 hover:bg-white/2 bulk-row';
+    tr.innerHTML = `
+        <td class="p-2 text-white/40 font-mono bulk-row-num">${tbody.children.length + 1}</td>
+        <td class="p-2"><select class="bulk-input bulk-cell-size">${sizeOpts}</select></td>
+        <td class="p-2"><input type="text" placeholder="Drg. Nama Lengkap" class="bulk-input bulk-cell-name"></td>
+        <td class="p-2"><input type="text" placeholder="Sp.PD / dkk" class="bulk-input bulk-cell-line2"></td>
+        <td class="p-2 text-right whitespace-nowrap">
+            <button title="Duplikat baris" onclick="bulkDuplicateRow(this)" class="text-cyan-300/60 hover:text-cyan-300 text-sm mr-2"><i class="fa-solid fa-copy"></i></button>
+            <button title="Hapus baris" onclick="bulkDeleteRow(this)" class="text-red-400/60 hover:text-red-400 text-base">&times;</button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+
+    // Optional prefill (dipakai saat duplicate)
+    if (prefillData) {
+        tr.querySelector('.bulk-cell-size').value  = prefillData.size  || '';
+        tr.querySelector('.bulk-cell-name').value  = prefillData.name  || '';
+        tr.querySelector('.bulk-cell-line2').value = prefillData.line2 || '';
+    }
+
+    bulkUpdateRowCount();
+    // Focus nama input untuk row baru (kecuali saat duplicate)
+    if (!prefillData) {
+        tr.querySelector('.bulk-cell-name').focus();
+    }
+}
+
+function bulkDuplicateRow(btn) {
+    const tr = btn.closest('tr');
+    if (!tr) return;
+    const data = {
+        size:  tr.querySelector('.bulk-cell-size')?.value  || '',
+        name:  tr.querySelector('.bulk-cell-name')?.value  || '',
+        line2: tr.querySelector('.bulk-cell-line2')?.value || '',
+    };
+    // Insert clone TEPAT di bawah baris asal (bukan di akhir tbody)
+    bulkAddRow(data);
+    const tbody = tr.parentNode;
+    const newTr = tbody.lastElementChild;
+    if (newTr && newTr !== tr.nextSibling) {
+        tbody.insertBefore(newTr, tr.nextSibling);
+        bulkUpdateRowCount(); // re-number setelah pindah posisi
+    }
+}
+
+function bulkDeleteRow(btn) {
+    const tr = btn.closest('tr');
+    if (!tr) return;
+    tr.remove();
+    bulkUpdateRowCount();
+    const tbody = document.getElementById('bulk-rows-body');
+    if (tbody.children.length === 0) {
+        document.getElementById('bulk-empty-state')?.classList.remove('hidden');
+    }
+}
+
+function bulkUpdateRowCount() {
+    const tbody = document.getElementById('bulk-rows-body');
+    if (!tbody) return;
+    const count = tbody.children.length;
+    const countEl = document.getElementById('bulk-row-count');
+    const pcsEl   = document.getElementById('bulk-total-pcs');
+    if (countEl) countEl.textContent = count;
+    if (pcsEl)   pcsEl.textContent   = `${count} pcs`;
+    // Auto-renumber rows 1..N
+    Array.from(tbody.children).forEach((tr, i) => {
+        const numCell = tr.querySelector('.bulk-row-num');
+        if (numCell) numCell.textContent = i + 1;
+    });
+}
 
 </script>
 </body>
