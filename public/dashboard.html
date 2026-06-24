@@ -1044,16 +1044,47 @@
                 </div>
               </div>
 
-              <!-- 4 · STOK + TOTAL placeholder (wiring next commit) -->
-              <div class="bg-white/2 border border-white/8 rounded-lg p-4">
-                <p class="text-[10px] font-mono uppercase tracking-wider text-white/40 mb-3">4 · Cek Stok · Total</p>
-                <p class="text-[11px] text-white/40 italic">Stock summary + total breakdown akan muncul di sini setelah baris ditambahkan. <span class="text-amber-300/70">Wiring di commit berikutnya.</span></p>
+              <!-- 4 · STOK SUMMARY -->
+              <div class="bg-white/2 border border-white/8 rounded-lg p-4 space-y-3">
+                <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">4 · Cek Stok · Auto-PO Per Size</p>
+                <div id="bulk-stock-summary" class="grid sm:grid-cols-2 gap-2 text-xs">
+                  <p class="text-[11px] text-white/40 italic col-span-2">Pilih produk/warna/variant + tambah baris untuk melihat ringkasan stok.</p>
+                </div>
+                <div id="bulk-po-banner" class="hidden bg-amber-500/8 border border-amber-400/25 rounded-lg p-3 flex items-start gap-2">
+                  <span class="text-amber-300 text-base">⚠</span>
+                  <p class="text-[11px] text-amber-200/90 leading-relaxed">
+                    <strong><span class="bulk-po-count">0</span> pcs akan jadi Pre-Order.</strong> Otomatis dipenuhi saat stok masuk via Receive Stock. Customer tetap bisa lanjut bayar; bordir mulai dikerjakan setelah barang ready.
+                  </p>
+                </div>
               </div>
 
-              <!-- Bulk submit placeholder -->
-              <button id="bulk-submit-btn" disabled class="w-full py-3 rounded-xl bg-green-600/40 text-white/60 font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2">
-                <i class="fa-solid fa-cart-plus"></i> Submit Bulk Order
-                <span class="text-[10px] text-white/50 ml-1">(disabled — wiring next commit)</span>
+              <!-- 5 · TOTAL CARD -->
+              <div id="bulk-total-card" class="hidden bg-white/2 border border-white/8 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <p class="text-[10px] text-white/40 uppercase">Subtotal Produk</p>
+                  <p id="bulk-total-product" class="text-lg font-bold mt-1">Rp 0</p>
+                  <p id="bulk-total-product-detail" class="text-[10px] text-white/40">0 × Rp 0</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-white/40 uppercase">Bordir Nama</p>
+                  <p id="bulk-total-nama" class="text-lg font-bold mt-1">Rp 0</p>
+                  <p id="bulk-total-nama-detail" class="text-[10px] text-white/40">— off</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-white/40 uppercase">Bordir Logo</p>
+                  <p id="bulk-total-logo" class="text-lg font-bold mt-1">Rp 0</p>
+                  <p id="bulk-total-logo-detail" class="text-[10px] text-white/40">— off</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-white/40 uppercase">Total</p>
+                  <p id="bulk-total-grand" class="text-xl font-bold text-green-400 mt-1">Rp 0</p>
+                  <p class="text-[10px] text-white/40">Belum termasuk ongkir</p>
+                </div>
+              </div>
+
+              <!-- Submit -->
+              <button id="bulk-submit-btn" onclick="bulkSubmitOrder()" disabled class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:bg-green-600/40 disabled:text-white/60 disabled:cursor-not-allowed">
+                <i class="fa-solid fa-cart-plus"></i> <span id="bulk-submit-label">Submit Bulk Order</span>
               </button>
             </div>
           </div>
@@ -10241,11 +10272,24 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BULK BORDIR MODE — Phase 1 skeleton (Commit 1)
+// BULK BORDIR MODE — Phase 1 (Commit 2)
 // ───────────────────────────────────────────────────────────────────────────
-// Visual + table mgmt only. Cascade data wiring, stock summary, total
-// breakdown, dan submit handler akan di-bind di Commit 2.
+// Mode opt-in di Kasir untuk order banyak dgn bordir nama per-orang beda.
+// State namespace-isolated dari single-line (waInventoryCache, waProducts dst):
+//   bulkInventoryCache  → array of {color, variant_type, size, stock}
+//   bulkSelectedProduct → cached product object (id, name, price_by_type)
+//   bulkLogoFile        → base64 string of uploaded logo (1 logo / N pcs)
+//
+// Data flow on submit:
+//   N rows → N items[] (qty=1 each) + embroideryDetails[] aggregated
+//   POST /api/orders (sama endpoint dgn single-line — 0 backend change)
+//   Auto-PO: per-size aggregate need vs stock; rows yg melebihi stok di-flag
+//   is_po=true berdasarkan FIFO allocation (rows pertama dapat stok in-hand).
 // ═══════════════════════════════════════════════════════════════════════════
+
+let bulkInventoryCache = null;
+let bulkSelectedProduct = null;
+let bulkLogoFile = null;
 
 function kasirSetMode(mode) {
     const single = document.getElementById('kasir-single-mode');
@@ -10258,7 +10302,7 @@ function kasirSetMode(mode) {
         bulk.classList.remove('hidden');
         sBtn.classList.remove('kasir-mode-active');
         bBtn.classList.add('kasir-mode-active');
-        bulkPopulateProducts(); // populate dropdown saat masuk Bulk mode
+        bulkPopulateProducts();
     } else {
         single.classList.remove('hidden');
         bulk.classList.add('hidden');
@@ -10271,12 +10315,9 @@ function kasirSetMode(mode) {
 function bulkPopulateProducts() {
     const sel = document.getElementById('bulk-product');
     if (!sel) return;
-    if (sel.options.length > 1) return; // sudah populated, skip
+    if (sel.options.length > 1) return;
     if (typeof waProducts === 'undefined' || !Array.isArray(waProducts) || waProducts.length === 0) {
-        // waProducts belum dimuat — single Kasir biasanya fetch saat showModule('manual-order').
-        // Kalau kosong, kasih hint admin buka Single mode dulu (yang trigger fetch), atau kita
-        // fetch manual di Commit 2. Untuk skeleton, cukup info di console.
-        console.warn('[bulk] waProducts belum siap. Buka Single Line mode dulu (atau refresh).');
+        console.warn('[bulk] waProducts belum siap. Buka Single Line mode dulu.');
         return;
     }
     waProducts.forEach(p => {
@@ -10297,6 +10338,7 @@ function bulkToggleBordir(kind) {
     if (kind === 'logo') {
         document.getElementById('bulk-logo-panel').classList.toggle('hidden', active);
     }
+    bulkUpdateTotal();
 }
 
 function bulkOnLogoUpload(input) {
@@ -10310,42 +10352,153 @@ function bulkOnLogoUpload(input) {
     document.getElementById('bulk-logo-name').textContent = file.name;
     const reader = new FileReader();
     reader.onload = (e) => {
+        bulkLogoFile = e.target.result; // base64 → dipakai semua N pcs
         document.getElementById('bulk-logo-preview').innerHTML =
             `<img src="${e.target.result}" class="w-full h-full object-contain rounded-md">`;
     };
     reader.readAsDataURL(file);
 }
 
-// ── Cascade dropdowns (skeleton — real data wiring di Commit 2) ──────────
-function bulkOnProductChange() {
-    const v = document.getElementById('bulk-product').value;
-    document.getElementById('bulk-color').disabled   = !v;
-    document.getElementById('bulk-variant').disabled = !v;
-    document.getElementById('bulk-add-row-btn').disabled = !v;
-    // Real cascade (populate color/variant options dari product variants): Commit 2
-}
-function bulkOnColorChange()   { /* Commit 2 */ }
-function bulkOnVariantChange() { /* Commit 2 */ }
+// ── Cascade: Product → Color → Variant → (per-row) Size ──────────────────
+async function bulkOnProductChange() {
+    const pid = document.getElementById('bulk-product').value;
+    const colorSel   = document.getElementById('bulk-color');
+    const variantSel = document.getElementById('bulk-variant');
+    colorSel.innerHTML   = '<option value="">— Pilih Warna —</option>';
+    variantSel.innerHTML = '<option value="">— Pilih Variant —</option>';
+    colorSel.disabled = true;
+    variantSel.disabled = true;
+    document.getElementById('bulk-add-row-btn').disabled = true;
+    bulkInventoryCache = null;
+    bulkSelectedProduct = null;
 
-// ── Row management: add / duplicate / delete + auto-renumber ─────────────
+    if (!pid) {
+        bulkClearAllRows();
+        bulkUpdateStockSummary();
+        bulkUpdateTotal();
+        return;
+    }
+
+    bulkSelectedProduct = waProducts.find(p => p.id === parseInt(pid)) || null;
+    try {
+        const res = await fetch(API + `/api/inventory/${pid}`);
+        const inv = await res.json();
+        bulkInventoryCache = Array.isArray(inv) ? inv : [];
+        const colors = [...new Set(bulkInventoryCache.map(i => i.color))];
+        colors.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c; opt.textContent = c;
+            colorSel.appendChild(opt);
+        });
+        // Custom warna BLOCKED di Bulk Phase 1 (off-catalog flow lebih kompleks
+        // — admin pakai Single Line untuk custom color). Tidak append __custom__.
+        colorSel.disabled = false;
+        if (colors.length === 1) {
+            colorSel.value = colors[0];
+            bulkOnColorChange();
+        }
+    } catch (e) {
+        alert('Gagal load inventory produk: ' + e.message);
+    }
+    bulkClearAllRows();
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
+}
+
+function bulkOnColorChange() {
+    const color = document.getElementById('bulk-color').value;
+    const variantSel = document.getElementById('bulk-variant');
+    variantSel.innerHTML = '<option value="">— Pilih Variant —</option>';
+    variantSel.disabled = true;
+    document.getElementById('bulk-add-row-btn').disabled = true;
+
+    if (!color || !bulkInventoryCache) {
+        bulkClearAllRows();
+        bulkUpdateStockSummary();
+        bulkUpdateTotal();
+        return;
+    }
+    const variants = [...new Set(bulkInventoryCache.filter(i => i.color === color).map(i => i.variant_type))];
+    variants.forEach(v => {
+        const label = v === 'pendek' ? 'Lengan Pendek' : v === 'panjang' ? 'Lengan Panjang' : v;
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = label;
+        variantSel.appendChild(opt);
+    });
+    variantSel.disabled = false;
+    if (variants.length === 1) {
+        variantSel.value = variants[0];
+        bulkOnVariantChange();
+    }
+    bulkClearAllRows();
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
+}
+
+function bulkOnVariantChange() {
+    const v = document.getElementById('bulk-variant').value;
+    document.getElementById('bulk-add-row-btn').disabled = !v;
+    bulkRefreshAllSizeOptions();
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
+}
+
+// Sizes tersedia utk color+variant terpilih, urut S→XXL→4XL dst.
+function bulkAvailableSizes() {
+    if (!bulkInventoryCache) return [];
+    const color = document.getElementById('bulk-color').value;
+    const variant = document.getElementById('bulk-variant').value;
+    if (!color || !variant) return [];
+    const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','3XL','4XL','5XL'];
+    return bulkInventoryCache
+        .filter(i => i.color === color && i.variant_type === variant)
+        .sort((a, b) => {
+            const ia = SIZE_ORDER.indexOf(a.size);
+            const ib = SIZE_ORDER.indexOf(b.size);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+}
+
+function bulkRefreshAllSizeOptions() {
+    const sizes = bulkAvailableSizes();
+    const sizeOpts = sizes.map(s => `<option value="${s.size}">${s.size}</option>`).join('');
+    document.querySelectorAll('#bulk-rows-body select.bulk-cell-size').forEach(sel => {
+        const current = sel.value;
+        sel.innerHTML = sizeOpts;
+        if (current && sizes.find(s => s.size === current)) {
+            sel.value = current;
+        } else if (sizes.length > 0) {
+            sel.value = sizes[0].size;
+        }
+    });
+}
+
+function bulkClearAllRows() {
+    const tbody = document.getElementById('bulk-rows-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    document.getElementById('bulk-empty-state')?.classList.remove('hidden');
+    bulkUpdateRowCount();
+}
+
+// ── Row management ───────────────────────────────────────────────────────
 function bulkAddRow(prefillData) {
     const tbody = document.getElementById('bulk-rows-body');
     const empty = document.getElementById('bulk-empty-state');
     if (empty) empty.classList.add('hidden');
 
-    // Placeholder size options — Commit 2 akan pakai sizes dari selected variant
-    const sizes = ['S', 'M', 'L', 'XL', 'XXL'];
-    const sizeOpts = sizes.map(s => `<option value="${s}">${s}</option>`).join('');
+    const sizes = bulkAvailableSizes();
+    const sizeOpts = sizes.length > 0
+        ? sizes.map(s => `<option value="${s.size}">${s.size}</option>`).join('')
+        : '<option value="">— pilih produk dulu —</option>';
 
     const tr = document.createElement('tr');
     tr.className = 'border-t border-white/5 hover:bg-white/2 bulk-row';
-    // Setiap <td> punya <span class="bulk-cell-label"> yg HANYA tampil di mobile
-    // (CSS @media max-width:640px). Desktop layout = pure table, label tersembunyi.
     tr.innerHTML = `
         <td class="p-2 text-white/40 font-mono bulk-row-num">${tbody.children.length + 1}</td>
         <td class="p-2">
             <span class="bulk-cell-label">Size</span>
-            <select class="bulk-input bulk-cell-size">${sizeOpts}</select>
+            <select class="bulk-input bulk-cell-size" onchange="bulkOnRowChange()">${sizeOpts}</select>
         </td>
         <td class="p-2">
             <span class="bulk-cell-label">Nama Dokter</span>
@@ -10362,7 +10515,6 @@ function bulkAddRow(prefillData) {
     `;
     tbody.appendChild(tr);
 
-    // Optional prefill (dipakai saat duplicate)
     if (prefillData) {
         tr.querySelector('.bulk-cell-size').value  = prefillData.size  || '';
         tr.querySelector('.bulk-cell-name').value  = prefillData.name  || '';
@@ -10370,10 +10522,18 @@ function bulkAddRow(prefillData) {
     }
 
     bulkUpdateRowCount();
-    // Focus nama input untuk row baru (kecuali saat duplicate)
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
+
     if (!prefillData) {
         tr.querySelector('.bulk-cell-name').focus();
     }
+}
+
+function bulkOnRowChange() {
+    // Size dropdown changed in any row → recompute stock + total
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
 }
 
 function bulkDuplicateRow(btn) {
@@ -10384,13 +10544,14 @@ function bulkDuplicateRow(btn) {
         name:  tr.querySelector('.bulk-cell-name')?.value  || '',
         line2: tr.querySelector('.bulk-cell-line2')?.value || '',
     };
-    // Insert clone TEPAT di bawah baris asal (bukan di akhir tbody)
     bulkAddRow(data);
     const tbody = tr.parentNode;
     const newTr = tbody.lastElementChild;
     if (newTr && newTr !== tr.nextSibling) {
         tbody.insertBefore(newTr, tr.nextSibling);
-        bulkUpdateRowCount(); // re-number setelah pindah posisi
+        bulkUpdateRowCount();
+        bulkUpdateStockSummary();
+        bulkUpdateTotal();
     }
 }
 
@@ -10399,6 +10560,8 @@ function bulkDeleteRow(btn) {
     if (!tr) return;
     tr.remove();
     bulkUpdateRowCount();
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
     const tbody = document.getElementById('bulk-rows-body');
     if (tbody.children.length === 0) {
         document.getElementById('bulk-empty-state')?.classList.remove('hidden');
@@ -10413,12 +10576,351 @@ function bulkUpdateRowCount() {
     const pcsEl   = document.getElementById('bulk-total-pcs');
     if (countEl) countEl.textContent = count;
     if (pcsEl)   pcsEl.textContent   = `${count} pcs`;
-    // Auto-renumber rows 1..N
     Array.from(tbody.children).forEach((tr, i) => {
         const numCell = tr.querySelector('.bulk-row-num');
         if (numCell) numCell.textContent = i + 1;
     });
 }
+
+// ── Stock summary + auto-PO detection ────────────────────────────────────
+// Aggregate rows per size, compare vs inventory, render card grid.
+function bulkUpdateStockSummary() {
+    const panel = document.getElementById('bulk-stock-summary');
+    const banner = document.getElementById('bulk-po-banner');
+    if (!panel) return;
+
+    const variant = document.getElementById('bulk-variant')?.value;
+    const color = document.getElementById('bulk-color')?.value;
+    const rows = document.querySelectorAll('#bulk-rows-body tr');
+
+    if (!bulkInventoryCache || !variant || !color || rows.length === 0) {
+        panel.innerHTML = '<p class="text-[11px] text-white/40 italic col-span-2">Pilih produk/warna/variant + tambah baris untuk melihat ringkasan stok.</p>';
+        if (banner) banner.classList.add('hidden');
+        return;
+    }
+
+    const needPerSize = {};
+    rows.forEach(tr => {
+        const size = tr.querySelector('.bulk-cell-size')?.value;
+        if (size) needPerSize[size] = (needPerSize[size] || 0) + 1;
+    });
+
+    const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','3XL','4XL','5XL'];
+    const sizesInfo = Object.keys(needPerSize)
+        .sort((a, b) => {
+            const ia = SIZE_ORDER.indexOf(a);
+            const ib = SIZE_ORDER.indexOf(b);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        })
+        .map(size => {
+            const inv = bulkInventoryCache.find(i => i.color === color && i.variant_type === variant && i.size === size);
+            const avail = inv ? Number(inv.stock) : 0;
+            const need = needPerSize[size];
+            const poNeeded = Math.max(0, need - avail);
+            return { size, need, avail, poNeeded };
+        });
+
+    const totalPO = sizesInfo.reduce((s, x) => s + x.poNeeded, 0);
+
+    panel.innerHTML = sizesInfo.map(s => {
+        const isOK = s.poNeeded === 0;
+        return `<div class="${isOK ? 'bg-green-500/8 border-green-400/20' : 'bg-amber-500/8 border-amber-400/30'} border rounded-lg p-3 flex items-center justify-between">
+            <div>
+                <p class="font-bold text-xs">Size ${esc(s.size)}</p>
+                <p class="text-[10px] text-white/50">${s.need} dibutuhkan · ${s.avail} tersedia${s.poNeeded > 0 ? ` · <span class="text-amber-300">selisih ${s.poNeeded} → PO otomatis</span>` : ''}</p>
+            </div>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded ${isOK ? 'bg-green-500/15 text-green-300' : 'bg-amber-500/20 text-amber-300'}">${isOK ? 'STOK OK' : '⏳ PO ' + s.poNeeded}</span>
+        </div>`;
+    }).join('');
+
+    if (banner) {
+        if (totalPO > 0) {
+            banner.classList.remove('hidden');
+            const cnt = banner.querySelector('.bulk-po-count');
+            if (cnt) cnt.textContent = totalPO;
+        } else {
+            banner.classList.add('hidden');
+        }
+    }
+}
+
+// ── Total breakdown card ─────────────────────────────────────────────────
+function bulkUpdateTotal() {
+    const card = document.getElementById('bulk-total-card');
+    const btn = document.getElementById('bulk-submit-btn');
+    const label = document.getElementById('bulk-submit-label');
+    if (!card || !btn) return;
+
+    const rows = document.querySelectorAll('#bulk-rows-body tr');
+    const n = rows.length;
+    const variant = document.getElementById('bulk-variant')?.value;
+
+    if (!bulkSelectedProduct || !variant || n === 0) {
+        card.classList.add('hidden');
+        btn.disabled = true;
+        if (label) label.textContent = 'Submit Bulk Order';
+        return;
+    }
+    card.classList.remove('hidden');
+    btn.disabled = false;
+
+    const unitPrice = (bulkSelectedProduct.price_by_type && bulkSelectedProduct.price_by_type[variant]) || 0;
+    const namaActive = document.getElementById('bulk-bordir-nama').value === 'true';
+    const logoActive = document.getElementById('bulk-bordir-logo').value === 'true';
+    const namaPrice = 20000;
+    const logoPrice = parseInt(document.getElementById('bulk-logo-price')?.value) || 30000;
+
+    const subProduct = unitPrice * n;
+    const subNama = namaActive ? namaPrice * n : 0;
+    const subLogo = logoActive ? logoPrice * n : 0;
+    const grand = subProduct + subNama + subLogo;
+
+    document.getElementById('bulk-total-product').textContent = 'Rp ' + subProduct.toLocaleString('id-ID');
+    document.getElementById('bulk-total-product-detail').textContent = n + ' × Rp ' + unitPrice.toLocaleString('id-ID');
+    document.getElementById('bulk-total-nama').textContent = 'Rp ' + subNama.toLocaleString('id-ID');
+    document.getElementById('bulk-total-nama-detail').textContent = namaActive ? (n + ' × Rp ' + namaPrice.toLocaleString('id-ID')) : '— off';
+    document.getElementById('bulk-total-logo').textContent = 'Rp ' + subLogo.toLocaleString('id-ID');
+    document.getElementById('bulk-total-logo-detail').textContent = logoActive ? (n + ' × Rp ' + logoPrice.toLocaleString('id-ID')) : '— off';
+    document.getElementById('bulk-total-grand').textContent = 'Rp ' + grand.toLocaleString('id-ID');
+    if (label) label.textContent = `✓ Tambahkan ${n} Pcs ke Order`;
+}
+
+// ── Submit handler ───────────────────────────────────────────────────────
+async function bulkSubmitOrder() {
+    const btn = document.getElementById('bulk-submit-btn');
+    const label = document.getElementById('bulk-submit-label');
+
+    // ── Customer + shipping validation (mirror waSubmitOrder) ──
+    const customerName    = document.getElementById('wa-customer-name').value.trim();
+    const customerPhone   = document.getElementById('wa-customer-phone').value.trim();
+    const customerAddress = document.getElementById('wa-customer-address').value.trim();
+    const shippingCity    = document.getElementById('wa-shipping-city').value;
+    const shippingCost    = parseInt(document.getElementById('wa-shipping-cost').value || 0);
+    const shippingCourier = document.getElementById('wa-shipping-courier')?.value || '';
+    const shippingWeight  = parseFloat(document.getElementById('wa-shipping-weight')?.value || 1);
+    const paymentMethod   = document.getElementById('wa-payment-method').value;
+    const notes           = document.getElementById('wa-notes').value.trim();
+    const orderSource     = document.getElementById('wa-order-source')?.value || 'whatsapp';
+    const billingTo       = document.getElementById('wa-billing-to')?.value.trim() || '';
+    const invoiceDate     = document.getElementById('wa-invoice-date')?.value || '';
+
+    if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
+        alert('Lengkapi data pelanggan terlebih dahulu (Nama, HP, Alamat, Kota).'); return;
+    }
+    if (orderSource === 'collaboration_event' && !billingTo) {
+        alert('Collaboration Event: isi dulu "Ditagihkan Ke / Bill To (Partner)".'); return;
+    }
+
+    // ── Bulk-specific validation ──
+    if (!bulkSelectedProduct) {
+        alert('Pilih produk dulu di panel Bulk.'); return;
+    }
+    const color = document.getElementById('bulk-color').value;
+    const variant = document.getElementById('bulk-variant').value;
+    if (!color || !variant) {
+        alert('Pilih warna + variant produk dulu.'); return;
+    }
+
+    const rows = Array.from(document.querySelectorAll('#bulk-rows-body tr'));
+    if (rows.length === 0) {
+        alert('Belum ada baris bordir. Klik "Tambah Baris" dulu.'); return;
+    }
+
+    const namaActive = document.getElementById('bulk-bordir-nama').value === 'true';
+    const logoActive = document.getElementById('bulk-bordir-logo').value === 'true';
+    if (!namaActive && !logoActive) {
+        const proceed = confirm('Tidak ada bordir (Nama/Logo dua-duanya off). Order tetap dibuat untuk ' + rows.length + ' pcs tanpa bordir. Lanjut?');
+        if (!proceed) return;
+    }
+    if (logoActive && !bulkLogoFile) {
+        alert('Bordir Logo aktif tapi belum upload logo. Upload file dulu atau matikan toggle Logo.');
+        return;
+    }
+
+    // Position conflict: kalau nama + logo dua-duanya aktif, posisi harus beda
+    const namaPos = 'kanan'; // Bulk Nama default posisi kanan
+    const logoPos = document.getElementById('bulk-logo-pos').value || 'kiri';
+    if (namaActive && logoActive && namaPos === logoPos) {
+        alert('Posisi Bordir Nama (kanan) dan Logo (' + logoPos + ') tidak boleh sama. Ubah posisi Logo di panel Bordir.');
+        return;
+    }
+
+    // ── Aggregate per-size: stock vs need → FIFO PO allocation ──
+    const needPerSize = {};
+    rows.forEach(tr => {
+        const size = tr.querySelector('.bulk-cell-size').value;
+        if (size) needPerSize[size] = (needPerSize[size] || 0) + 1;
+    });
+    const stockPerSize = {};
+    Object.keys(needPerSize).forEach(size => {
+        const inv = bulkInventoryCache.find(i => i.color === color && i.variant_type === variant && i.size === size);
+        stockPerSize[size] = inv ? Number(inv.stock) : 0;
+    });
+
+    // ── Build items[] + embroideryDetails[] ──
+    const productName = bulkSelectedProduct.name || 'Produk';
+    const unitPrice = (bulkSelectedProduct.price_by_type && bulkSelectedProduct.price_by_type[variant]) || 0;
+    const namaPrice = 20000;
+    const logoPrice = parseInt(document.getElementById('bulk-logo-price').value) || 30000;
+    const logoColor = document.getElementById('bulk-logo-color').value.trim() || '';
+
+    const items = [];
+    const embroideryDetails = [];
+    const allocated = {}; // Track running PO allocation per size (FIFO)
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        const tr = rows[i];
+        const size = tr.querySelector('.bulk-cell-size').value;
+        const namaText  = tr.querySelector('.bulk-cell-name').value.trim();
+        const namaLine2 = tr.querySelector('.bulk-cell-line2').value.trim();
+
+        if (!size) { errors.push('Baris #' + (i + 1) + ': size kosong.'); continue; }
+        if (namaActive && !namaText) { errors.push('Baris #' + (i + 1) + ': nama bordir kosong.'); continue; }
+
+        allocated[size] = (allocated[size] || 0) + 1;
+        const isPO = allocated[size] > (stockPerSize[size] || 0);
+
+        items.push({
+            product_id:        bulkSelectedProduct.id,
+            color:             color,
+            variant_type:      variant,
+            size:              size,
+            quantity:          1,
+            bordir_nama:       namaActive,
+            bordir_logo:       logoActive,
+            bordir_nama_price: namaPrice,
+            bordir_logo_price: logoPrice,
+            is_bonus:          false,
+            is_custom_size:    false,
+            custom_price:      0,
+            is_po:             isPO,
+        });
+
+        if (namaActive || logoActive) {
+            const itemLabel = productName + ' (' + color + ', ' + size + ')';
+            if (namaActive) {
+                const namaPayload = { type: 'nama', item_label: itemLabel, value: namaText, color: '', position: namaPos };
+                if (namaLine2) namaPayload.value_line2 = namaLine2;
+                embroideryDetails.push(namaPayload);
+            }
+            if (logoActive) {
+                embroideryDetails.push({ type: 'logo', item_label: itemLabel, value: bulkLogoFile, color: logoColor, position: logoPos });
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        alert('⚠️ Lengkapi pesanan dulu:\n\n' + errors.join('\n'));
+        return;
+    }
+    if (items.length === 0) {
+        alert('Tidak ada item valid untuk disubmit.'); return;
+    }
+
+    // ── POST /api/orders (same endpoint as waSubmitOrder — zero backend change) ──
+    btn.disabled = true;
+    if (label) label.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...';
+
+    try {
+        const res = await fetch(API + '/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
+            body: JSON.stringify({
+                customer_name: customerName,
+                customer_phone: customerPhone,
+                customer_address: customerAddress,
+                shipping_city: shippingCity,
+                shipping_cost: shippingCost,
+                shipping_courier: shippingCourier,
+                shipping_weight_kg: shippingWeight,
+                notes: notes,
+                order_source: orderSource,
+                payment_method: paymentMethod,
+                discount_percent: (typeof waSelectedDiscount !== 'undefined' ? waSelectedDiscount : 0),
+                billing_to: billingTo,
+                invoice_date: invoiceDate || null,
+                items: items,
+                embroidery_details: embroideryDetails.length ? embroideryDetails : null,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
+
+        window.waLastOrderId = data.id;
+        let savedOrder = null;
+        try { savedOrder = await apiFetch('/api/orders/' + data.id); } catch (e) {}
+        const waMsg = savedOrder
+            ? buildOrderWaMessage(savedOrder)
+            : ('Pesanan tercatat. Invoice ' + data.order_code + '.');
+        window.waLastWaMsg = waMsg;
+        window.waLastWaPhone = (typeof normalizeWAPhone === 'function')
+            ? normalizeWAPhone(savedOrder ? savedOrder.customer_phone : customerPhone)
+            : (savedOrder ? savedOrder.customer_phone : customerPhone);
+
+        document.getElementById('wa-result-code').textContent = data.order_code;
+        document.getElementById('wa-result-message').textContent = waMsg;
+        if (typeof waRenderResultInstruction === 'function') {
+            waRenderResultInstruction(orderSource, paymentMethod, billingTo);
+        }
+        document.getElementById('wa-result-panel').classList.remove('hidden');
+        document.getElementById('wa-result-panel').scrollIntoView({ behavior: 'smooth' });
+
+        // Lock submit button silver style — re-aktif via "Order Baru" yg memanggil
+        // waResetForm (juga reset bulk state via bulkResetState below).
+        btn.classList.add('!bg-zinc-700', '!cursor-not-allowed');
+        btn.disabled = true;
+        if (label) label.innerHTML = '<i class="fa-solid fa-check"></i> Tersimpan — klik "Order Baru" untuk input lagi';
+    } catch (err) {
+        alert('Gagal: ' + (err && err.message ? err.message : 'Unknown error'));
+        btn.disabled = false;
+        if (label) label.textContent = '✓ Tambahkan ' + rows.length + ' Pcs ke Order';
+    }
+}
+
+// Reset bulk state — dipanggil oleh waResetForm saat admin klik "Order Baru".
+// (Hook ke waResetForm di-tambah via patch di bawah definition kalau ada,
+// dengan guard supaya idempotent.)
+function bulkResetState() {
+    bulkInventoryCache = null;
+    bulkSelectedProduct = null;
+    bulkLogoFile = null;
+    const prodSel = document.getElementById('bulk-product');
+    const colorSel = document.getElementById('bulk-color');
+    const variantSel = document.getElementById('bulk-variant');
+    if (prodSel) prodSel.value = '';
+    if (colorSel) { colorSel.innerHTML = '<option value="">— Pilih Warna —</option>'; colorSel.disabled = true; }
+    if (variantSel) { variantSel.innerHTML = '<option value="">— Pilih Variant —</option>'; variantSel.disabled = true; }
+    ['bulk-bordir-nama', 'bulk-bordir-logo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.value = 'false'; el.closest('.wa-bordir-pill')?.classList.remove('active'); }
+    });
+    document.getElementById('bulk-logo-panel')?.classList.add('hidden');
+    document.getElementById('bulk-logo-preview').innerHTML = '<i class="fa-solid fa-image text-white/30"></i>';
+    document.getElementById('bulk-logo-name').textContent = 'Logo dipakai untuk semua pcs · max 1.8MB';
+    const logoFile = document.getElementById('bulk-logo-file'); if (logoFile) logoFile.value = '';
+    bulkClearAllRows();
+    bulkUpdateStockSummary();
+    bulkUpdateTotal();
+    // Unlock submit button styling
+    const btn = document.getElementById('bulk-submit-btn');
+    if (btn) {
+        btn.classList.remove('!bg-zinc-700', '!cursor-not-allowed');
+    }
+}
+
+// Hook bulkResetState ke waResetForm kalau ada (tanpa memodifikasi waResetForm).
+// Dieksekusi di DOMContentLoaded — saat itu waResetForm sudah didefinisikan.
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.waResetForm === 'function' && !window.__bulkResetHooked) {
+        const _orig = window.waResetForm;
+        window.waResetForm = function() {
+            _orig.apply(this, arguments);
+            try { bulkResetState(); } catch (e) { console.warn('[bulk] reset hook error', e); }
+        };
+        window.__bulkResetHooked = true;
+    }
+});
 
 </script>
 </body>
