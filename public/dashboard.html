@@ -1002,7 +1002,7 @@
             <div class="flex gap-2 items-end">
               <div class="flex-1">
                 <label class="wa-field-label">Nominal DP (Rp)</label>
-                <input type="number" id="wa-dp-amount" min="0" step="1000" placeholder="mis. 2000000" oninput="waUpdateDpHint()" />
+                <input type="number" id="wa-dp-amount" min="0" step="1000" placeholder="mis. 2000000" oninput="if(window.kasirCart&&window.kasirCart.length){kasirCartUpdateTotals();}else{waUpdateDpHint();}" />
               </div>
               <button type="button" onclick="waDpFill50()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/70 text-xs font-bold transition whitespace-nowrap">Isi 50%</button>
             </div>
@@ -9187,18 +9187,24 @@ function waProductPriceLabel(p) {
     return 'Rp ' + Number(p && p.price || 0).toLocaleString('id-ID');
 }
 
-// Harga satuan katalog untuk item non-custom. Tops/gown bisa beda harga per variant
-// (Lengan Pendek vs Panjang) → baca price_by_type[variant]; fallback ke harga produk
-// (yang nilainya = harga termurah/min). Mengikuti resolusi server agar preview = total real.
+// SATU sumber resolusi harga satuan katalog — dipakai single & bulk cart.
+// Tops/gown beda harga per variant (price_by_type[variant]). Produk single-price
+// punya price_by_type = NULL → fallback ke product.price. Mirror resolusi backend
+// (server.js ~2274) supaya preview cart = invoice final.
+function waResolveUnitPrice(product, variant) {
+    if (!product) return 0;
+    const pbt = product.price_by_type;
+    if (pbt && variant && pbt[variant] != null) return Number(pbt[variant]) || 0;
+    return Number(product.price) || 0;
+}
+
+// Harga satuan katalog untuk item non-custom (single mode, by row idx).
 function waCatalogUnitPrice(idx) {
-    const prodEl = document.getElementById(`wa-prod-${idx}`);
-    const pid = parseInt(prodEl?.value);
+    const pid = parseInt(document.getElementById(`wa-prod-${idx}`)?.value);
     if (!pid) return 0;
     const prod = waProducts.find(p => p.id === pid);
     const vt = document.getElementById(`wa-variant-${idx}`)?.value;
-    if (prod && prod.price_by_type && vt && prod.price_by_type[vt] != null)
-        return Number(prod.price_by_type[vt]) || 0;
-    return parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price || 0) || 0;
+    return waResolveUnitPrice(prod, vt);
 }
 
 // Sumber order berubah → tampilkan box "Bill To (Partner)" hanya untuk
@@ -9270,6 +9276,8 @@ function waUpdateTotal() {
 
     document.getElementById('wa-total-preview').textContent = 'Rp ' + total.toLocaleString('id-ID');
     waUpdateDpHint();
+    // Ongkir/courier berubah → ringkasan keranjang ikut update (bukan cuma preview single).
+    if (window.kasirCart && window.kasirCart.length && typeof kasirCartUpdateTotals === 'function') kasirCartUpdateTotals();
     waCheckBordirSection();
 }
 
@@ -10759,7 +10767,7 @@ function bulkPrefillCustomPrice(panel) {
     const priceEl = panel.querySelector('.bulk-cell-custom-price');
     if (!priceEl || !panel._state.selectedProduct || !variant) return;
     if (priceEl.value && parseInt(priceEl.value) > 0) return;
-    const catalogPrice = (panel._state.selectedProduct.price_by_type && panel._state.selectedProduct.price_by_type[variant]) || 0;
+    const catalogPrice = waResolveUnitPrice(panel._state.selectedProduct, variant);
     if (catalogPrice > 0) priceEl.value = catalogPrice;
 }
 
@@ -11010,7 +11018,7 @@ function bulkUpdatePanelTotal(panel) {
     const isCustomColor = color === '__custom__';
     const unitPrice = isCustomColor
         ? (parseInt(panel.querySelector('.bulk-cell-custom-price')?.value) || 0)
-        : ((panel._state.selectedProduct.price_by_type && panel._state.selectedProduct.price_by_type[variant]) || 0);
+        : waResolveUnitPrice(panel._state.selectedProduct, variant);
 
     const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
     const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
@@ -11075,7 +11083,7 @@ function bulkUpdateGrandTotal() {
         const isCustomColor = color === '__custom__';
         const unitPrice = isCustomColor
             ? (parseInt(panel.querySelector('.bulk-cell-custom-price')?.value) || 0)
-            : ((panel._state.selectedProduct.price_by_type && panel._state.selectedProduct.price_by_type[variant]) || 0);
+            : waResolveUnitPrice(panel._state.selectedProduct, variant);
         const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
         const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
         const logoPrice = parseInt(panel.querySelector('.bulk-cell-logo-price')?.value) || 30000;
@@ -11556,7 +11564,7 @@ function _kasirCollectSingleItems() {
         const isBonus    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
         const bNP = parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000;
         const bLP = parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000;
-        const approxBase = customPrice !== null ? customPrice : (parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price) || 0);
+        const approxBase = customPrice !== null ? customPrice : waCatalogUnitPrice(idx);
         const baseSub = approxBase * qtyVal;
         const bordirSub = ((bordirNama ? bNP : 0) + (bordirLogo ? bLP : 0)) * qtyVal;
         productSubtotal += baseSub + bordirSub;
@@ -11677,8 +11685,7 @@ function kasirAddToCartBulk() {
         const logoColor   = panel.querySelector('.bulk-cell-logo-color').value.trim() || '';
         const namaColor   = panel.querySelector('.bulk-cell-nama-color')?.value.trim() || '';
         const panelDiscToken = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
-        const prodOption  = panel.querySelector('.bulk-cell-product option:checked');
-        const approxBase  = isCustomColor ? customPrice : ((panel._state.selectedProduct?.price_by_type?.[variant]) || parseInt(prodOption?.dataset?.price) || 0);
+        const approxBase  = isCustomColor ? customPrice : waResolveUnitPrice(panel._state.selectedProduct, variant);
 
         const allocated = {};
         const panelItems = [], panelEmb = [];
