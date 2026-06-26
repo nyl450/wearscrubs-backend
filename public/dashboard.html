@@ -11727,6 +11727,50 @@ function kasirAddToCartBulk() {
     if (typeof toast === 'function') toast(`✓ ${validGroups.length} grup ditambahkan ke keranjang`);
 }
 
+// Agregasi qty per varian fisik lintas SEMUA grup keranjang, lalu bandingkan dgn
+// stok terbaru dari server. Mirror persis logika backend (server.js ~2206): item
+// Pre-Order / custom-size / custom-product di-skip (sama spt backend), bonus IKUT
+// dihitung (stok bonus tetap dipotong). Return { ok, violations[] }.
+async function kasirCheckAggregateStock() {
+    const need = new Map(); // key -> {qty, pid, size, color, vtype}
+    window.kasirCart.forEach(g => (g.items || []).forEach(it => {
+        if (it.is_po || it.is_custom_size || it.is_custom_product || !it.product_id) return;
+        const vtype = it.variant_type || 'null';
+        const key = `${it.product_id}|${it.size}|${it.color}|${vtype}`;
+        const e = need.get(key) || { qty: 0, pid: it.product_id, size: it.size, color: it.color, vtype };
+        e.qty += (it.quantity || 1);
+        need.set(key, e);
+    }));
+    if (need.size === 0) return { ok: true, violations: [] };
+
+    // Stok terbaru per produk unik (authoritative — sama sumber yg dicek backend).
+    const pids = [...new Set([...need.values()].map(e => e.pid))];
+    const stockMap = new Map();
+    let fetchFailed = false;
+    await Promise.all(pids.map(async pid => {
+        try {
+            const res = await fetch(API + '/api/inventory/' + pid);
+            const inv = await res.json();
+            (Array.isArray(inv) ? inv : []).forEach(r => {
+                stockMap.set(`${pid}|${r.size}|${r.color}|${r.variant_type || 'null'}`, Number(r.stock) || 0);
+            });
+        } catch (e) { fetchFailed = true; }
+    }));
+    // Kalau gagal ambil stok, jangan blokir — biarkan backend yg jadi sumber kebenaran.
+    if (fetchFailed) return { ok: true, violations: [] };
+
+    const violations = [];
+    for (const [key, e] of need) {
+        const stock = stockMap.get(key) || 0;
+        if (e.qty > stock) {
+            const prodName = (typeof waProducts !== 'undefined' && waProducts.find(p => p.id === e.pid)?.name) || ('Produk #' + e.pid);
+            const vstr = (e.vtype && e.vtype !== 'null') ? ', ' + e.vtype : '';
+            violations.push(`• ${prodName} (${e.color}${vstr}, ${e.size}): butuh ${e.qty}, stok ${stock}`);
+        }
+    }
+    return { ok: violations.length === 0, violations };
+}
+
 async function kasirCartSubmit() {
     if (!window.kasirCart || window.kasirCart.length === 0) { alert('Keranjang masih kosong.'); return; }
     const customerName    = document.getElementById('wa-customer-name').value.trim();
@@ -11759,6 +11803,21 @@ async function kasirCartSubmit() {
     const dpAmount = parseInt(document.getElementById('wa-dp-amount')?.value || 0) || 0;
 
     const btn = document.getElementById('kasir-cart-submit-btn');
+    const restoreBtn = () => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA'; } };
+
+    // Pre-check stok agregat lintas grup (mirror backend server.js ~2206). Varian fisik
+    // yang sama bisa tersebar di beberapa panel/grup; tiap grup lolos sendiri tapi totalnya
+    // bisa melebihi stok → backend akan tolak. Cek dulu di sini biar pesannya jelas & dini.
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Memeriksa stok...'; }
+    const stockCheck = await kasirCheckAggregateStock();
+    if (!stockCheck.ok) {
+        restoreBtn();
+        alert('⚠️ Stok tidak cukup — beberapa grup memakai varian yang sama, totalnya melebihi stok:\n\n'
+            + stockCheck.violations.join('\n')
+            + '\n\nSolusi: kurangi jumlah, atau hapus salah satu grup lalu input ulang sebagian sebagai Pre-Order.');
+        return;
+    }
+
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...'; }
     try {
         const res = await fetch(API + '/api/orders', {
