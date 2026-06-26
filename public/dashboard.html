@@ -16,7 +16,9 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
         #chatbot-widget, #chatbot-toggle, .fa-robot { display: none !important; }
-        .sidebar-btn.active { background: rgba(255,255,255,0.1); color: white; }
+        .sidebar-btn { position: relative; }
+        .sidebar-btn.active { background: rgba(99,102,241,0.10); color: #fff; box-shadow: inset 2px 0 0 #6366f1; }
+        .sidebar-btn.active i { color: #818cf8; }
         .status-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.65rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; }
         .spin { animation: spin 600ms linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -465,23 +467,30 @@
         <img decoding="async" src="images/logo/logo%20ws%20white%20250x55.png" alt="Wearscrubs" class="h-6 w-auto object-contain">
         <span class="text-xs font-bold tracking-widest text-white/30 uppercase ml-1 hidden sm:block">Admin Portal</span>
     </div>
-    <div class="flex items-center gap-4">
-        <div id="header-pending-badge" class="hidden items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-full">
-            <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-            <span id="header-pending-count" class="text-xs font-bold text-red-400">0 Pesanan Baru</span>
+    <div class="flex items-center gap-3">
+        <!-- Cluster 1: notifikasi (badge muncul hanya kalau ada) -->
+        <div class="flex items-center gap-2 empty:hidden">
+            <div id="header-pending-badge" class="hidden items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-full">
+                <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                <span id="header-pending-count" class="text-xs font-bold text-red-400">0 Pesanan Baru</span>
+            </div>
+            <button id="header-refund-badge" onclick="showModule('refund')" type="button"
+                class="hidden items-center gap-2 bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-full hover:bg-orange-500/20 transition cursor-pointer"
+                title="Buka menu Refund">
+                <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                <span id="header-refund-count" class="text-xs font-bold text-orange-300">0 Refund</span>
+            </button>
         </div>
-        <button id="header-refund-badge" onclick="showModule('refund')" type="button"
-            class="hidden items-center gap-2 bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-full hover:bg-orange-500/20 transition cursor-pointer"
-            title="Buka menu Refund">
-            <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
-            <span id="header-refund-count" class="text-xs font-bold text-orange-300">0 Refund</span>
-        </button>
-        <span id="header-clock" class="hidden md:block text-[11px] font-mono text-white/25 tracking-tight"></span>
-        <a href="index.html" target="_blank" class="text-xs text-white/40 hover:text-white transition flex items-center gap-1.5">
-            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> <span class="hidden sm:inline">Lihat Website</span>
-        </a>
-        <div class="flex items-center gap-2 pl-4 border-l border-white/10">
-            <div class="text-right hidden sm:block">
+        <!-- Cluster 2: meta (jam + link website) -->
+        <div class="hidden md:flex items-center gap-3 text-white/30">
+            <span id="header-clock" class="text-[11px] font-mono tracking-tight"></span>
+            <a href="index.html" target="_blank" class="text-xs hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> <span class="hidden lg:inline">Lihat Website</span>
+            </a>
+        </div>
+        <!-- Cluster 3: user + logout -->
+        <div class="flex items-center gap-2 pl-3 border-l border-white/10">
+            <div class="text-right hidden sm:block leading-tight">
                 <p id="admin-username" class="text-xs font-semibold text-white">Admin</p>
                 <p id="admin-role" class="text-[10px] font-bold uppercase tracking-wider text-yellow-400">admin</p>
             </div>
@@ -624,9 +633,9 @@
             <div class="flex justify-between items-center mb-6">
                 <h3 class="font-bold text-sm">Statistik</h3>
                 <div class="flex gap-2">
-                    <button onclick="switchChart('products')" data-tab="products" class="chart-tab-btn active text-[10px] font-bold px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Produk</button>
-                    <button onclick="switchChart('orders')" data-tab="orders" class="chart-tab-btn text-[10px] font-bold px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Orders</button>
-                    <button onclick="switchChart('revenue')" data-tab="revenue" class="chart-tab-btn text-[10px] font-bold px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Pendapatan</button>
+                    <button onclick="switchChart('products')" data-tab="products" class="chart-tab-btn active text-[11px] font-bold px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Produk</button>
+                    <button onclick="switchChart('orders')" data-tab="orders" class="chart-tab-btn text-[11px] font-bold px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Orders</button>
+                    <button onclick="switchChart('revenue')" data-tab="revenue" class="chart-tab-btn text-[11px] font-bold px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white hover:text-black transition-all">Pendapatan</button>
                 </div>
             </div>
             <div class="relative h-72"><canvas id="main-chart"></canvas></div>
@@ -3547,6 +3556,37 @@ async function loadOverview() {
     } catch(e) { console.error('Overview error:', e); }
 }
 
+// Plugin Chart.js: tampilkan angka di atas tiap bar supaya chart langsung kebaca
+// tanpa harus hover. fmt diberikan per-chart lewat options.plugins.barValueLabels.fmt.
+const barValueLabelsPlugin = {
+    id: 'barValueLabels',
+    afterDatasetsDraw(chart, args, opts) {
+        const { ctx } = chart;
+        const fmtVal = (opts && opts.fmt) || (v => v);
+        chart.data.datasets.forEach((ds, di) => {
+            chart.getDatasetMeta(di).data.forEach((bar, i) => {
+                const v = ds.data[i];
+                if (v == null) return;
+                ctx.save();
+                ctx.fillStyle = 'rgba(255,255,255,0.78)';
+                ctx.font = '700 11px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(fmtVal(v), bar.x, bar.y - 6);
+                ctx.restore();
+            });
+        });
+    }
+};
+// Singkat angka besar untuk label bar (28.314.500 → "Rp 28,3jt") biar tidak overflow.
+function fmtShort(n) {
+    n = Number(n) || 0;
+    if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '').replace('.', ',') + 'M';
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '').replace('.', ',') + 'jt';
+    if (n >= 1e3) return Math.round(n / 1e3) + 'rb';
+    return '' + n;
+}
+
 function switchChart(type) {
     document.querySelectorAll('.chart-tab-btn').forEach(b => {
         const active = b.dataset.tab === type;
@@ -3573,15 +3613,22 @@ function switchChart(type) {
         color = 'rgba(168,85,247,0.7)';
     }
     const ctx = document.getElementById('main-chart').getContext('2d');
+    const labelFmt = type === 'revenue' ? (v => 'Rp ' + fmtShort(v)) : (v => '' + v);
     mainChart = new Chart(ctx, {
         type: 'bar',
-        data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 8, borderSkipped: false }] },
+        data: { labels, datasets: [{ data, backgroundColor: color, hoverBackgroundColor: color.replace(/0\.7\)$/, '0.95)'), borderRadius: 8, borderSkipped: false, maxBarThickness: 96 }] },
+        plugins: [barValueLabelsPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => type === 'revenue' ? 'Rp ' + fmt(ctx.parsed.y) : ctx.parsed.y } } },
+            layout: { padding: { top: 22 } },
+            plugins: {
+                legend: { display: false },
+                barValueLabels: { fmt: labelFmt },
+                tooltip: { callbacks: { label: ctx => type === 'revenue' ? 'Rp ' + fmt(ctx.parsed.y) : ctx.parsed.y } }
+            },
             scales: {
-                x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } } },
-                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, callback: v => type === 'revenue' ? 'Rp '+fmt(v) : v } }
+                x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { size: 11, weight: '600' } } },
+                y: { beginAtZero: true, grace: '8%', grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false }, ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 11 }, callback: v => type === 'revenue' ? 'Rp '+fmtShort(v) : v } }
             }
         }
     });
@@ -3593,13 +3640,13 @@ async function loadRecentOrders() {
         const recent = orders.slice(0,5);
         const el = document.getElementById('recent-orders-table');
         if (!recent.length) { el.innerHTML = '<p class="text-center text-xs text-white/30 py-8">Belum ada pesanan</p>'; return; }
-        el.innerHTML = `<table class="w-full text-xs"><thead><tr class="border-b border-darkborder text-white/30 uppercase tracking-wider">
+        el.innerHTML = `<table class="w-full text-xs"><thead><tr class="bg-white/[0.03] border-b border-white/10 text-white/50 uppercase tracking-wider text-[10px] font-semibold">
             <th class="px-5 py-3 text-left">Kode</th><th class="px-5 py-3 text-left">Pelanggan</th>
             <th class="px-5 py-3 text-right">Total</th><th class="px-5 py-3 text-center">Status</th>
-        </tr></thead><tbody class="divide-y divide-darkborder">
-            ${recent.map(o => `<tr class="hover:bg-white/2 cursor-pointer" onclick="viewOrder(${o.id})">
+        </tr></thead><tbody class="divide-y divide-white/[0.06]">
+            ${recent.map(o => `<tr class="hover:bg-white/[0.05] cursor-pointer transition-colors" onclick="viewOrder(${o.id})">
                 <td class="px-5 py-3 font-mono text-white/50">${esc(o.order_code)}</td>
-                <td class="px-5 py-3 font-medium">${esc(o.customer_name)}</td>
+                <td class="px-5 py-3 font-medium text-white/90">${esc(o.customer_name)}</td>
                 <td class="px-5 py-3 text-right text-green-400 font-bold">Rp ${fmt(o.total_amount)}</td>
                 <td class="px-5 py-3 text-center">${statusBadge(o.order_status)}</td>
             </tr>`).join('')}
