@@ -976,32 +976,16 @@
           <div class="p-5 space-y-3">
             <div class="flex items-center justify-between">
               <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Diskon (Opsional)</p>
-              <span class="text-[10px] text-white/20">Hanya berlaku untuk harga produk</span>
+              <span class="text-[10px] text-white/20">Untuk produk tanpa diskon sendiri</span>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <!-- Diskon 5% -->
-              <div id="label-disc-5" onclick="waSelectDiscount(5)"
-                class="flex items-center gap-3 p-3.5 rounded-xl border border-white/8 bg-white/3 cursor-pointer hover:border-white/20 transition-all">
-                <div class="w-4 h-4 rounded-full border-2 border-white/20 flex items-center justify-center shrink-0" id="radio-disc-5">
-                  <div class="w-2 h-2 rounded-full bg-green-400 hidden" id="dot-disc-5"></div>
-                </div>
-                <div>
-                  <p class="text-sm font-semibold text-white/80">Diskon 5%</p>
-                  <p class="text-xs text-white/30">Diskon reguler</p>
-                </div>
-              </div>
-              <!-- Consignment 30% -->
-              <div id="label-disc-30" onclick="waSelectDiscount(30)"
-                class="flex items-center gap-3 p-3.5 rounded-xl border border-white/8 bg-white/3 cursor-pointer hover:border-white/20 transition-all">
-                <div class="w-4 h-4 rounded-full border-2 border-white/20 flex items-center justify-center shrink-0" id="radio-disc-30">
-                  <div class="w-2 h-2 rounded-full bg-yellow-400 hidden" id="dot-disc-30"></div>
-                </div>
-                <div>
-                  <p class="text-sm font-semibold text-white/80">Consignment 30%</p>
-                  <p class="text-xs text-white/30">Event / partner</p>
-                </div>
-              </div>
-            </div>
+            <select id="wa-form-discount" onchange="waUpdateTotal()" class="text-sm w-full">
+              <option value="">Tanpa diskon</option>
+              <option value="5-inc">Diskon 5% (termasuk bordir)</option>
+              <option value="5-exc">Diskon 5% (tanpa bordir)</option>
+              <option value="30-inc">Consignment 30% (termasuk bordir)</option>
+              <option value="30-exc">Consignment 30% (tanpa bordir)</option>
+            </select>
+            <p class="text-[10px] text-white/30 leading-relaxed">Diskon ini dipakai untuk baris produk yang <b>tidak</b> punya diskonnya sendiri. Kalau satu baris sudah dipilih diskon, diskon ini tidak ditambah lagi (tidak dobel). "Tanpa bordir" = harga bordir tidak ikut didiskon.</p>
             <!-- Preview diskon -->
             <div id="wa-discount-preview" class="hidden px-4 py-2.5 rounded-xl bg-green-500/8 border border-green-500/15 flex items-center justify-between">
               <span id="wa-discount-label-text" class="text-xs font-medium text-green-400"></span>
@@ -1009,12 +993,30 @@
             </div>
           </div>
 
+          <!-- SECTION: DP / Uang Muka -->
+          <div class="p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>DP / Uang Muka (Opsional)</p>
+              <span class="text-[10px] text-white/20">Untuk bayar sebagian dulu</span>
+            </div>
+            <div class="flex gap-2 items-end">
+              <div class="flex-1">
+                <label class="wa-field-label">Nominal DP (Rp)</label>
+                <input type="number" id="wa-dp-amount" min="0" step="1000" placeholder="mis. 2000000" oninput="waUpdateDpHint()" />
+              </div>
+              <button type="button" onclick="waDpFill50()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/70 text-xs font-bold transition whitespace-nowrap">Isi 50%</button>
+            </div>
+            <p id="wa-dp-hint" class="hidden text-[11px] text-amber-300/80 font-medium"></p>
+            <p class="text-[10px] text-white/30 leading-relaxed">Kalau diisi, invoice WA menampilkan DP dibayar + sisa pelunasan, plus catatan ongkir masih estimasi (dikonfirmasi sebelum pengiriman). "Isi 50%" mengambil setengah dari grand total saat ini.</p>
+          </div>
+
           <!-- SECTION: Foto & Bordir -->
           <div class="p-5 space-y-4">
-            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Lampiran Invoice (Opsional)</p>
+            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Foto untuk Customer (Opsional)</p>
+            <p class="text-[11px] text-white/35 leading-relaxed -mt-1">Foto referensi yang dikirim ke customer biar punya gambaran pesanan - mis. contoh hasil bordir logo, warna kain, atau model produk.</p>
             <!-- Foto Produk -->
             <div>
-              <label class="block text-xs font-medium text-white/55 mb-1.5">Foto Produk <span class="text-white/25 font-normal">(max 4)</span></label>
+              <label class="block text-xs font-medium text-white/55 mb-1.5">Foto Produk / Referensi <span class="text-white/25 font-normal">(max 4)</span></label>
               <div id="wa-photo-previews" class="grid grid-cols-4 gap-2 mb-2 empty:hidden"></div>
               <label class="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/25 text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-image"></i> Pilih Foto Produk
@@ -1058,6 +1060,8 @@
               <span>Grand Total</span>
               <span id="kasir-cart-grand" class="text-green-400 text-lg">Rp 0</span>
             </div>
+            <div id="kasir-cart-dp-row" class="hidden flex justify-between text-amber-300"><span>💳 DP Dibayar</span><span id="kasir-cart-dp">Rp 0</span></div>
+            <div id="kasir-cart-sisa-row" class="hidden flex justify-between text-amber-200 font-semibold"><span>Sisa Pelunasan</span><span id="kasir-cart-sisa">Rp 0</span></div>
           </div>
           <button onclick="kasirCartSubmit()" id="kasir-cart-submit-btn" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
             <i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA
@@ -6579,6 +6583,15 @@ async function viewOrder(id) {
                 <span>Total</span>
                 <span class="text-green-400 text-lg">Rp ${fmt(o.total_amount)}</span>
             </div>
+            ${(o.dp_amount||0) > 0 ? `
+            <div class="flex justify-between mt-1 text-sm text-amber-300">
+                <span>💳 DP Dibayar</span>
+                <span>Rp ${fmt(o.dp_amount)}</span>
+            </div>
+            <div class="flex justify-between text-sm text-amber-200 font-semibold">
+                <span>Sisa Pelunasan</span>
+                <span>Rp ${fmt(Math.max(0, (o.total_amount||0) - (o.dp_amount||0)))}</span>
+            </div>` : ''}
         </div>
 
         ${bordirHTML}
@@ -8693,6 +8706,17 @@ function waAddItem() {
                 <span class="wa-bordir-price" id="wa-bonus-hint-${idx}">tidak ditagih</span>
             </div>
             <input type="hidden" id="wa-bonus-${idx}" value="false" />
+            <!-- Diskon khusus baris ini (override diskon umum di bawah; tidak dobel) -->
+            <div>
+                <label class="wa-field-label">Diskon Baris Ini <span class="wa-optional">(opsional, override diskon umum)</span></label>
+                <select id="wa-item-disc-${idx}" class="input-sm" onchange="waUpdateTotal()">
+                    <option value="">— Ikut diskon umum / tanpa diskon</option>
+                    <option value="5-inc">Diskon 5% (termasuk bordir)</option>
+                    <option value="5-exc">Diskon 5% (tanpa bordir)</option>
+                    <option value="30-inc">Consignment 30% (termasuk bordir)</option>
+                    <option value="30-exc">Consignment 30% (tanpa bordir)</option>
+                </select>
+            </div>
             <!-- Sub-form Bordir Nama -->
             <div id="wa-bordir-nama-fields-${idx}" class="wa-collapse">
               <div class="wa-collapse-inner">
@@ -9127,32 +9151,27 @@ function waTogglePO(idx) {
     hidden.value = nowActive ? 'true' : 'false';
 }
 
-let waSelectedDiscount = 0; // 0, 5, atau 30
+let waSelectedDiscount = 0; // legacy (dead path waSubmitOrder/bulkSubmitOrder) — cart pakai token-based
 
-function waSelectDiscount(pct) {
-    waSelectedDiscount = (waSelectedDiscount === pct) ? 0 : pct;
-    waRenderDiscountUI();
-    waUpdateTotal();
+// ── Diskon token: "" | "5-inc" | "5-exc" | "30-inc" | "30-exc" ──────────────
+// inc = bordir ikut didiskon; exc = bordir TIDAK didiskon (cuma harga produk).
+function parseDiscToken(token) {
+    if (!token) return { pct: 0, incBordir: true };
+    const [p, mode] = String(token).split('-');
+    return { pct: parseInt(p) || 0, incBordir: mode !== 'exc' };
 }
-
-function waRenderDiscountUI() {
-    [5, 30].forEach(p => {
-        const lbl = document.getElementById(`label-disc-${p}`);
-        const dot = document.getElementById(`dot-disc-${p}`);
-        const radio = document.getElementById(`radio-disc-${p}`);
-        if (lbl) { lbl.classList.remove('border-green-500/40','border-yellow-500/40','bg-green-500/5','bg-yellow-500/5'); }
-        if (dot) dot.classList.add('hidden');
-        if (radio) { radio.classList.remove('border-green-400','border-yellow-400'); }
-    });
-    const prev = document.getElementById('wa-discount-preview');
-    if (waSelectedDiscount === 0) { if (prev) prev.classList.add('hidden'); return; }
-    const color = waSelectedDiscount === 30 ? 'yellow' : 'green';
-    const lbl = document.getElementById(`label-disc-${waSelectedDiscount}`);
-    const dot = document.getElementById(`dot-disc-${waSelectedDiscount}`);
-    const radio = document.getElementById(`radio-disc-${waSelectedDiscount}`);
-    if (lbl) lbl.classList.add(`border-${color}-500/40`, `bg-${color}-500/5`);
-    if (dot) dot.classList.remove('hidden');
-    if (radio) radio.classList.add(`border-${color}-400`);
+function discTokenLabel(token) {
+    const { pct, incBordir } = parseDiscToken(token);
+    if (!pct) return '';
+    const base = pct === 30 ? 'Consignment 30%' : 'Diskon ' + pct + '%';
+    return base + (incBordir ? '' : ' (tanpa bordir)');
+}
+// Hitung nominal diskon dari subtotal harga produk & subtotal bordir terpisah.
+function discAmountFor(token, baseSubtotal, bordirSubtotal) {
+    const { pct, incBordir } = parseDiscToken(token);
+    if (!pct) return 0;
+    const dbase = baseSubtotal + (incBordir ? bordirSubtotal : 0);
+    return Math.round(dbase * pct / 100);
 }
 
 // Label harga di dropdown produk:
@@ -9203,7 +9222,9 @@ function waVariantOptionLabel(idx, v) {
 }
 
 function waUpdateTotal() {
-    let productTotal = 0;
+    let productTotal = 0, discountAmount = 0;
+    const formToken = document.getElementById('wa-form-discount')?.value || '';
+    const usedTokens = new Set();
     const container = document.getElementById('wa-items-container');
     container.querySelectorAll('[id^="wa-item-"]').forEach(item => {
         const idx = item.id.replace('wa-item-', '');
@@ -9222,21 +9243,25 @@ function waUpdateTotal() {
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 0) : 0;
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 0) : 0;
-        productTotal += (price + bordirNama + bordirLogo) * qty;
+        const baseSub   = price * qty;
+        const bordirSub = (bordirNama + bordirLogo) * qty;
+        productTotal += baseSub + bordirSub;
+        // Diskon baris: per-line token override diskon umum (tidak dobel).
+        const lineToken = document.getElementById(`wa-item-disc-${idx}`)?.value || '';
+        const effToken  = lineToken || formToken;
+        const d = discAmountFor(effToken, baseSub, bordirSub);
+        if (d > 0) { discountAmount += d; usedTokens.add(effToken); }
     });
     const ongkir = parseInt(document.getElementById('wa-shipping-cost')?.value || 0);
-
-    // Kalkulasi diskon dari product total saja
-    const discountAmount = Math.round(productTotal * waSelectedDiscount / 100);
     const total = productTotal - discountAmount + ongkir;
 
     // Update preview diskon
     const discPreview = document.getElementById('wa-discount-preview');
     const discLabelEl = document.getElementById('wa-discount-label-text');
     const discAmountEl = document.getElementById('wa-discount-amount-text');
-    if (waSelectedDiscount > 0 && discountAmount > 0) {
-        const labelText = waSelectedDiscount === 30 ? 'Consignment 30%' : 'Diskon 5%';
-        if (discLabelEl) discLabelEl.textContent = labelText + ' dari Rp ' + productTotal.toLocaleString('id-ID');
+    if (discountAmount > 0) {
+        const labelText = usedTokens.size === 1 ? discTokenLabel([...usedTokens][0]) : 'Diskon (campuran)';
+        if (discLabelEl) discLabelEl.textContent = labelText;
         if (discAmountEl) discAmountEl.textContent = '-Rp ' + discountAmount.toLocaleString('id-ID');
         if (discPreview) discPreview.classList.remove('hidden');
     } else {
@@ -9244,7 +9269,38 @@ function waUpdateTotal() {
     }
 
     document.getElementById('wa-total-preview').textContent = 'Rp ' + total.toLocaleString('id-ID');
+    waUpdateDpHint();
     waCheckBordirSection();
+}
+
+// ── DP / Uang Muka ──────────────────────────────────────────────────────────
+// Grand total saat ini: pakai isi keranjang kalau sudah ada item, kalau belum
+// pakai estimasi single-mode (wa-total-preview). DP dihitung 50% dari sini.
+function waCurrentGrandTotal() {
+    const shipping = parseInt(document.getElementById('wa-shipping-cost')?.value || 0) || 0;
+    if (window.kasirCart && window.kasirCart.length) {
+        let p = 0, d = 0;
+        window.kasirCart.forEach(g => { p += (g.productSubtotal || 0); d += (g.discountAmount || 0); });
+        return p - d + shipping;
+    }
+    const t = (document.getElementById('wa-total-preview')?.textContent || '').replace(/[^0-9]/g, '');
+    return parseInt(t || '0') || 0;
+}
+function waDpFill50() {
+    const grand = waCurrentGrandTotal();
+    if (grand <= 0) { alert('Total masih Rp 0. Tambahkan produk (atau masukkan ke keranjang) dulu sebelum mengisi DP.'); return; }
+    const dpEl = document.getElementById('wa-dp-amount');
+    if (dpEl) { dpEl.value = Math.round(grand / 2); waUpdateDpHint(); }
+}
+function waUpdateDpHint() {
+    const hint = document.getElementById('wa-dp-hint');
+    if (!hint) return;
+    const dp = parseInt(document.getElementById('wa-dp-amount')?.value || 0) || 0;
+    if (dp <= 0) { hint.classList.add('hidden'); return; }
+    const grand = waCurrentGrandTotal();
+    const sisa = Math.max(0, grand - dp);
+    hint.textContent = `DP Rp ${dp.toLocaleString('id-ID')} · Sisa pelunasan ± Rp ${sisa.toLocaleString('id-ID')} (ongkir final dikonfirmasi sebelum kirim)`;
+    hint.classList.remove('hidden');
 }
 
 // Free Ongkir / Kirim sendiri → ongkir otomatis 0 (dan field dikunci)
@@ -9550,6 +9606,34 @@ function buildOrderWaMessage(o) {
         ? `${o.discount_label || 'Diskon'}: -${rp(o.discount_amount)}\n`
         : '';
 
+    // DP / Uang Muka. Total tetap penuh; tampilkan DP dibayar + sisa pelunasan,
+    // plus catatan ongkir masih estimasi (pesanan banyak → ongkir final bisa beda).
+    const dp = Number(o.dp_amount || 0);
+    const total = Number(o.total_amount || 0);
+    const isDp = dp > 0;
+    const sisa = Math.max(0, total - dp);
+    const dpBlock = isDp
+        ? `\nDP Dibayar: ${rp(dp)}\nSisa Pelunasan: ${rp(sisa)}\n\n` +
+          `*Catatan: Biaya ongkir masih estimasi. Apabila ada biaya tambahan / kelebihan akan kami infokan sebelum pengiriman.*`
+        : '';
+
+    // Instruksi pembayaran adaptif: Cash (lunas) / DP (transfer DP dulu) / normal (transfer penuh).
+    let payInstruction;
+    if (o.payment_method === 'Cash') {
+        payInstruction = `\n\nPembayaran tunai (Cash) sudah kami terima. Terima kasih sudah berbelanja di Wearscrubs!`;
+    } else if (isDp) {
+        payInstruction =
+            `\n\nUntuk DP, silakan transfer *${rp(dp)}* ke *BCA 8780269791* / *Mandiri 1220010735721* a/n *Priscilla Lavine* dan kirim bukti transfer ke WA ini ya Dok\n\n` +
+            `Sisa pelunasan *${rp(sisa)}* beserta kekurangan ongkir (bila ada) dibayar sebelum barang dikirim - akan kami konfirmasi dulu.\n\n` +
+            `Mohon DP dilakukan maksimal *2 x 24 jam*. Melebihi waktu tersebut, pesanan dibatalkan otomatis oleh sistem kami.\n\n` +
+            `Terima kasih sudah berbelanja di Wearscrubs!`;
+    } else {
+        payInstruction =
+            `\n\nSilakan lakukan pembayaran *BCA 8780269791* / *Mandiri 1220010735721* a/n *Priscilla Lavine* dan kirim bukti transfer ke WA ini ya Dok\n\n` +
+            `Mohon melakukan pembayaran dalam waktu maksimal *2 x 24 jam*. Melebihi waktu yang diberikan, pemesanan akan dibatalkan oleh sistem kami secara otomatis.\n\n` +
+            `Terima kasih sudah berbelanja di Wearscrubs!`;
+    }
+
     return `Halo ${o.customer_name || ''}\n\n` +
         `Order Anda sudah tercatat di sistem kami.\n\n` +
         `*Invoice: ${o.order_code}*\n\n` +
@@ -9561,14 +9645,9 @@ function buildOrderWaMessage(o) {
         `Ongkir: ${rp(o.shipping_cost)}\n` +
         discountLine +
         `*TOTAL: ${rp(o.total_amount)}*` +
+        dpBlock +
         (o.payment_method ? `\nMetode: ${o.payment_method}` : '') +
-        // Order tunai (walk-in/event) sudah dibayar di tempat → jangan kirim instruksi
-        // transfer BCA/Mandiri + tenggat 2x24 jam (tidak relevan & membingungkan).
-        (o.payment_method === 'Cash'
-            ? `\n\nPembayaran tunai (Cash) sudah kami terima. Terima kasih sudah berbelanja di Wearscrubs!`
-            : `\n\nSilakan lakukan pembayaran *BCA 8780269791* / *Mandiri 1220010735721* a/n *Priscilla Lavine* dan kirim bukti transfer ke WA ini ya Dok\n\n` +
-              `Mohon melakukan pembayaran dalam waktu maksimal *2 x 24 jam*. Melebihi waktu yang diberikan, pemesanan akan dibatalkan oleh sistem kami secara otomatis.\n\n` +
-              `Terima kasih sudah berbelanja di Wearscrubs!`);
+        payInstruction;
 }
 
 // Instruksi pembayaran di panel hasil (post-save), adaptif per sumber + metode.
@@ -9692,10 +9771,13 @@ function waResetForm() {
             const t = new Date();
             dateEl.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
         }
+        // Reset diskon umum + DP.
+        const fd = document.getElementById('wa-form-discount'); if (fd) fd.value = '';
+        const dp = document.getElementById('wa-dp-amount'); if (dp) dp.value = '';
+        if (typeof waUpdateDpHint === 'function') waUpdateDpHint();
         // Reset blok hasil ke kondisi default (pesan WA + tombol kirim tampil lagi).
         const instr = document.getElementById('wa-result-instruction'); if (instr) instr.innerHTML = '';
         ['wa-result-wa-block','wa-result-send-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); });
-        if (typeof waRenderDiscountUI === 'function') waRenderDiscountUI();
     } catch (e) { console.warn('waResetForm cleanup skipped:', e); }
 
     // Rebuild a fresh item row (guaranteed to run).
@@ -10422,9 +10504,11 @@ function bulkAddPanel() {
         <div class="bg-white/2 border border-white/8 rounded-lg p-3 flex items-center gap-3 flex-wrap">
             <p class="text-[10px] font-mono uppercase tracking-wider text-white/40 shrink-0">5 · Diskon Panel</p>
             <select class="bulk-cell-panel-discount bulk-input text-xs flex-1 min-w-[160px]" onchange="bulkUpdateTotal(this)">
-                <option value="0">Tanpa diskon</option>
-                <option value="5">Diskon 5%</option>
-                <option value="30">Consignment 30%</option>
+                <option value="">Tanpa diskon</option>
+                <option value="5-inc">Diskon 5% (termasuk bordir)</option>
+                <option value="5-exc">Diskon 5% (tanpa bordir)</option>
+                <option value="30-inc">Consignment 30% (termasuk bordir)</option>
+                <option value="30-exc">Consignment 30% (tanpa bordir)</option>
             </select>
             <p class="bulk-cell-panel-discount-preview text-[10px] text-green-400 hidden w-full mt-0.5"></p>
         </div>
@@ -11222,7 +11306,7 @@ function kasirCartRender() {
             <div class="flex-1 min-w-0">
                 <p class="text-xs font-bold text-white truncate">${esc(g.groupLabel)}</p>
                 <p class="text-[10px] text-white/40 mt-0.5">${g.items.length} item · ${fmt(g.productSubtotal)}</p>
-                ${g.discountPercent > 0 ? `<p class="text-[10px] text-green-400">🏷️ Diskon ${g.discountPercent}% = −${fmt(g.discountAmount)}</p>` : ''}
+                ${g.discountAmount > 0 ? `<p class="text-[10px] text-green-400">🏷️ ${esc(g.discountLabel || 'Diskon')} = −${fmt(g.discountAmount)}</p>` : ''}
             </div>
             <button onclick="kasirCartRemove(${g.id})" class="text-red-400/60 hover:text-red-400 text-[11px] px-2 py-1 rounded transition shrink-0">✕ Hapus</button>
         </div>
@@ -11248,6 +11332,19 @@ function kasirCartUpdateTotals() {
     if (elShip)  elShip.textContent  = fmt(shippingCost);
     if (discRow)  discRow.classList.toggle('hidden', discTotal === 0);
     if (elDisc)   elDisc.textContent = '−' + fmt(discTotal);
+    // Baris DP (kalau diisi)
+    const dp = parseInt(document.getElementById('wa-dp-amount')?.value || 0) || 0;
+    const dpRow = document.getElementById('kasir-cart-dp-row');
+    const sisaRow = document.getElementById('kasir-cart-sisa-row');
+    if (dpRow)   dpRow.classList.toggle('hidden', dp <= 0);
+    if (sisaRow) sisaRow.classList.toggle('hidden', dp <= 0);
+    if (dp > 0) {
+        const elDp = document.getElementById('kasir-cart-dp');
+        const elSisa = document.getElementById('kasir-cart-sisa');
+        if (elDp)   elDp.textContent = fmt(dp);
+        if (elSisa) elSisa.textContent = fmt(Math.max(0, grand - dp));
+    }
+    waUpdateDpHint();
 }
 
 // Kumpulkan items dari single-mode items container.
@@ -11255,7 +11352,9 @@ function kasirCartUpdateTotals() {
 function _kasirCollectSingleItems() {
     const container = document.getElementById('wa-items-container');
     const items = [], embroideryDetails = [], posErrors = [];
-    let productSubtotal = 0;
+    let productSubtotal = 0, discountAmount = 0;
+    const usedTokens = new Set();
+    const formToken = document.getElementById('wa-form-discount')?.value || '';
 
     for (const item of container.querySelectorAll('[id^="wa-item-"]')) {
         const idx = item.id.replace('wa-item-', '');
@@ -11288,7 +11387,14 @@ function _kasirCollectSingleItems() {
                 size: cpSize, quantity: cpQty, bordir_nama: bordirNamaCP, bordir_logo: bordirLogoCP,
                 bordir_nama_price: bNP, bordir_logo_price: bLP, is_bonus: isBonusCP,
                 custom_price: cpPrice, is_custom_size: false, is_po: false });
-            productSubtotal += (cpPrice + (bordirNamaCP ? bNP : 0) + (bordirLogoCP ? bLP : 0)) * cpQty;
+            const cpBaseSub = cpPrice * cpQty;
+            const cpBordirSub = ((bordirNamaCP ? bNP : 0) + (bordirLogoCP ? bLP : 0)) * cpQty;
+            productSubtotal += cpBaseSub + cpBordirSub;
+            if (!isBonusCP) {
+                const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
+                const d = discAmountFor(tok, cpBaseSub, cpBordirSub);
+                if (d > 0) { discountAmount += d; usedTokens.add(tok); }
+            }
             if (bordirNamaCP || bordirLogoCP) {
                 const il = `${cpName} (${cpColor}, ${cpSize})`;
                 let nP = null, lP = null;
@@ -11343,7 +11449,14 @@ function _kasirCollectSingleItems() {
         const bNP = parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000;
         const bLP = parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000;
         const approxBase = customPrice !== null ? customPrice : (parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price) || 0);
-        productSubtotal += (approxBase + (bordirNama ? bNP : 0) + (bordirLogo ? bLP : 0)) * qtyVal;
+        const baseSub = approxBase * qtyVal;
+        const bordirSub = ((bordirNama ? bNP : 0) + (bordirLogo ? bLP : 0)) * qtyVal;
+        productSubtotal += baseSub + bordirSub;
+        if (!isBonus) {
+            const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
+            const d = discAmountFor(tok, baseSub, bordirSub);
+            if (d > 0) { discountAmount += d; usedTokens.add(tok); }
+        }
         items.push({ product_id: parseInt(productId), color: finalColor, variant_type: variantEl?.value || 'null',
             size: finalSize, quantity: qtyVal, bordir_nama: bordirNama, bordir_logo: bordirLogo,
             bordir_nama_price: bNP, bordir_logo_price: bLP, is_bonus: isBonus,
@@ -11370,7 +11483,8 @@ function _kasirCollectSingleItems() {
             if (bordirNama && bordirLogo && nP && lP && nP === lP) posErrors.push(`${pName}: posisi bordir nama dan logo tidak boleh sama.`);
         }
     }
-    return { ok: posErrors.length === 0 && items.length > 0, items, embroideryDetails, productSubtotal, errors: posErrors };
+    const discountLabel = usedTokens.size === 1 ? discTokenLabel([...usedTokens][0]) : (discountAmount > 0 ? 'Diskon per produk' : '');
+    return { ok: posErrors.length === 0 && items.length > 0, items, embroideryDetails, productSubtotal, discountAmount, discountLabel, errors: posErrors };
 }
 
 function kasirAddToCartSingle() {
@@ -11378,8 +11492,7 @@ function kasirAddToCartSingle() {
     if (result.errors.length > 0) { alert('⚠️ Lengkapi pesanan dulu:\n\n' + result.errors.join('\n')); return; }
     if (result.items.length === 0) { alert('Tambahkan minimal satu produk.'); return; }
 
-    const discPct = typeof waSelectedDiscount !== 'undefined' ? (waSelectedDiscount || 0) : 0;
-    const discAmt = Math.round(result.productSubtotal * discPct / 100);
+    const discAmt = result.discountAmount || 0;
 
     // Build label dari item pertama
     const firstProdEl = document.querySelector('#wa-items-container [id^="wa-prod-"]');
@@ -11388,17 +11501,19 @@ function kasirAddToCartSingle() {
         || 'Produk';
     const totalPcs = result.items.reduce((s, i) => s + (i.quantity || 1), 0);
     const extraLabel = result.items.length > 1 ? ` +${result.items.length-1} lainnya` : '';
-    const groupLabel = `${firstProdName}${extraLabel} · ${totalPcs} pcs${discPct > 0 ? ` (Disc ${discPct}%)` : ''}`;
+    const groupLabel = `${firstProdName}${extraLabel} · ${totalPcs} pcs${discAmt > 0 ? ` (${result.discountLabel || 'Diskon'})` : ''}`;
 
     kasirCartPush({ mode: 'single', groupLabel, items: result.items, embroideryDetails: result.embroideryDetails,
-        productSubtotal: result.productSubtotal, discountPercent: discPct, discountAmount: discAmt });
+        productSubtotal: result.productSubtotal, discountLabel: result.discountLabel, discountAmount: discAmt });
 
     // Reset items section (customer data & shipping tetap)
     const container = document.getElementById('wa-items-container');
     if (container) container.innerHTML = '';
     waItemCount = 0;
     waAddItem();
-    waSelectDiscount(0);
+    const formDiscEl = document.getElementById('wa-form-discount');
+    if (formDiscEl) formDiscEl.value = '';
+    waUpdateTotal();
 
     // Hook ongkir change agar cart total ikut update
     const costEl = document.getElementById('wa-shipping-cost');
@@ -11452,13 +11567,13 @@ function kasirAddToCartBulk() {
         const namaPrice   = 20000;
         const logoPrice   = parseInt(panel.querySelector('.bulk-cell-logo-price').value) || 30000;
         const logoColor   = panel.querySelector('.bulk-cell-logo-color').value.trim() || '';
-        const panelDiscPct = parseInt(panel.querySelector('.bulk-cell-panel-discount')?.value || 0) || 0;
+        const panelDiscToken = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
         const prodOption  = panel.querySelector('.bulk-cell-product option:checked');
         const approxBase  = isCustomColor ? customPrice : ((panel._state.selectedProduct?.price_by_type?.[variant]) || parseInt(prodOption?.dataset?.price) || 0);
 
         const allocated = {};
         const panelItems = [], panelEmb = [];
-        let panelSubtotal = 0, rowErr = false;
+        let panelSubtotal = 0, panelBaseSub = 0, panelBordirSub = 0, rowErr = false;
 
         for (let i = 0; i < rows.length; i++) {
             const tr = rows[i];
@@ -11473,7 +11588,9 @@ function kasirAddToCartBulk() {
                 size, quantity: 1, bordir_nama: namaActive, bordir_logo: logoActive,
                 bordir_nama_price: namaPrice, bordir_logo_price: logoPrice, is_bonus: false,
                 is_custom_size: isCustomColor, custom_price: isCustomColor ? customPrice : 0, is_po: isCustomColor ? false : isPO });
-            panelSubtotal += approxBase + (namaActive ? namaPrice : 0) + (logoActive ? logoPrice : 0);
+            panelBaseSub   += approxBase;
+            panelBordirSub += (namaActive ? namaPrice : 0) + (logoActive ? logoPrice : 0);
+            panelSubtotal  += approxBase + (namaActive ? namaPrice : 0) + (logoActive ? logoPrice : 0);
             if (namaActive || logoActive) {
                 const il = productName + ' (' + finalColor + ', ' + size + ')';
                 if (namaActive) {
@@ -11485,11 +11602,12 @@ function kasirAddToCartBulk() {
             }
         }
         if (!rowErr && panelItems.length > 0) {
-            const discAmt = Math.round(panelSubtotal * panelDiscPct / 100);
+            const discAmt = discAmountFor(panelDiscToken, panelBaseSub, panelBordirSub);
+            const discLbl = discTokenLabel(panelDiscToken);
             validGroups.push({ mode: 'bulk',
-                groupLabel: `${productName} ${finalColor} ${variant} · ${panelItems.length} pcs${panelDiscPct > 0 ? ` (Disc ${panelDiscPct}%)` : ''}`,
+                groupLabel: `${productName} ${finalColor} ${variant} · ${panelItems.length} pcs${discAmt > 0 ? ` (${discLbl})` : ''}`,
                 items: panelItems, embroideryDetails: panelEmb,
-                productSubtotal: panelSubtotal, discountPercent: panelDiscPct, discountAmount: discAmt });
+                productSubtotal: panelSubtotal, discountLabel: discLbl, discountAmount: discAmt });
         }
     }
 
@@ -11522,7 +11640,14 @@ async function kasirCartSubmit() {
     }
     const allItems = [], allEmb = [];
     let totalDiscountAmount = 0;
-    window.kasirCart.forEach(g => { allItems.push(...g.items); allEmb.push(...g.embroideryDetails); totalDiscountAmount += g.discountAmount; });
+    const discLabels = new Set();
+    window.kasirCart.forEach(g => {
+        allItems.push(...g.items); allEmb.push(...g.embroideryDetails); totalDiscountAmount += g.discountAmount;
+        if (g.discountAmount > 0 && g.discountLabel) discLabels.add(g.discountLabel);
+    });
+    const discountLabelCustom = totalDiscountAmount > 0
+        ? (discLabels.size === 1 ? [...discLabels][0] : 'Diskon per produk') : '';
+    const dpAmount = parseInt(document.getElementById('wa-dp-amount')?.value || 0) || 0;
 
     const btn = document.getElementById('kasir-cart-submit-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...'; }
@@ -11537,7 +11662,7 @@ async function kasirCartSubmit() {
                 invoice_date: invoiceDate || null, items: allItems,
                 embroidery_details: allEmb.length ? allEmb : null,
                 discount_percent: 0, discount_amount_custom: totalDiscountAmount,
-                discount_label_custom: totalDiscountAmount > 0 ? 'Diskon per produk' : '' }),
+                discount_label_custom: discountLabelCustom, dp_amount: dpAmount }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
@@ -11552,8 +11677,10 @@ async function kasirCartSubmit() {
         if (typeof waRenderResultInstruction === 'function') waRenderResultInstruction(orderSource, paymentMethod, billingTo);
         document.getElementById('wa-result-panel').classList.remove('hidden');
         document.getElementById('wa-result-panel').scrollIntoView({ behavior: 'smooth' });
-        // Kosongkan cart
+        // Kosongkan cart + DP
         window.kasirCart = [];
+        const dpEl = document.getElementById('wa-dp-amount'); if (dpEl) dpEl.value = '';
+        if (typeof waUpdateDpHint === 'function') waUpdateDpHint();
         const cartSection = document.getElementById('kasir-cart-section');
         if (cartSection) cartSection.classList.add('hidden');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Tersimpan — klik "Order Baru"'; }
@@ -11654,6 +11781,12 @@ function _generateFormatOrderText(o) {
     if (bordirGrandTotal > 0) parts.push(`Bordir ${rp(bordirGrandTotal)}`);
     if (discountAmount > 0)  parts.push(`Disc -${rp(discountAmount)}`);
     text += `Total Pesanan: ${parts.join(' + ')} = ${rp(total)}`;
+    const dp = o.dp_amount || 0;
+    if (dp > 0) {
+        text += `\nDP Dibayar: ${rp(dp)}`;
+        text += `\nSisa Pelunasan: ${rp(Math.max(0, total - dp))}`;
+        text += `\n(Ongkir masih estimasi - cek ulang sebelum kirim)`;
+    }
     return text;
 }
 

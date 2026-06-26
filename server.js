@@ -553,6 +553,7 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_percent INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_label TEXT DEFAULT NULL`);
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dp_amount INTEGER DEFAULT 0`);
 
     // ── Migrate: add gown to category constraint ──────────────────────────────
     // Drop old constraint and recreate to include gown (PostgreSQL approach)
@@ -2350,6 +2351,11 @@ app.post('/api/orders', async (req, res) => {
             : (safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null);
         const total = productTotal - discountAmount + shippingCost;
 
+        // DP / uang muka (admin-only). Total tetap penuh; DP hanya info pembayaran bertahap.
+        const rawDp = parseInt(req.body.dp_amount);
+        const safeDpAmount = (isAdmin && Number.isInteger(rawDp) && rawDp > 0)
+            ? Math.min(rawDp, total) : 0;
+
         // Courier dipilih manual dari form, fallback ke logika kota jika tidak diisi
         const cityInfo = CITIES.find(c => c.name === shipping_city);
         const weightKg = parseFloat(shipping_weight_kg || 0);
@@ -2383,8 +2389,8 @@ app.post('/api/orders', async (req, res) => {
                 `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
-                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING id`,
+                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
@@ -2398,7 +2404,8 @@ app.post('/api/orders', async (req, res) => {
                  discountLabel,
                  logoAlreadyProvided,
                  safeBillingTo,
-                 safeInvoiceDate]
+                 safeInvoiceDate,
+                 safeDpAmount]
             );
             const newOrderId = orderResult.rows[0].id;
 
@@ -2499,7 +2506,8 @@ app.post('/api/orders', async (req, res) => {
             courier,
             discount_percent: safeDiscountPct,
             discount_amount: discountAmount,
-            discount_label: discountLabel
+            discount_label: discountLabel,
+            dp_amount: safeDpAmount
         });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
