@@ -7552,8 +7552,8 @@ function openShipOrder(orderId) {
             </div>
             <div>
                 <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Kurir Final (opsional)</label>
-                <input name="shipping_courier_final" type="text" placeholder="${existingCourier || 'JNE / J&T / Lion Parcel...'}" value="${existingCourier && (existingCourier.includes('/') || existingCourier.includes(','))? '' : existingCourier}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
-                <p class="text-[10px] text-white/30 mt-1">Kosongkan jika tidak berubah dari pilihan awal (<span class="text-white/50">${existingCourier || '-'}</span>)</p>
+                <input name="shipping_courier_final" type="text" placeholder="${esc(existingCourier || 'JNE / J&T / Lion Parcel...')}" value="${esc(existingCourier && (existingCourier.includes('/') || existingCourier.includes(','))? '' : existingCourier)}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
+                <p class="text-[10px] text-white/30 mt-1">Kosongkan jika tidak berubah dari pilihan awal (<span class="text-white/50">${esc(existingCourier || '-')}</span>)</p>
             </div>
             <div>
                 <label class="block text-xs text-white/50 uppercase tracking-wider font-bold mb-1.5">Catatan (opsional)</label>

@@ -883,6 +883,14 @@ function safeJSON(str, fallback = []) {
     try { return JSON.parse(str); } catch { return fallback; }
 }
 
+// Kurir = label pendek (mis. "JNE / J&T Reguler"). Buang karakter yang bisa dipakai
+// untuk HTML/attribute injection (stored-XSS di dashboard — CSP off, escaping satu-
+// satunya benteng) + batasi panjang. Dipakai di create & edit order, termasuk path
+// publik (checkout) yang TIDAK terautentikasi.
+function sanitizeCourier(s) {
+    return String(s == null ? '' : s).replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
 // Kurir 'ambil langsung' utk event/walk-in. Order dgn courier ini auto-skip
 // Kemas+Kirim — di confirm-payment / bordir-done langsung jadi 'done' karena
 // barang udah diambil customer di tempat. Single source of truth — selalu
@@ -2345,7 +2353,10 @@ app.post('/api/orders', async (req, res) => {
         // Admin dapat override total discount via discount_amount_custom (untuk per-produk/panel disc di Kasir cart)
         const rawCustom = parseInt(req.body.discount_amount_custom);
         const discountAmountCustom = (isAdmin && Number.isInteger(rawCustom) && rawCustom >= 0) ? rawCustom : null;
-        const discountAmount = discountAmountCustom !== null ? discountAmountCustom : Math.round(productTotal * safeDiscountPct / 100);
+        const discountAmountRaw = discountAmountCustom !== null ? discountAmountCustom : Math.round(productTotal * safeDiscountPct / 100);
+        // Clamp: diskon tidak boleh melebihi subtotal produk (cegah total_amount negatif
+        // yang merusak invoice/report/refund). Konsisten dgn clamp DP di bawah.
+        const discountAmount = Math.max(0, Math.min(discountAmountRaw, productTotal));
         const discountLabel = discountAmountCustom !== null
             ? (req.body.discount_label_custom || 'Diskon per produk') || null
             : (safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null);
@@ -2364,7 +2375,7 @@ app.post('/api/orders', async (req, res) => {
             if (cityInfo.zone !== 1 && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
             else autoCourier = cityInfo.zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
         }
-        const courier = (req_shipping_courier && req_shipping_courier.trim()) ? req_shipping_courier.trim() : autoCourier;
+        const courier = (req_shipping_courier && req_shipping_courier.trim()) ? sanitizeCourier(req_shipping_courier) : autoCourier;
 
         // Detect bordir flags from items for order-level tracking
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
@@ -3184,7 +3195,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             setClauses.push(`shipping_city = $${idx++}`); params.push(v);
         }
         if (shipping_courier !== undefined) {
-            setClauses.push(`shipping_courier = $${idx++}`); params.push(String(shipping_courier).trim());
+            setClauses.push(`shipping_courier = $${idx++}`); params.push(sanitizeCourier(shipping_courier));
         }
         if (shipping_weight_kg !== undefined) {
             const w = parseFloat(shipping_weight_kg);
