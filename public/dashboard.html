@@ -961,7 +961,7 @@
                   <div>
                     <p class="text-[10px] text-white/40 uppercase">Grand Total</p>
                     <p id="bulk-grand-total" class="text-xl font-bold text-green-400 mt-1">Rp 0</p>
-                    <p class="text-[10px] text-white/40">Belum termasuk ongkir + diskon</p>
+                    <p class="text-[10px] text-white/40">Diskon sudah dihitung · belum termasuk ongkir</p>
                   </div>
                 </div>
               </div>
@@ -980,10 +980,10 @@
             </div>
             <select id="wa-form-discount" onchange="waUpdateTotal()" class="text-sm w-full">
               <option value="">Tanpa diskon</option>
-              <option value="5-inc">Diskon 5% (termasuk bordir)</option>
-              <option value="5-exc">Diskon 5% (tanpa bordir)</option>
-              <option value="30-inc">Consignment 30% (termasuk bordir)</option>
-              <option value="30-exc">Consignment 30% (tanpa bordir)</option>
+              <option value="5-inc">Diskon 5% (produk + bordir)</option>
+              <option value="5-exc">Diskon 5% (produk saja)</option>
+              <option value="30-inc">Consignment 30% (produk + bordir)</option>
+              <option value="30-exc">Consignment 30% (produk saja)</option>
             </select>
             <p class="text-[10px] text-white/30 leading-relaxed">Diskon ini dipakai untuk baris produk yang <b>tidak</b> punya diskonnya sendiri. Kalau satu baris sudah dipilih diskon, diskon ini tidak ditambah lagi (tidak dobel). "Tanpa bordir" = harga bordir tidak ikut didiskon.</p>
             <!-- Preview diskon -->
@@ -8711,10 +8711,10 @@ function waAddItem() {
                 <label class="wa-field-label">Diskon Baris Ini <span class="wa-optional">(opsional, override diskon umum)</span></label>
                 <select id="wa-item-disc-${idx}" class="input-sm" onchange="waUpdateTotal()">
                     <option value="">— Ikut diskon umum / tanpa diskon</option>
-                    <option value="5-inc">Diskon 5% (termasuk bordir)</option>
-                    <option value="5-exc">Diskon 5% (tanpa bordir)</option>
-                    <option value="30-inc">Consignment 30% (termasuk bordir)</option>
-                    <option value="30-exc">Consignment 30% (tanpa bordir)</option>
+                    <option value="5-inc">Diskon 5% (produk + bordir)</option>
+                    <option value="5-exc">Diskon 5% (produk saja)</option>
+                    <option value="30-inc">Consignment 30% (produk + bordir)</option>
+                    <option value="30-exc">Consignment 30% (produk saja)</option>
                 </select>
             </div>
             <!-- Sub-form Bordir Nama -->
@@ -9164,7 +9164,7 @@ function discTokenLabel(token) {
     const { pct, incBordir } = parseDiscToken(token);
     if (!pct) return '';
     const base = pct === 30 ? 'Consignment 30%' : 'Diskon ' + pct + '%';
-    return base + (incBordir ? '' : ' (tanpa bordir)');
+    return base + (incBordir ? ' (produk + bordir)' : ' (produk saja)');
 }
 // Hitung nominal diskon dari subtotal harga produk & subtotal bordir terpisah.
 function discAmountFor(token, baseSubtotal, bordirSubtotal) {
@@ -10496,6 +10496,17 @@ function bulkAddPanel() {
             </div>
         </div>
 
+        <div class="bg-white/2 border border-white/8 rounded-lg p-3 space-y-1.5">
+            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">5 · Diskon Panel</p>
+            <select class="bulk-cell-panel-discount bulk-input text-xs w-full" onchange="bulkUpdateTotal(this)">
+                <option value="">Tanpa diskon</option>
+                <option value="5-inc">Diskon 5% (produk + bordir)</option>
+                <option value="5-exc">Diskon 5% (produk saja)</option>
+                <option value="30-inc">Consignment 30% (produk + bordir)</option>
+                <option value="30-exc">Consignment 30% (produk saja)</option>
+            </select>
+        </div>
+
         <div class="bulk-panel-subtotal hidden bg-white/2 border border-white/8 rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div>
                 <p class="text-[10px] text-white/40 uppercase">Produk</p>
@@ -10515,19 +10526,8 @@ function bulkAddPanel() {
             <div>
                 <p class="text-[10px] text-white/40 uppercase">Subtotal Panel</p>
                 <p class="bulk-panel-grand text-lg font-bold text-cyan-300 mt-1">Rp 0</p>
+                <p class="bulk-panel-disc-detail text-[10px] text-green-400 hidden mt-0.5"></p>
             </div>
-        </div>
-
-        <div class="bg-white/2 border border-white/8 rounded-lg p-3 flex items-center gap-3 flex-wrap">
-            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40 shrink-0">5 · Diskon Panel</p>
-            <select class="bulk-cell-panel-discount bulk-input text-xs flex-1 min-w-[160px]" onchange="bulkUpdateTotal(this)">
-                <option value="">Tanpa diskon</option>
-                <option value="5-inc">Diskon 5% (termasuk bordir)</option>
-                <option value="5-exc">Diskon 5% (tanpa bordir)</option>
-                <option value="30-inc">Consignment 30% (termasuk bordir)</option>
-                <option value="30-exc">Consignment 30% (tanpa bordir)</option>
-            </select>
-            <p class="bulk-cell-panel-discount-preview text-[10px] text-green-400 hidden w-full mt-0.5"></p>
         </div>
     `;
 
@@ -11022,13 +11022,27 @@ function bulkUpdatePanelTotal(panel) {
     const subLogo = logoActive ? logoPrice * n : 0;
     const grand = subProduct + subNama + subLogo;
 
+    // Diskon panel langsung dihitung ke Subtotal Panel (net = grand − diskon).
+    const token = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
+    const discount = discAmountFor(token, subProduct, subNama + subLogo);
+    const net = grand - discount;
+
     sub.querySelector('.bulk-panel-product').textContent = 'Rp ' + subProduct.toLocaleString('id-ID');
     sub.querySelector('.bulk-panel-product-detail').textContent = n + ' × Rp ' + unitPrice.toLocaleString('id-ID');
     sub.querySelector('.bulk-panel-nama').textContent = 'Rp ' + subNama.toLocaleString('id-ID');
     sub.querySelector('.bulk-panel-nama-detail').textContent = namaActive ? (n + ' × Rp ' + namaPrice.toLocaleString('id-ID')) : '— off';
     sub.querySelector('.bulk-panel-logo').textContent = 'Rp ' + subLogo.toLocaleString('id-ID');
     sub.querySelector('.bulk-panel-logo-detail').textContent = logoActive ? (n + ' × Rp ' + logoPrice.toLocaleString('id-ID')) : '— off';
-    sub.querySelector('.bulk-panel-grand').textContent = 'Rp ' + grand.toLocaleString('id-ID');
+    sub.querySelector('.bulk-panel-grand').textContent = 'Rp ' + net.toLocaleString('id-ID');
+    const discEl = sub.querySelector('.bulk-panel-disc-detail');
+    if (discEl) {
+        if (discount > 0) {
+            discEl.textContent = '−Rp ' + discount.toLocaleString('id-ID') + ' · ' + discTokenLabel(token);
+            discEl.classList.remove('hidden');
+        } else {
+            discEl.classList.add('hidden');
+        }
+    }
 }
 
 // ── Cross-panel total (grand) ────────────────────────────────────────────
@@ -11048,7 +11062,7 @@ function bulkUpdateGrandTotal() {
     if (!card || !btn) return;
 
     const panels = document.querySelectorAll('#bulk-panels-container .bulk-panel');
-    let totalProduct = 0, totalNama = 0, totalLogo = 0, totalPcs = 0;
+    let totalProduct = 0, totalNama = 0, totalLogo = 0, totalPcs = 0, totalDiscount = 0;
     let namaPcs = 0, logoPcs = 0;
 
     panels.forEach(panel => {
@@ -11066,13 +11080,18 @@ function bulkUpdateGrandTotal() {
         const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
         const logoPrice = parseInt(panel.querySelector('.bulk-cell-logo-price')?.value) || 30000;
 
-        totalProduct += unitPrice * n;
+        const pProduct = unitPrice * n;
+        const pNama = namaActive ? 20000 * n : 0;
+        const pLogo = logoActive ? logoPrice * n : 0;
+        totalProduct += pProduct;
         totalPcs += n;
-        if (namaActive) { totalNama += 20000 * n; namaPcs += n; }
-        if (logoActive) { totalLogo += logoPrice * n; logoPcs += n; }
+        if (namaActive) { totalNama += pNama; namaPcs += n; }
+        if (logoActive) { totalLogo += pLogo; logoPcs += n; }
+        const token = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
+        totalDiscount += discAmountFor(token, pProduct, pNama + pLogo);
     });
 
-    const grand = totalProduct + totalNama + totalLogo;
+    const grand = totalProduct + totalNama + totalLogo - totalDiscount;
 
     if (totalPcs === 0) {
         card.classList.add('hidden');
@@ -11349,17 +11368,58 @@ function kasirCartRender() {
     // Pastikan tombol submit fresh & bisa diklik (reset state "Tersimpan" dari order sebelumnya).
     const submitBtn = document.getElementById('kasir-cart-submit-btn');
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA'; }
+    const totalPcsOf = (g) => g.items.reduce((s, i) => s + (i.quantity || 1), 0);
     itemsEl.innerHTML = window.kasirCart.map(g => `
-        <div class="bg-white/3 border border-white/10 rounded-xl p-3 flex items-start justify-between gap-2">
-            <div class="flex-1 min-w-0">
-                <p class="text-xs font-bold text-white truncate">${esc(g.groupLabel)}</p>
-                <p class="text-[10px] text-white/40 mt-0.5">${g.items.length} item · ${fmt(g.productSubtotal)}</p>
-                ${g.discountAmount > 0 ? `<p class="text-[10px] text-green-400">🏷️ ${esc(g.discountLabel || 'Diskon')} = −${fmt(g.discountAmount)}</p>` : ''}
+        <div class="bg-white/3 border border-white/10 rounded-xl p-3">
+            <div class="flex items-start justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-bold text-white">${esc(g.groupLabel)}</p>
+                    <p class="text-[10px] text-white/40 mt-0.5">${g.items.length} baris · ${fmt(g.productSubtotal)}</p>
+                    ${g.discountAmount > 0 ? `<p class="text-[10px] text-green-400">🏷️ ${esc(g.discountLabel || 'Diskon')} = −${fmt(g.discountAmount)}</p>` : ''}
+                </div>
+                <button onclick="kasirCartRemove(${g.id})" class="text-red-400/60 hover:text-red-400 text-[11px] px-2 py-1 rounded transition shrink-0">✕ Hapus</button>
             </div>
-            <button onclick="kasirCartRemove(${g.id})" class="text-red-400/60 hover:text-red-400 text-[11px] px-2 py-1 rounded transition shrink-0">✕ Hapus</button>
+            <details class="mt-2">
+                <summary class="text-[10px] text-cyan-300/80 cursor-pointer select-none hover:text-cyan-200 list-none [&::-webkit-details-marker]:hidden">▸ Lihat detail (${totalPcsOf(g)} pcs)</summary>
+                <div class="mt-2 space-y-1 border-t border-white/8 pt-2 max-h-64 overflow-y-auto">${kasirGroupDetailHtml(g)}</div>
+            </details>
         </div>
     `).join('');
     kasirCartUpdateTotals();
+}
+
+// Render rincian per-pcs satu grup keranjang (read-only) — pasangkan item dgn
+// teks bordir nama/logo-nya (urutan emb mengikuti urutan item saat di-collect).
+function kasirGroupDetailHtml(g) {
+    const fmt = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
+    const namas = (g.embroideryDetails || []).filter(e => e.type === 'nama');
+    const logos = (g.embroideryDetails || []).filter(e => e.type === 'logo');
+    let ni = 0, li = 0;
+    return g.items.map((it, i) => {
+        const prod = it.is_custom_product
+            ? (it.custom_product_name || 'Produk custom')
+            : ((typeof waProducts !== 'undefined' && waProducts.find(p => p.id === it.product_id)?.name) || 'Produk');
+        const variant = (it.variant_type && it.variant_type !== 'null') ? ' · ' + esc(it.variant_type) : '';
+        const tags = [];
+        if (it.is_po) tags.push('PO');
+        if (it.is_bonus) tags.push('Bonus');
+        if (it.is_custom_size || it.is_custom_product) tags.push('Custom');
+        const tagStr = tags.length ? ` <span class="text-amber-300/70">[${tags.join(', ')}]</span>` : '';
+        let sub = '';
+        if (it.bordir_nama && ni < namas.length) {
+            const e = namas[ni++];
+            const nm = e.value_line2 ? `${e.value} / ${e.value_line2}` : e.value;
+            sub += `<p class="text-[10px] text-white/45 pl-3">✎ Nama: "${esc(nm)}"${e.color ? ' · benang ' + esc(e.color) : ''}${e.position ? ' · ' + esc(e.position) : ''}</p>`;
+        }
+        if (it.bordir_logo && li < logos.length) {
+            const e = logos[li++];
+            sub += `<p class="text-[10px] text-white/45 pl-3">🅛 Logo${e.color ? ' · benang ' + esc(e.color) : ''}${e.position ? ' · ' + esc(e.position) : ''}</p>`;
+        }
+        return `<div>
+            <p class="text-[11px] text-white/75">${i+1}. ${esc(prod)} · ${esc(it.color || '-')}${variant} · ${esc(it.size || '-')} ×${it.quantity || 1}${tagStr}</p>
+            ${sub}
+        </div>`;
+    }).join('');
 }
 
 function kasirCartUpdateTotals() {
