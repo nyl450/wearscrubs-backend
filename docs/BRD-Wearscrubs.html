@@ -172,11 +172,11 @@
     <dl class="meta">
       <div>
         <dt>Versi Dokumen</dt>
-        <dd>1.1</dd>
+        <dd>1.2</dd>
       </div>
       <div>
         <dt>Tanggal Terbit</dt>
-        <dd>13 Juni 2026</dd>
+        <dd>26 Juni 2026</dd>
       </div>
       <div>
         <dt>Pemilik Produk</dt>
@@ -257,6 +257,19 @@
       <li><strong>Infrastruktur & Operasi</strong> <span class="dots">.................................</span></li>
       <li><strong>Roadmap & Pending Items</strong> <span class="dots">.................................</span></li>
       <li><strong>Glossarium</strong> <span class="dots">.....................................................</span></li>
+      <li><strong>Pembaruan Fitur (Sprint Juni 2026)</strong> <span class="dots">..............</span>
+        <ol>
+          <li>Keranjang Kasir (Cart Staging)</li>
+          <li>Mode Bulk Bordir (Banyak Produk Sekaligus)</li>
+          <li>Diskon Lebih Fleksibel</li>
+          <li>DP / Uang Muka</li>
+          <li>Tombol "Format Order" untuk Tim Internal</li>
+          <li>Temporary Order (Barang Pinjam / Trial)</li>
+          <li>Tanggal Order di Invoice</li>
+          <li>Export Excel di Report</li>
+          <li>Perbaikan Keamanan & Akurasi Harga</li>
+        </ol>
+      </li>
     </ol>
   </div>
 </section>
@@ -655,7 +668,11 @@
     <li><strong>Pre-Order toggle:</strong> muncul otomatis kalau qty &gt; stok. Whole-item PO, stok dialokasi saat barang datang (FIFO, paid-only).</li>
     <li><strong>Bonus toggle:</strong> tandai item sebagai bonus (Rp 0). Stok tetap di-deduct, harga di-nol-kan.</li>
     <li><strong>Bordir per-item:</strong> nama (dgn baris ke-2 opsional), logo (upload PNG/JPG atau placeholder "kirim via WA"), warna benang, posisi dada kiri/kanan.</li>
-    <li><strong>Diskon:</strong> pilihan 0% / 5% / Consignment 30% (validasi server-side).</li>
+    <li><strong>Diskon fleksibel:</strong> 0% / 5% / Consignment 30%, masing-masing bisa "produk + bordir" atau "produk saja". Bisa diatur per-baris produk, bukan cuma satu untuk seluruh order. Validasi server-side. <em>(detail di Bab 12.3)</em></li>
+    <li><strong>Keranjang (Cart):</strong> item tidak langsung jadi invoice — ditampung dulu di keranjang, dicek totalnya, baru sekali klik "Simpan &amp; Generate Invoice". <em>(detail di Bab 12.1)</em></li>
+    <li><strong>Mode Bulk Bordir:</strong> input banyak produk + banyak nama bordir sekaligus dalam satu order. <em>(detail di Bab 12.2)</em></li>
+    <li><strong>DP / Uang Muka:</strong> catat pembayaran sebagian (mis. 50%); invoice menampilkan DP dibayar + sisa pelunasan. <em>(detail di Bab 12.4)</em></li>
+    <li><strong>Tanggal Order:</strong> admin bisa atur tanggal yang muncul di invoice (mis. customer minta tanggal khusus). Admin-only. <em>(detail di Bab 12.7)</em></li>
     <li><strong>Result panel adaptif:</strong> setelah submit, panel hasil menampilkan instruksi bayar yang sesuai sumber + metode (QRIS image / BCA-Mandiri / Cash / Collab note).</li>
   </ul>
 
@@ -1132,11 +1149,127 @@ git -C "D:/ws/wearscrubs-backend" push origin main
       <tr><td><strong>Pool 6543</strong></td><td>Supabase pgbouncer pool (transaction mode) — manage koneksi efisien.</td></tr>
     </tbody>
   </table>
+</section>
 
+<!-- ────────────────────────────────────────────────────────────
+     12. PEMBARUAN FITUR (SPRINT JUNI 2026)
+     ──────────────────────────────────────────────────────────── -->
+<section>
+  <h1 class="chapter"><span class="num">12</span>Pembaruan Fitur (Sprint Juni 2026)</h1>
+  <p>Bab ini merangkum fitur-fitur baru yang ditambahkan sepanjang Juni 2026, ditulis dengan bahasa sederhana supaya mudah dipahami siapa pun. Semua fitur di bawah sudah aktif (live) di dashboard.</p>
+
+  <h2>12.1 Keranjang Kasir (Cart Staging)</h2>
+  <p><strong>Masalah lama:</strong> Saat input pesanan, begitu klik tombol simpan, sistem langsung membuat invoice. Padahal sering kali satu pesanan berisi campuran — misalnya atasan Minna pakai bordir (butuh ukuran &amp; nama), digabung celana atau topi yang tidak pakai bordir. Alurnya jadi kaku karena tiap jenis produk harus dibuat invoice terpisah.</p>
+  <p><strong>Sekarang:</strong> Item tidak langsung jadi invoice. Item ditampung dulu di <strong>Keranjang</strong>. Admin bisa menambah beberapa kelompok produk (lewat mode bulk maupun mode satuan), mengecek total keseluruhan, baru menekan tombol terakhir untuk membuat invoice satu kali.</p>
+  <p>Alur singkatnya:</p>
+  <ol>
+    <li>Input produk (mode satuan atau mode bulk) → klik <strong>"Tambah ke Keranjang"</strong>.</li>
+    <li>Ulangi untuk produk lain (mis. tambah celana &amp; topi). Semua masuk ke daftar keranjang.</li>
+    <li>Tiap kelompok di keranjang bisa dibuka untuk <strong>melihat detail isinya</strong> (produk, warna, ukuran, jumlah, nama bordir) — read-only, untuk memastikan tidak ada yang salah.</li>
+    <li>Cek ringkasan total (subtotal, diskon, ongkir, grand total).</li>
+    <li>Klik <strong>"Simpan &amp; Generate Invoice WA"</strong> — semua jadi satu pesanan.</li>
+  </ol>
+  <p>Kalau ada kelompok yang salah, bisa dihapus dari keranjang sebelum disimpan.</p>
+
+  <h2>12.2 Mode Bulk Bordir (Banyak Produk Sekaligus)</h2>
+  <p>Untuk pesanan rombongan (mis. satu rumah sakit pesan banyak scrub dengan nama dokter berbeda-beda), tersedia <strong>Mode Bulk</strong>. Satu pesanan bisa berisi banyak "panel produk", dan tiap panel bisa produk yang berbeda.</p>
+  <ul>
+    <li><strong>Multi-panel:</strong> tiap panel = satu produk + warna + varian + pengaturan bordirnya sendiri.</li>
+    <li><strong>Daftar per-orang:</strong> di dalam panel, tiap baris = 1 pcs. Tinggal isi ukuran + nama yang dibordir per orang. Ada tombol duplikat baris untuk nama yang sama.</li>
+    <li><strong>Warna benang &amp; posisi bordir</strong> diatur sekali per panel (berlaku untuk semua nama di panel itu).</li>
+    <li><strong>Bordir hanya untuk Atasan &amp; Gown.</strong> Kalau produk yang dipilih celana/topi, pilihan bordir otomatis non-aktif.</li>
+    <li><strong>Cek stok otomatis:</strong> kalau jumlah melebihi stok, sebagian otomatis jadi Pre-Order.</li>
+    <li><strong>Custom warna</strong> didukung (warna di luar katalog, harga manual, otomatis Pre-Order).</li>
+  </ul>
+
+  <h2>12.3 Diskon Lebih Fleksibel</h2>
+  <p>Dulu diskon hanya satu pilihan untuk seluruh pesanan: 0%, 5%, atau Consignment 30%. Sekarang diskon lebih fleksibel dalam tiga hal:</p>
+  <p><strong>(a) Bisa pilih bordir ikut didiskon atau tidak.</strong> Tiap diskon punya dua versi:</p>
+  <table class="keep">
+    <thead><tr><th>Pilihan</th><th>Artinya</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Diskon 5% (produk + bordir)</strong></td><td>Diskon dihitung dari harga produk <em>dan</em> bordir.</td></tr>
+      <tr><td><strong>Diskon 5% (produk saja)</strong></td><td>Diskon hanya dari harga produk; harga bordir tetap penuh.</td></tr>
+      <tr><td><strong>Consignment 30% (produk + bordir)</strong></td><td>Default untuk Collaboration Event (sesuai aturan partner).</td></tr>
+      <tr><td><strong>Consignment 30% (produk saja)</strong></td><td>Versi 30% tanpa memotong harga bordir.</td></tr>
+    </tbody>
+  </table>
+  <p>Catatan: ongkir <strong>tidak pernah</strong> kena diskon.</p>
+  <p><strong>(b) Diskon bisa per-produk, bukan cuma satu untuk seluruh order.</strong> Contoh nyata: pesanan 16 atasan + 16 celana + 16 topi, tapi istri hanya mau memberi diskon 5% untuk atasan &amp; celana, topi tidak. Sekarang tiap baris (mode satuan) atau tiap panel (mode bulk) punya pilihan diskonnya sendiri.</p>
+  <p><strong>(c) Tidak dobel.</strong> Ada juga "diskon umum" sebagai cadangan. Kalau sebuah baris sudah punya diskon sendiri, diskon umum tidak ditambahkan lagi ke baris itu (supaya tidak terpotong dua kali). Diskon umum hanya berlaku untuk baris yang belum punya diskon sendiri.</p>
+  <p>Di mode bulk, pilihan diskon diletakkan tepat di atas Subtotal Panel, dan subtotalnya langsung terhitung otomatis setelah dikurangi diskon.</p>
+
+  <h2>12.4 DP / Uang Muka</h2>
+  <p>Untuk pesanan besar, customer sering membayar uang muka (DP) dulu — biasanya 50%. Tim mengerjakan pesanan sampai siap kirim, lalu sisa pelunasan dibayar sebelum barang dikirim.</p>
+  <ul>
+    <li>Ada kolom <strong>"Nominal DP (Rp)"</strong> + tombol <strong>"Isi 50%"</strong> yang otomatis mengambil setengah dari total saat ini.</li>
+    <li>Total invoice tetap penuh; di bawahnya muncul <strong>"DP Dibayar"</strong> dan <strong>"Sisa Pelunasan"</strong>.</li>
+    <li>Karena pesanan banyak, ongkir final kadang berbeda dari perkiraan awal. Maka di invoice DP ada catatan: <em>"Biaya ongkir masih estimasi, apabila ada biaya tambahan/kelebihan akan diinfokan sebelum pengiriman."</em></li>
+    <li>Instruksi pembayaran di pesan WhatsApp menyesuaikan: customer diminta transfer DP dulu, sisa + ongkir final dikonfirmasi sebelum kirim.</li>
+  </ul>
+
+  <h2>12.5 Tombol "Format Order" untuk Tim Internal</h2>
+  <p>Di halaman detail pesanan ada tombol <strong>"Format"</strong> (khusus admin). Saat diklik, sistem membuat teks ringkas berisi data pesanan — nama, alamat, telepon, ongkir, daftar produk + detail bordir, dan rincian total. Teks ini tinggal disalin lalu ditempel ke grup WhatsApp tim internal, supaya tim produksi tahu persis isi pesanan tanpa harus buka dashboard.</p>
+
+  <h2>12.6 Temporary Order (Barang Pinjam / Trial)</h2>
+  <p>Modul terpisah untuk barang yang dipinjamkan sementara — bukan penjualan langsung. Tiga jenis: <strong>Size Trial</strong> (customer coba ukuran dulu), <strong>Endorsement</strong> (barang dipinjam untuk foto/promosi), dan <strong>Other</strong> (pinjaman lain).</p>
+  <ul>
+    <li>Saat barang dikirim untuk dicoba, stok berkurang sementara (status "keluar untuk trial").</li>
+    <li>Setelah customer memutuskan, admin menandai per item: <strong>ambil (beli)</strong> atau <strong>kembalikan</strong>.</li>
+    <li>Item yang dibeli → lanjut jadi pesanan/pembayaran biasa. Item yang dikembalikan → stok dikembalikan otomatis saat barang diterima kembali.</li>
+    <li>Punya tab &amp; menu sendiri (On Progress / Payment / Return) supaya tidak tercampur dengan penjualan biasa. Di Inventory muncul penanda "🧪 N keluar" per varian.</li>
+    <li>Trial tidak boleh pakai bordir/custom/Pre-Order (karena barang harus kembali utuh).</li>
+  </ul>
+
+  <h2>12.7 Tanggal Order di Invoice</h2>
+  <p>Kadang customer minta tanggal tertentu tertera di invoice. Admin bisa mengatur "Tanggal Order" di Kasir; kalau dikosongkan, sistem pakai tanggal pembuatan otomatis. Fitur ini <strong>khusus admin</strong> — pesanan dari website publik tidak bisa mengubahnya (mencegah manipulasi tanggal).</p>
+
+  <h2>12.8 Export Excel di Report</h2>
+  <p>Di menu Report ada tombol <strong>"Export Excel"</strong>. Laporan penjualan per-transaksi bisa diunduh sebagai file Excel untuk pembukuan. Rincian kolomnya: jumlah, bordir, harga satuan, subtotal, diskon %, diskon Rp, dan total penjualan — konsisten dengan angka di invoice dan database. Barang yang dikembalikan dari trial tidak ikut dihitung sebagai penjualan.</p>
+
+  <h2>12.9 Perbaikan Keamanan &amp; Akurasi Harga</h2>
+  <p>Sepanjang Juni dilakukan dua ronde audit. Semua temuan diperiksa ulang dan diperbaiki:</p>
+  <table class="keep">
+    <thead><tr><th>Temuan</th><th>Risiko</th><th>Perbaikan</th></tr></thead>
+    <tbody>
+      <tr><td>Diskon manual bisa lebih besar dari subtotal → total bisa minus.</td><td>Invoice/laporan/refund bisa rusak.</td><td>Diskon dibatasi maksimal sebesar subtotal produk (tidak pernah minus).</td></tr>
+      <tr><td>Kolom kurir bisa diisi kode berbahaya dari order publik (XSS).</td><td>Bisa mencuri sesi admin saat dibuka di dashboard.</td><td>Input kurir dibersihkan di server + ditampilkan aman (escape) di dashboard.</td></tr>
+      <tr><td>Produk harga-tunggal (mis. topi/celana) terbaca Rp0 di mode bulk.</td><td>Subtotal &amp; diskon di keranjang salah dari invoice asli.</td><td>Semua perhitungan harga keranjang disatukan ke satu rumus yang sama dengan server.</td></tr>
+      <tr><td>Varian lebih mahal (mis. Lengan Panjang) terhitung harga termurah di keranjang satuan.</td><td>Harga kurang dari seharusnya.</td><td>Harga keranjang mengikuti harga varian yang dipilih.</td></tr>
+      <tr><td>Stok varian yang sama tersebar di beberapa panel/kelompok bisa lolos cek per-panel.</td><td>Pesanan ditolak server di langkah terakhir (membingungkan).</td><td>Cek stok gabungan seluruh keranjang sebelum submit, dengan pesan jelas.</td></tr>
+      <tr><td>Total keranjang tidak ikut berubah saat ongkir/DP diubah.</td><td>Angka tampil tidak sinkron.</td><td>Ringkasan keranjang otomatis dihitung ulang setiap ongkir/DP berubah.</td></tr>
+    </tbody>
+  </table>
+  <p>Catatan: pengaman utama di sisi server tetap menjadi sumber kebenaran — perbaikan di atas membuat tampilan dashboard akurat dan mencegah kebingungan sejak awal.</p>
+</section>
+
+<!-- ────────────────────────────────────────────────────────────
+     CHANGELOG
+     ──────────────────────────────────────────────────────────── -->
+<section>
   <h2 style="margin-top:12mm;">Changelog</h2>
   <table>
     <thead><tr><th>Versi</th><th>Tanggal</th><th>Perubahan</th></tr></thead>
     <tbody>
+      <tr>
+        <td><strong>1.2</strong></td>
+        <td>26 Juni 2026</td>
+        <td>
+          Catch-up dua sprint (13-26 Juni). Ditambah <strong>Bab 12 "Pembaruan Fitur"</strong> yang merangkum semuanya dengan bahasa sederhana:
+          <ul>
+            <li>§12.1 — <strong>Keranjang Kasir (Cart Staging)</strong>: item ditampung dulu, baru generate invoice sekali; tiap kelompok bisa dibuka lihat detail.</li>
+            <li>§12.2 — <strong>Mode Bulk Bordir</strong> multi-panel (banyak produk + banyak nama sekaligus), warna benang per panel, gate bordir Atasan/Gown.</li>
+            <li>§12.3 — <strong>Diskon fleksibel</strong>: pilihan "produk + bordir" vs "produk saja", per-baris/per-panel, tidak dobel dengan diskon umum.</li>
+            <li>§12.4 — <strong>DP / Uang Muka</strong>: tombol Isi 50%, invoice tampil DP + sisa pelunasan + catatan ongkir estimasi.</li>
+            <li>§12.5 — tombol <strong>Format Order</strong> untuk grup WhatsApp tim internal.</li>
+            <li>§12.6 — <strong>Temporary Order</strong> (Size Trial / Endorsement / Other) didokumentasikan.</li>
+            <li>§12.7 — <strong>Tanggal Order</strong> override di invoice (admin-only).</li>
+            <li>§12.8 — <strong>Export Excel</strong> per-transaksi di Report.</li>
+            <li>§12.9 — <strong>Perbaikan keamanan &amp; akurasi harga</strong> dari 2 ronde audit (clamp diskon, sanitasi kurir/XSS, harga produk single-price, cek stok gabungan).</li>
+            <li>§5.6 — bullet Diskon Kasir diperbarui + pointer ke Bab 12.</li>
+          </ul>
+        </td>
+      </tr>
       <tr>
         <td><strong>1.1</strong></td>
         <td>13 Juni 2026</td>
