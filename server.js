@@ -2341,8 +2341,13 @@ app.post('/api/orders', async (req, res) => {
         const validDiscounts = [0, 5, 30];
         const requestedPct = isAdmin ? parseInt(discount_percent) : 0;
         const safeDiscountPct = validDiscounts.includes(requestedPct) ? requestedPct : 0;
-        const discountAmount = Math.round(productTotal * safeDiscountPct / 100);
-        const discountLabel = safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null;
+        // Admin dapat override total discount via discount_amount_custom (untuk per-produk/panel disc di Kasir cart)
+        const rawCustom = parseInt(req.body.discount_amount_custom);
+        const discountAmountCustom = (isAdmin && Number.isInteger(rawCustom) && rawCustom >= 0) ? rawCustom : null;
+        const discountAmount = discountAmountCustom !== null ? discountAmountCustom : Math.round(productTotal * safeDiscountPct / 100);
+        const discountLabel = discountAmountCustom !== null
+            ? (req.body.discount_label_custom || 'Diskon per produk') || null
+            : (safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null);
         const total = productTotal - discountAmount + shippingCost;
 
         // Courier dipilih manual dari form, fallback ke logika kota jika tidak diisi

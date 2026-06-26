@@ -966,8 +966,8 @@
                 </div>
               </div>
 
-              <button id="bulk-submit-btn" onclick="bulkSubmitOrder()" disabled class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:bg-green-600/40 disabled:text-white/60 disabled:cursor-not-allowed">
-                <i class="fa-solid fa-cart-plus"></i> <span id="bulk-submit-label">Submit Bulk Order</span>
+              <button id="bulk-submit-btn" onclick="kasirAddToCartBulk()" disabled class="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:bg-cyan-600/40 disabled:text-white/60 disabled:cursor-not-allowed">
+                <i class="fa-solid fa-cart-plus"></i> <span id="bulk-submit-label">Tambah Panel ke Keranjang</span>
               </button>
             </div>
           </div>
@@ -1038,10 +1038,30 @@
               <span class="text-sm text-white/60 font-medium">Total Estimasi</span>
               <span id="wa-total-preview" class="text-xl font-bold text-white">Rp 0</span>
             </div>
-            <button onclick="waSubmitOrder()" id="wa-submit-btn" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">
-              <i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA
+            <button onclick="kasirAddToCartSingle()" id="wa-submit-btn" class="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2">
+              <i class="fa-solid fa-cart-plus"></i> Tambah ke Keranjang
             </button>
           </div>
+        </div>
+
+        <!-- KASIR CART SECTION -->
+        <div id="kasir-cart-section" class="hidden bg-darkcard border border-cyan-500/20 rounded-2xl p-5 space-y-4">
+          <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
+            <i class="fa-solid fa-cart-shopping text-cyan-400"></i> Keranjang Pesanan
+          </p>
+          <div id="kasir-cart-items" class="space-y-2"></div>
+          <div id="kasir-cart-total-section" class="hidden border-t border-white/8 pt-4 space-y-2 text-sm">
+            <div class="flex justify-between text-white/50"><span>Subtotal Produk</span><span id="kasir-cart-prod-total">Rp 0</span></div>
+            <div id="kasir-cart-disc-row" class="hidden flex justify-between text-green-400"><span>🏷️ Diskon per produk</span><span id="kasir-cart-disc-total">−Rp 0</span></div>
+            <div class="flex justify-between text-white/50"><span>Ongkos Kirim</span><span id="kasir-cart-shipping">Rp 0</span></div>
+            <div class="flex justify-between font-bold border-t border-darkborder pt-2">
+              <span>Grand Total</span>
+              <span id="kasir-cart-grand" class="text-green-400 text-lg">Rp 0</span>
+            </div>
+          </div>
+          <button onclick="kasirCartSubmit()" id="kasir-cart-submit-btn" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA
+          </button>
         </div>
 
         <!-- Result Panel -->
@@ -2026,6 +2046,10 @@
             <h3 class="font-bold text-base sm:text-lg truncate" id="order-modal-name">Detail Pesanan</h3>
         </div>
         <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <button id="order-format-btn" onclick="openFormatOrderModal()" title="Generate format order untuk WA Group internal tim"
+                class="hidden w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/25 text-amber-300 text-xs font-bold transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-clipboard-list"></i><span class="hidden sm:inline">Format</span>
+            </button>
             <!-- Tombol Edit Pesanan: ditampilkan/hide oleh viewOrder berdasar status order
                  (sembunyikan kalau cancelled/done/shipped). Beri jarak dari X via gap di parent. -->
             <button id="order-edit-btn" onclick="openEditOrderModal()" title="Edit data pesanan (nama, HP, alamat, kurir, metode bayar)"
@@ -6045,6 +6069,8 @@ async function viewOrder(id) {
             const canEdit = isAdmin && !['cancelled','done','shipped'].includes(o.order_status);
             editBtn.classList.toggle('hidden', !canEdit);
         }
+        const formatBtn = document.getElementById('order-format-btn');
+        if (formatBtn) formatBtn.classList.toggle('hidden', !isAdmin);
 
         // Parse bordir details
         let bordirDetails = [];
@@ -9631,8 +9657,12 @@ function waResetForm() {
     if (sBtn) {
         sBtn.disabled = false;
         sBtn.classList.remove('wa-submit-locked');
-        sBtn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA';
+        sBtn.innerHTML = '<i class="fa-solid fa-cart-plus"></i> Tambah ke Keranjang';
     }
+    // Clear cart + hide cart section
+    window.kasirCart = [];
+    const cartSection = document.getElementById('kasir-cart-section');
+    if (cartSection) cartSection.classList.add('hidden');
     const totalEl = document.getElementById('wa-total-preview'); if (totalEl) totalEl.textContent = 'Rp 0';
 
     // Reset state vars (cheap, can't throw).
@@ -10388,6 +10418,16 @@ function bulkAddPanel() {
                 <p class="bulk-panel-grand text-lg font-bold text-cyan-300 mt-1">Rp 0</p>
             </div>
         </div>
+
+        <div class="bg-white/2 border border-white/8 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40 shrink-0">5 · Diskon Panel</p>
+            <select class="bulk-cell-panel-discount bulk-input text-xs flex-1 min-w-[160px]" onchange="bulkUpdateTotal(this)">
+                <option value="0">Tanpa diskon</option>
+                <option value="5">Diskon 5%</option>
+                <option value="30">Consignment 30%</option>
+            </select>
+            <p class="bulk-cell-panel-discount-preview text-[10px] text-green-400 hidden w-full mt-0.5"></p>
+        </div>
     `;
 
     container.appendChild(panel);
@@ -10908,7 +10948,7 @@ function bulkUpdateGrandTotal() {
     if (totalPcs === 0) {
         card.classList.add('hidden');
         btn.disabled = true;
-        if (label) label.textContent = 'Submit Bulk Order';
+        if (label) label.textContent = 'Tambah Panel ke Keranjang';
         return;
     }
     card.classList.remove('hidden');
@@ -10921,7 +10961,7 @@ function bulkUpdateGrandTotal() {
     document.getElementById('bulk-grand-logo').textContent = 'Rp ' + totalLogo.toLocaleString('id-ID');
     document.getElementById('bulk-grand-logo-detail').textContent = logoPcs + ' pcs';
     document.getElementById('bulk-grand-total').textContent = 'Rp ' + grand.toLocaleString('id-ID');
-    if (label) label.textContent = '✓ Submit Order — ' + totalPcs + ' Pcs dari ' + panels.length + ' Panel';
+    if (label) label.textContent = '✓ Tambah ke Keranjang — ' + totalPcs + ' Pcs dari ' + panels.length + ' Panel';
 }
 
 // ── Submit handler ───────────────────────────────────────────────────────
@@ -11151,6 +11191,471 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__bulkResetHooked = true;
     }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KASIR CART — Tampung item sebelum final submit
+// ═══════════════════════════════════════════════════════════════════════════
+
+window.kasirCart = [];
+let _kasirCartId = 0;
+
+function kasirCartPush(entry) {
+    _kasirCartId++;
+    window.kasirCart.push({ ...entry, id: _kasirCartId });
+    kasirCartRender();
+}
+
+function kasirCartRemove(id) {
+    window.kasirCart = window.kasirCart.filter(g => g.id !== id);
+    kasirCartRender();
+}
+
+function kasirCartRender() {
+    const section = document.getElementById('kasir-cart-section');
+    const itemsEl = document.getElementById('kasir-cart-items');
+    if (!section || !itemsEl) return;
+    const fmt = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
+    if (window.kasirCart.length === 0) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    itemsEl.innerHTML = window.kasirCart.map(g => `
+        <div class="bg-white/3 border border-white/10 rounded-xl p-3 flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold text-white truncate">${esc(g.groupLabel)}</p>
+                <p class="text-[10px] text-white/40 mt-0.5">${g.items.length} item · ${fmt(g.productSubtotal)}</p>
+                ${g.discountPercent > 0 ? `<p class="text-[10px] text-green-400">🏷️ Diskon ${g.discountPercent}% = −${fmt(g.discountAmount)}</p>` : ''}
+            </div>
+            <button onclick="kasirCartRemove(${g.id})" class="text-red-400/60 hover:text-red-400 text-[11px] px-2 py-1 rounded transition shrink-0">✕ Hapus</button>
+        </div>
+    `).join('');
+    kasirCartUpdateTotals();
+}
+
+function kasirCartUpdateTotals() {
+    const shippingCost = parseInt(document.getElementById('wa-shipping-cost')?.value || 0) || 0;
+    let prodTotal = 0, discTotal = 0;
+    window.kasirCart.forEach(g => { prodTotal += g.productSubtotal; discTotal += g.discountAmount; });
+    const grand = prodTotal - discTotal + shippingCost;
+    const fmt = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
+    const totalSection = document.getElementById('kasir-cart-total-section');
+    if (totalSection) totalSection.classList.remove('hidden');
+    const elProd = document.getElementById('kasir-cart-prod-total');
+    const elGrand = document.getElementById('kasir-cart-grand');
+    const elShip  = document.getElementById('kasir-cart-shipping');
+    const discRow  = document.getElementById('kasir-cart-disc-row');
+    const elDisc   = document.getElementById('kasir-cart-disc-total');
+    if (elProd)  elProd.textContent  = fmt(prodTotal);
+    if (elGrand) elGrand.textContent = fmt(grand);
+    if (elShip)  elShip.textContent  = fmt(shippingCost);
+    if (discRow)  discRow.classList.toggle('hidden', discTotal === 0);
+    if (elDisc)   elDisc.textContent = '−' + fmt(discTotal);
+}
+
+// Kumpulkan items dari single-mode items container.
+// Returns { ok, items, embroideryDetails, productSubtotal, errors }
+function _kasirCollectSingleItems() {
+    const container = document.getElementById('wa-items-container');
+    const items = [], embroideryDetails = [], posErrors = [];
+    let productSubtotal = 0;
+
+    for (const item of container.querySelectorAll('[id^="wa-item-"]')) {
+        const idx = item.id.replace('wa-item-', '');
+        const prodEl = document.getElementById(`wa-prod-${idx}`);
+        const productId = prodEl?.value;
+        if (!productId) continue;
+
+        // ── Custom Product ──
+        if (productId === '__custom_product__') {
+            const cpName    = document.getElementById(`wa-cprod-name-${idx}`)?.value.trim() || '';
+            const cpCat     = document.getElementById(`wa-cprod-cat-${idx}`)?.value || '';
+            const cpVariant = document.getElementById(`wa-cprod-variant-${idx}`)?.value.trim() || '';
+            const cpColor   = document.getElementById(`wa-cprod-color-${idx}`)?.value.trim() || '';
+            const cpSize    = document.getElementById(`wa-cprod-size-${idx}`)?.value.trim() || '';
+            const cpPrice   = parseInt(document.getElementById(`wa-cprod-price-${idx}`)?.value);
+            const cpQty     = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
+            const label = cpName || `Item #${idx}`;
+            if (!cpName)  { posErrors.push(`Custom Product #${idx}: isi nama produk.`); continue; }
+            if (!cpCat)   { posErrors.push(`${label}: pilih kategori.`); continue; }
+            if (!cpColor) { posErrors.push(`${label}: isi warna.`); continue; }
+            if (!cpSize)  { posErrors.push(`${label}: isi ukuran.`); continue; }
+            if (!Number.isInteger(cpPrice) || cpPrice < 0) { posErrors.push(`${label}: isi harga satuan.`); continue; }
+            const bordirNamaCP = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
+            const bordirLogoCP = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
+            const isBonusCP    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
+            const bNP = parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000;
+            const bLP = parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000;
+            items.push({ product_id: null, is_custom_product: true, custom_product_name: cpName,
+                custom_product_category: cpCat, color: cpColor, variant_type: cpVariant || 'null',
+                size: cpSize, quantity: cpQty, bordir_nama: bordirNamaCP, bordir_logo: bordirLogoCP,
+                bordir_nama_price: bNP, bordir_logo_price: bLP, is_bonus: isBonusCP,
+                custom_price: cpPrice, is_custom_size: false, is_po: false });
+            productSubtotal += (cpPrice + (bordirNamaCP ? bNP : 0) + (bordirLogoCP ? bLP : 0)) * cpQty;
+            if (bordirNamaCP || bordirLogoCP) {
+                const il = `${cpName} (${cpColor}, ${cpSize})`;
+                let nP = null, lP = null;
+                if (bordirNamaCP) {
+                    const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
+                    const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                    const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
+                    nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                    if (!t) { posErrors.push(`${il}: isi teks bordir nama.`); continue; }
+                    const payload = { item_label: il, type: 'nama', value: t, color: c, position: nP };
+                    if (t2) payload.value_line2 = t2;
+                    embroideryDetails.push(payload);
+                }
+                if (bordirLogoCP) {
+                    const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
+                    lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                    embroideryDetails.push({ item_label: il, type: 'logo', value: waBordirLogoFiles[idx] || 'kirim via WA', color: c, position: lP });
+                }
+                if (bordirNamaCP && bordirLogoCP && nP && lP && nP === lP) posErrors.push(`${il}: posisi bordir nama dan logo tidak boleh sama.`);
+            }
+            continue;
+        }
+
+        // ── Produk reguler ──
+        const colorEl   = document.getElementById(`wa-color-${idx}`);
+        const variantEl = document.getElementById(`wa-variant-${idx}`);
+        const sizeEl    = document.getElementById(`wa-size-${idx}`);
+        const pName     = prodEl.options[prodEl.selectedIndex]?.dataset?.name || prodEl.options[prodEl.selectedIndex]?.text?.split('—')[0].trim() || `Item #${idx}`;
+        if (!colorEl?.value) { posErrors.push(`${pName}: pilih warna dulu.`); continue; }
+        if (variantEl && variantEl.options.length > 1 && !variantEl.value) { posErrors.push(`${pName}: pilih variant dulu.`); continue; }
+        if (!sizeEl?.value) { posErrors.push(`${pName}: pilih ukuran dulu.`); continue; }
+        const isCustomSize  = sizeEl.value === '__custom__';
+        const isCustomColor = colorEl.value === '__custom__';
+        const isCustom = isCustomSize || isCustomColor;
+        let finalSize = sizeEl.value, finalColor = colorEl.value, customPrice = null;
+        if (isCustom) {
+            if (isCustomColor) { finalColor = document.getElementById(`wa-custom-color-${idx}`)?.value.trim() || ''; if (!finalColor) { posErrors.push(`${pName}: isi label warna custom.`); continue; } }
+            if (isCustomSize)  { finalSize  = document.getElementById(`wa-custom-size-${idx}`)?.value.trim() || '';  if (!finalSize)  { posErrors.push(`${pName}: isi label ukuran custom.`); continue; } }
+            customPrice = parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value);
+            if (!Number.isInteger(customPrice) || customPrice < 0) { posErrors.push(`${pName}: isi harga satuan custom.`); continue; }
+        }
+        const qtyVal = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
+        const isPO = !isCustom && document.getElementById(`wa-po-${idx}`)?.value === 'true';
+        if (!isCustom) {
+            const stockRow = (waInventoryCache[idx] || []).find(i => i.color === colorEl.value && i.variant_type === variantEl?.value && i.size === finalSize);
+            const avail = stockRow ? Number(stockRow.stock) : 0;
+            if (qtyVal > avail && !isPO) { posErrors.push(`${pName}: jumlah ${qtyVal} melebihi stok ${avail}. Aktifkan Pre-Order.`); continue; }
+        }
+        const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true';
+        const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true';
+        const isBonus    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
+        const bNP = parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000;
+        const bLP = parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000;
+        const approxBase = customPrice !== null ? customPrice : (parseInt(prodEl.options[prodEl.selectedIndex]?.dataset?.price) || 0);
+        productSubtotal += (approxBase + (bordirNama ? bNP : 0) + (bordirLogo ? bLP : 0)) * qtyVal;
+        items.push({ product_id: parseInt(productId), color: finalColor, variant_type: variantEl?.value || 'null',
+            size: finalSize, quantity: qtyVal, bordir_nama: bordirNama, bordir_logo: bordirLogo,
+            bordir_nama_price: bNP, bordir_logo_price: bLP, is_bonus: isBonus,
+            is_custom_size: isCustom, custom_price: customPrice, is_po: isPO });
+        if (bordirNama || bordirLogo) {
+            const pText = prodEl?.options[prodEl.selectedIndex]?.text || 'Produk';
+            const il = `${pText} (${finalColor}, ${finalSize})`;
+            let nP = null, lP = null;
+            if (bordirNama) {
+                const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
+                const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
+                nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                if (!t) { posErrors.push(`Nama bordir untuk ${pName} belum diisi.`); continue; }
+                const payload = { type: 'nama', item_label: il, value: t, color: c, position: nP };
+                if (t2) payload.value_line2 = t2;
+                embroideryDetails.push(payload);
+            }
+            if (bordirLogo) {
+                const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
+                lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                embroideryDetails.push({ type: 'logo', item_label: il, value: waBordirLogoFiles[idx] || 'Logo dikirim via WA', color: c, position: lP });
+            }
+            if (bordirNama && bordirLogo && nP && lP && nP === lP) posErrors.push(`${pName}: posisi bordir nama dan logo tidak boleh sama.`);
+        }
+    }
+    return { ok: posErrors.length === 0 && items.length > 0, items, embroideryDetails, productSubtotal, errors: posErrors };
+}
+
+function kasirAddToCartSingle() {
+    const result = _kasirCollectSingleItems();
+    if (result.errors.length > 0) { alert('⚠️ Lengkapi pesanan dulu:\n\n' + result.errors.join('\n')); return; }
+    if (result.items.length === 0) { alert('Tambahkan minimal satu produk.'); return; }
+
+    const discPct = typeof waSelectedDiscount !== 'undefined' ? (waSelectedDiscount || 0) : 0;
+    const discAmt = Math.round(result.productSubtotal * discPct / 100);
+
+    // Build label dari item pertama
+    const firstProdEl = document.querySelector('#wa-items-container [id^="wa-prod-"]');
+    const firstProdName = firstProdEl?.options[firstProdEl.selectedIndex]?.dataset?.name
+        || firstProdEl?.options[firstProdEl.selectedIndex]?.text?.split('—')[0].trim()
+        || 'Produk';
+    const totalPcs = result.items.reduce((s, i) => s + (i.quantity || 1), 0);
+    const extraLabel = result.items.length > 1 ? ` +${result.items.length-1} lainnya` : '';
+    const groupLabel = `${firstProdName}${extraLabel} · ${totalPcs} pcs${discPct > 0 ? ` (Disc ${discPct}%)` : ''}`;
+
+    kasirCartPush({ mode: 'single', groupLabel, items: result.items, embroideryDetails: result.embroideryDetails,
+        productSubtotal: result.productSubtotal, discountPercent: discPct, discountAmount: discAmt });
+
+    // Reset items section (customer data & shipping tetap)
+    const container = document.getElementById('wa-items-container');
+    if (container) container.innerHTML = '';
+    waItemCount = 0;
+    waAddItem();
+    waSelectDiscount(0);
+
+    // Hook ongkir change agar cart total ikut update
+    const costEl = document.getElementById('wa-shipping-cost');
+    if (costEl && !costEl._kasirCartHooked) {
+        const _origOninput = costEl.oninput;
+        costEl.oninput = function(e) { if (_origOninput) _origOninput.call(this, e); kasirCartUpdateTotals(); };
+        costEl._kasirCartHooked = true;
+    }
+    if (typeof toast === 'function') toast('✓ Ditambahkan ke keranjang');
+}
+
+function kasirAddToCartBulk() {
+    const panels = Array.from(document.querySelectorAll('#bulk-panels-container .bulk-panel'));
+    if (panels.length === 0) { alert('Belum ada panel bulk.'); return; }
+
+    const errors = [];
+    const validGroups = [];
+
+    for (let pIdx = 0; pIdx < panels.length; pIdx++) {
+        const panel = panels[pIdx];
+        const pl = 'Panel #' + (pIdx + 1);
+        if (!panel._state.selectedProduct) { errors.push(pl + ': produk belum dipilih.'); continue; }
+        const color   = panel.querySelector('.bulk-cell-color').value;
+        const variant = panel.querySelector('.bulk-cell-variant').value;
+        if (!color || !variant) { errors.push(pl + ': warna/variant belum dipilih.'); continue; }
+        const rows = Array.from(panel.querySelectorAll('.bulk-rows-body tr'));
+        if (rows.length === 0) { errors.push(pl + ': belum ada baris.'); continue; }
+        const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
+        const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
+        if (logoActive && !panel._state.logoFile) { errors.push(pl + ': logo belum diupload.'); continue; }
+        const namaPos = 'kanan';
+        const logoPos = panel.querySelector('.bulk-cell-logo-pos').value || 'kiri';
+        if (namaActive && logoActive && namaPos === logoPos) { errors.push(pl + ': posisi bordir sama.'); continue; }
+        const isCustomColor = color === '__custom__';
+        const customColorName = isCustomColor ? panel.querySelector('.bulk-cell-custom-color-name').value.trim() : '';
+        const customPrice = isCustomColor ? (parseInt(panel.querySelector('.bulk-cell-custom-price').value) || 0) : 0;
+        if (isCustomColor && !customColorName) { errors.push(pl + ': isi nama warna custom.'); continue; }
+        if (isCustomColor && customPrice <= 0)  { errors.push(pl + ': isi harga per pcs.'); continue; }
+
+        const needPerSize = {}, stockPerSize = {};
+        if (!isCustomColor) {
+            rows.forEach(tr => { const s = tr.querySelector('.bulk-cell-size').value; if (s) needPerSize[s] = (needPerSize[s]||0)+1; });
+            Object.keys(needPerSize).forEach(s => {
+                const inv = (panel._state.inventoryCache||[]).find(i => i.color===color && i.variant_type===variant && i.size===s);
+                stockPerSize[s] = inv ? Number(inv.stock) : 0;
+            });
+        }
+
+        const productName = panel._state.selectedProduct.name || 'Produk';
+        const finalColor  = isCustomColor ? customColorName : color;
+        const namaPrice   = 20000;
+        const logoPrice   = parseInt(panel.querySelector('.bulk-cell-logo-price').value) || 30000;
+        const logoColor   = panel.querySelector('.bulk-cell-logo-color').value.trim() || '';
+        const panelDiscPct = parseInt(panel.querySelector('.bulk-cell-panel-discount')?.value || 0) || 0;
+        const prodOption  = panel.querySelector('.bulk-cell-product option:checked');
+        const approxBase  = isCustomColor ? customPrice : ((panel._state.selectedProduct?.price_by_type?.[variant]) || parseInt(prodOption?.dataset?.price) || 0);
+
+        const allocated = {};
+        const panelItems = [], panelEmb = [];
+        let panelSubtotal = 0, rowErr = false;
+
+        for (let i = 0; i < rows.length; i++) {
+            const tr = rows[i];
+            const size      = tr.querySelector('.bulk-cell-size').value;
+            const namaText  = tr.querySelector('.bulk-cell-name').value.trim();
+            const namaLine2 = tr.querySelector('.bulk-cell-line2').value.trim();
+            if (!size) { errors.push(pl + ' baris #'+(i+1)+': size kosong.'); rowErr=true; continue; }
+            if (namaActive && !namaText) { errors.push(pl + ' baris #'+(i+1)+': nama bordir kosong.'); rowErr=true; continue; }
+            if (!isCustomColor) { allocated[size]=(allocated[size]||0)+1; }
+            const isPO = !isCustomColor && (allocated[size]||0) > (stockPerSize[size]||0);
+            panelItems.push({ product_id: panel._state.selectedProduct.id, color: finalColor, variant_type: variant,
+                size, quantity: 1, bordir_nama: namaActive, bordir_logo: logoActive,
+                bordir_nama_price: namaPrice, bordir_logo_price: logoPrice, is_bonus: false,
+                is_custom_size: isCustomColor, custom_price: isCustomColor ? customPrice : 0, is_po: isCustomColor ? false : isPO });
+            panelSubtotal += approxBase + (namaActive ? namaPrice : 0) + (logoActive ? logoPrice : 0);
+            if (namaActive || logoActive) {
+                const il = productName + ' (' + finalColor + ', ' + size + ')';
+                if (namaActive) {
+                    const p = { type: 'nama', item_label: il, value: namaText, color: '', position: namaPos };
+                    if (namaLine2) p.value_line2 = namaLine2;
+                    panelEmb.push(p);
+                }
+                if (logoActive) panelEmb.push({ type: 'logo', item_label: il, value: panel._state.logoFile, color: logoColor, position: logoPos });
+            }
+        }
+        if (!rowErr && panelItems.length > 0) {
+            const discAmt = Math.round(panelSubtotal * panelDiscPct / 100);
+            validGroups.push({ mode: 'bulk',
+                groupLabel: `${productName} ${finalColor} ${variant} · ${panelItems.length} pcs${panelDiscPct > 0 ? ` (Disc ${panelDiscPct}%)` : ''}`,
+                items: panelItems, embroideryDetails: panelEmb,
+                productSubtotal: panelSubtotal, discountPercent: panelDiscPct, discountAmount: discAmt });
+        }
+    }
+
+    if (errors.length > 0) { alert('⚠️ Lengkapi pesanan dulu:\n\n' + errors.join('\n')); return; }
+    if (validGroups.length === 0) { alert('Tidak ada panel valid.'); return; }
+    validGroups.forEach(g => kasirCartPush(g));
+    bulkResetState();
+    if (typeof toast === 'function') toast(`✓ ${validGroups.length} grup ditambahkan ke keranjang`);
+}
+
+async function kasirCartSubmit() {
+    if (!window.kasirCart || window.kasirCart.length === 0) { alert('Keranjang masih kosong.'); return; }
+    const customerName    = document.getElementById('wa-customer-name').value.trim();
+    const customerPhone   = document.getElementById('wa-customer-phone').value.trim();
+    const customerAddress = document.getElementById('wa-customer-address').value.trim();
+    const shippingCity    = document.getElementById('wa-shipping-city').value;
+    const shippingCost    = parseInt(document.getElementById('wa-shipping-cost').value || 0);
+    const shippingCourier = document.getElementById('wa-shipping-courier')?.value || '';
+    const shippingWeight  = parseFloat(document.getElementById('wa-shipping-weight')?.value || 1);
+    const paymentMethod   = document.getElementById('wa-payment-method').value;
+    const notes           = document.getElementById('wa-notes').value.trim();
+    const orderSource     = document.getElementById('wa-order-source')?.value || 'whatsapp';
+    const billingTo       = document.getElementById('wa-billing-to')?.value.trim() || '';
+    const invoiceDate     = document.getElementById('wa-invoice-date')?.value || '';
+    if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
+        alert('Lengkapi data pelanggan (Nama, HP, Alamat, Kota) terlebih dahulu.'); return;
+    }
+    if (orderSource === 'collaboration_event' && !billingTo) {
+        alert('Collaboration Event: isi dulu "Ditagihkan Ke / Bill To".'); return;
+    }
+    const allItems = [], allEmb = [];
+    let totalDiscountAmount = 0;
+    window.kasirCart.forEach(g => { allItems.push(...g.items); allEmb.push(...g.embroideryDetails); totalDiscountAmount += g.discountAmount; });
+
+    const btn = document.getElementById('kasir-cart-submit-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan...'; }
+    try {
+        const res = await fetch(API + '/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
+            body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone,
+                customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost,
+                shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes,
+                order_source: orderSource, payment_method: paymentMethod, billing_to: billingTo,
+                invoice_date: invoiceDate || null, items: allItems,
+                embroidery_details: allEmb.length ? allEmb : null,
+                discount_percent: 0, discount_amount_custom: totalDiscountAmount,
+                discount_label_custom: totalDiscountAmount > 0 ? 'Diskon per produk' : '' }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal membuat order');
+        window.waLastOrderId = data.id;
+        let savedOrder = null;
+        try { savedOrder = await apiFetch('/api/orders/' + data.id); } catch(e) {}
+        const waMsg = savedOrder ? buildOrderWaMessage(savedOrder) : `Pesanan tercatat. Invoice ${data.order_code}.`;
+        window.waLastWaMsg = waMsg;
+        window.waLastWaPhone = (typeof normalizeWAPhone === 'function') ? normalizeWAPhone(savedOrder ? savedOrder.customer_phone : customerPhone) : customerPhone;
+        document.getElementById('wa-result-code').textContent = data.order_code;
+        document.getElementById('wa-result-message').textContent = waMsg;
+        if (typeof waRenderResultInstruction === 'function') waRenderResultInstruction(orderSource, paymentMethod, billingTo);
+        document.getElementById('wa-result-panel').classList.remove('hidden');
+        document.getElementById('wa-result-panel').scrollIntoView({ behavior: 'smooth' });
+        // Kosongkan cart
+        window.kasirCart = [];
+        const cartSection = document.getElementById('kasir-cart-section');
+        if (cartSection) cartSection.classList.add('hidden');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Tersimpan — klik "Order Baru"'; }
+    } catch(err) {
+        alert('Error: ' + (err.message || 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA'; }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FORMAT ORDER — Generate teks pesanan untuk WA Group internal tim
+// ═══════════════════════════════════════════════════════════════════════════
+
+function openFormatOrderModal() {
+    const o = window._currentOrder;
+    if (!o) { if (typeof toast==='function') toast('Data order belum dimuat.', true); return; }
+    const text = _generateFormatOrderText(o);
+    // Buat modal on-demand (tidak perlu di HTML karena jarang dipakai)
+    const existing = document.getElementById('format-order-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'format-order-modal';
+    modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[1200] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-[#1c1c1c] border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-white/8 flex items-center justify-between shrink-0">
+                <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-clipboard-list text-amber-400"></i> Format Order — WA Internal</p>
+                <button onclick="document.getElementById('format-order-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto flex-1">
+                <pre id="format-order-text" class="text-xs text-white/80 whitespace-pre-wrap font-mono leading-relaxed bg-white/3 border border-white/8 rounded-xl p-4 select-all max-h-80 overflow-y-auto">${esc(text)}</pre>
+                <div class="flex gap-2">
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('format-order-text').textContent).then(()=>{ if(typeof toast==='function') toast('Teks disalin!'); })" class="flex-1 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-300 font-bold text-sm transition flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Teks</button>
+                    <button onclick="document.getElementById('format-order-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Tutup</button>
+                </div>
+                <p class="text-[10px] text-white/30 text-center">Salin lalu paste ke WA Group tim internal</p>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+function _generateFormatOrderText(o) {
+    const rp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
+    let bordirDetails = [];
+    try { bordirDetails = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch(e) {}
+
+    let text = `📋 FORMAT ORDER\n\n`;
+    text += `Nama: ${o.customer_name}\n`;
+    text += `Alamat: ${o.customer_address || '-'}\n`;
+    text += `Telepon: ${o.customer_phone}\n`;
+    text += `Ongkir: ${rp(o.shipping_cost || 0)}\n`;
+    if (o.shipping_courier) text += `Ekspedisi: ${o.shipping_courier}\n`;
+    text += `\n`;
+
+    const items = o.items || [];
+    let productSubtotal = 0, bordirGrandTotal = 0;
+
+    for (const it of items) {
+        if (it.is_bonus) continue;
+        const bNP = it.bordir_nama ? (Number(it.bordir_nama_price) || 20000) : 0;
+        const bLP = it.bordir_logo ? (Number(it.bordir_logo_price) || 30000) : 0;
+        const bordirPerUnit = bNP + bLP;
+        const basePerUnit   = Math.max(0, Number(it.price || 0) - bordirPerUnit);
+        const qty = it.quantity || 1;
+        productSubtotal  += basePerUnit * qty;
+        bordirGrandTotal += bordirPerUnit * qty;
+
+        const variantStr = (it.variant_type && it.variant_type !== 'null') ? `, ${it.variant_type}` : '';
+        text += `${it.product_name || 'Produk'}\n`;
+        text += `- ${it.product_name}, Warna ${it.color}${variantStr}, Size ${it.size} (${rp(basePerUnit)})`;
+        if (it.is_po) text += ` [Pre-Order]`;
+        if (it.is_custom_size || it.is_custom_product) text += ` [Custom]`;
+        text += `\n`;
+
+        // Cocokkan bordir detail ke item ini
+        const il = `${it.product_name} (${it.color}, ${it.size})`;
+        const matched = bordirDetails.filter(b => b.item_label === il ||
+            (b.item_label && b.item_label.includes(it.color) && b.item_label.includes(it.size) && b.item_label.startsWith(it.product_name)));
+        for (const b of matched) {
+            if (b.type === 'nama') {
+                const nameDisplay = b.value_line2 ? `${b.value}\n${b.value_line2}` : b.value;
+                text += `\nBordir nama:\n${nameDisplay}\nwarna bordir ${b.color || '-'}\n(${rp(bNP)})\n`;
+            } else if (b.type === 'logo') {
+                text += `\nBordir logo:\nwarna bordir ${b.color || '-'}\n(${rp(bLP)})\n`;
+            }
+        }
+        text += `Jumlah: ${qty} baju\n\n`;
+    }
+
+    const shippingCost   = o.shipping_cost || 0;
+    const discountAmount = o.discount_amount || 0;
+    const total          = o.total_amount || 0;
+
+    const parts = [];
+    if (productSubtotal > 0) parts.push(rp(productSubtotal));
+    if (shippingCost > 0)    parts.push(`Ongkir ${rp(shippingCost)}`);
+    if (bordirGrandTotal > 0) parts.push(`Bordir ${rp(bordirGrandTotal)}`);
+    if (discountAmount > 0)  parts.push(`Disc -${rp(discountAmount)}`);
+    text += `Total Pesanan: ${parts.join(' + ')} = ${rp(total)}`;
+    return text;
+}
 
 
 </script>
