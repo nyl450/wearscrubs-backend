@@ -10382,7 +10382,7 @@ function bulkAddPanel() {
         </div>
 
         <div class="bg-white/2 border border-white/8 rounded-lg p-3 space-y-3">
-            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">2 · Bordir (berlaku semua baris di panel ini)</p>
+            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">2 · Bordir (berlaku semua baris di panel ini) <span class="bulk-bordir-hint hidden text-amber-300/70 normal-case">— hanya Atasan & Gown</span></p>
             <div class="flex flex-wrap items-center gap-3">
                 <label class="wa-bordir-pill" onclick="bulkToggleBordir(this, 'nama')">
                     <span class="wa-bordir-box"></span>
@@ -10396,6 +10396,23 @@ function bulkAddPanel() {
                     <span class="wa-bordir-price">Rp 30rb/pcs</span>
                     <input type="hidden" class="bulk-cell-bordir-logo" value="false">
                 </label>
+            </div>
+
+            <div class="bulk-nama-panel hidden bg-white/3 border border-white/8 rounded-lg p-3">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[9px] text-white/40 uppercase">Warna Benang Nama</label>
+                        <input type="text" class="bulk-cell-nama-color bulk-input mt-0.5 text-[11px]" placeholder="mis. Putih, Hitam">
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-white/40 uppercase">Posisi</label>
+                        <select class="bulk-cell-nama-pos bulk-input mt-0.5 text-[11px]">
+                            <option value="kanan">Dada Kanan</option>
+                            <option value="kiri">Dada Kiri</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="text-[10px] text-white/30 mt-1.5">Warna benang & posisi berlaku untuk semua nama di panel ini.</p>
             </div>
 
             <div class="bulk-logo-panel hidden bg-white/3 border border-white/8 rounded-lg p-3 space-y-2">
@@ -10560,6 +10577,7 @@ function bulkPopulateProducts(sel) {
 }
 
 function bulkToggleBordir(el, kind) {
+    if (el.classList.contains('wa-disabled')) return; // bordir hanya tops & gown
     const panel = bulkGetPanel(el);
     if (!panel) return;
     const hidden = panel.querySelector('.bulk-cell-bordir-' + kind);
@@ -10570,8 +10588,33 @@ function bulkToggleBordir(el, kind) {
     if (kind === 'logo') {
         panel.querySelector('.bulk-logo-panel')?.classList.toggle('hidden', active);
     }
+    if (kind === 'nama') {
+        panel.querySelector('.bulk-nama-panel')?.classList.toggle('hidden', active);
+    }
     bulkUpdatePanelTotal(panel);
     bulkUpdateGrandTotal();
+}
+
+// Bordir hanya untuk tops (atasan) & gown. Produk lain → matikan + reset bordir.
+function bulkSetBordirEnabled(panel) {
+    if (!panel) return;
+    const cat = panel._state.selectedProduct?.category || '';
+    const enabled = cat === 'tops' || cat === 'gown';
+    const hint = panel.querySelector('.bulk-bordir-hint');
+    if (hint) hint.classList.toggle('hidden', enabled || !cat);
+    ['nama','logo'].forEach(kind => {
+        const hidden = panel.querySelector('.bulk-cell-bordir-' + kind);
+        const pill = hidden ? hidden.closest('.wa-bordir-pill') : null;
+        if (pill) pill.classList.toggle('wa-disabled', !enabled);
+        if (!enabled && hidden) {
+            hidden.value = 'false';
+            if (pill) pill.classList.remove('active');
+        }
+    });
+    if (!enabled) {
+        panel.querySelector('.bulk-nama-panel')?.classList.add('hidden');
+        panel.querySelector('.bulk-logo-panel')?.classList.add('hidden');
+    }
 }
 
 function bulkTriggerLogoUpload(btn) {
@@ -10617,6 +10660,7 @@ async function bulkOnProductChange(sel) {
     panel.querySelector('.bulk-custom-color-panel').classList.add('hidden');
 
     if (!pid) {
+        bulkSetBordirEnabled(panel);
         bulkClearAllRows(panel);
         bulkUpdateStockSummary(panel);
         bulkUpdatePanelTotal(panel);
@@ -10625,6 +10669,7 @@ async function bulkOnProductChange(sel) {
     }
 
     panel._state.selectedProduct = waProducts.find(p => p.id === parseInt(pid)) || null;
+    bulkSetBordirEnabled(panel);
     try {
         const res = await fetch(API + `/api/inventory/${pid}`);
         const inv = await res.json();
@@ -11547,9 +11592,9 @@ function kasirAddToCartBulk() {
         const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
         const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
         if (logoActive && !panel._state.logoFile) { errors.push(pl + ': logo belum diupload.'); continue; }
-        const namaPos = 'kanan';
+        const namaPos = panel.querySelector('.bulk-cell-nama-pos')?.value || 'kanan';
         const logoPos = panel.querySelector('.bulk-cell-logo-pos').value || 'kiri';
-        if (namaActive && logoActive && namaPos === logoPos) { errors.push(pl + ': posisi bordir sama.'); continue; }
+        if (namaActive && logoActive && namaPos === logoPos) { errors.push(pl + ': posisi bordir nama & logo tidak boleh sama.'); continue; }
         const isCustomColor = color === '__custom__';
         const customColorName = isCustomColor ? panel.querySelector('.bulk-cell-custom-color-name').value.trim() : '';
         const customPrice = isCustomColor ? (parseInt(panel.querySelector('.bulk-cell-custom-price').value) || 0) : 0;
@@ -11570,6 +11615,7 @@ function kasirAddToCartBulk() {
         const namaPrice   = 20000;
         const logoPrice   = parseInt(panel.querySelector('.bulk-cell-logo-price').value) || 30000;
         const logoColor   = panel.querySelector('.bulk-cell-logo-color').value.trim() || '';
+        const namaColor   = panel.querySelector('.bulk-cell-nama-color')?.value.trim() || '';
         const panelDiscToken = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
         const prodOption  = panel.querySelector('.bulk-cell-product option:checked');
         const approxBase  = isCustomColor ? customPrice : ((panel._state.selectedProduct?.price_by_type?.[variant]) || parseInt(prodOption?.dataset?.price) || 0);
@@ -11597,7 +11643,7 @@ function kasirAddToCartBulk() {
             if (namaActive || logoActive) {
                 const il = productName + ' (' + finalColor + ', ' + size + ')';
                 if (namaActive) {
-                    const p = { type: 'nama', item_label: il, value: namaText, color: '', position: namaPos };
+                    const p = { type: 'nama', item_label: il, value: namaText, color: namaColor, position: namaPos };
                     if (namaLine2) p.value_line2 = namaLine2;
                     panelEmb.push(p);
                 }
