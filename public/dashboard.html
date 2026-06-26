@@ -11301,6 +11301,9 @@ function kasirCartRender() {
     const fmt = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
     if (window.kasirCart.length === 0) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
+    // Pastikan tombol submit fresh & bisa diklik (reset state "Tersimpan" dari order sebelumnya).
+    const submitBtn = document.getElementById('kasir-cart-submit-btn');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan &amp; Generate Invoice WA'; }
     itemsEl.innerHTML = window.kasirCart.map(g => `
         <div class="bg-white/3 border border-white/10 rounded-xl p-3 flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
