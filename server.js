@@ -2068,6 +2068,38 @@ app.get('/api/reports/margin', requireAuth(['admin']), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/margin-by-product — margin per produk+variant. ADMIN ONLY.
+// Pendapatan = harga jual (produk+bordir) SEBELUM diskon order (gross). COGS = snapshot.
+// Exclude bonus (revenue 0), cancelled, trial-returned. Diurutkan profit terbesar.
+app.get('/api/reports/margin-by-product', requireAuth(['admin']), async (req, res) => {
+    try {
+        const r = reportRange(req);
+        if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
+        const rows = await dbAll(
+            `SELECT COALESCE(p.name, oi.custom_product_name) AS product,
+                    p.sku AS sku,
+                    oi.variant_type AS variant_type,
+                    SUM(oi.quantity)::int AS qty,
+                    COALESCE(SUM(oi.price * oi.quantity),0)::bigint AS revenue,
+                    COALESCE(SUM(oi.total_cogs),0)::bigint AS cogs
+               FROM order_items oi JOIN orders o ON o.id = oi.order_id
+               LEFT JOIN products p ON p.id = oi.product_id
+              WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+                AND oi.is_bonus = FALSE
+                AND COALESCE(oi.is_test_returned, FALSE) = FALSE
+                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+              GROUP BY product, p.sku, oi.variant_type
+              ORDER BY (COALESCE(SUM(oi.price*oi.quantity),0) - COALESCE(SUM(oi.total_cogs),0)) DESC`,
+            [r.from, r.to]
+        );
+        res.json(rows.map(x => {
+            const revenue = Number(x.revenue), cogs = Number(x.cogs), gp = revenue - cogs;
+            return { product: x.product, sku: x.sku, variant_type: x.variant_type, qty: x.qty,
+                revenue, cogs, gross_profit: gp, margin_pct: revenue > 0 ? +(gp / revenue * 100).toFixed(1) : 0 };
+        }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/reports/sales-type — breakdown per channel (website/whatsapp/event_offline/offline)
 app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res) => {
     try {

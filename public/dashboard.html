@@ -1347,6 +1347,27 @@
                 </div>
             </div>
             <p id="rep-margin-note" class="hidden text-xs text-white/40">Profit = Net Revenue (produk − diskon, tanpa ongkir) − COGS. COGS dari snapshot saat order, termasuk item bonus. <span class="text-amber-300/70 font-semibold">Admin only.</span></p>
+
+            <!-- Margin per Produk (admin only) — payoff COGS: mana yang paling untung -->
+            <div id="rep-margin-products-section" class="hidden bg-darkcard border border-white/10 rounded-2xl overflow-x-auto mt-1">
+                <div class="px-4 py-3 border-b border-white/8 flex items-center justify-between gap-2">
+                    <h4 class="font-bold text-sm">Margin per Produk / Variant</h4>
+                    <span class="text-[10px] text-white/35">Pendapatan sebelum diskon order · urut profit terbesar</span>
+                </div>
+                <table class="w-full text-sm min-w-[640px]">
+                    <thead class="text-white/40 text-[11px] uppercase tracking-wider"><tr>
+                        <th class="text-left p-3">Produk</th>
+                        <th class="text-left p-3">Variant</th>
+                        <th class="text-right p-3">Qty</th>
+                        <th class="text-right p-3">Pendapatan</th>
+                        <th class="text-right p-3">COGS</th>
+                        <th class="text-right p-3">Gross Profit</th>
+                        <th class="text-right p-3">Margin</th>
+                    </tr></thead>
+                    <tbody id="rep-margin-products-body"></tbody>
+                </table>
+                <p id="rep-margin-products-empty" class="hidden text-center text-xs text-white/30 py-6">Belum ada penjualan dalam periode (atau COGS belum diisi).</p>
+            </div>
         </div>
 
         <!-- Tab: Sales Type -->
@@ -2871,7 +2892,32 @@ async function loadReport() {
                 mSection?.classList.remove('hidden');
                 mNote?.classList.remove('hidden');
             } catch (e) { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); }
-        } else { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); }
+            // Margin per produk/variant (payoff COGS)
+            const mpSection = document.getElementById('rep-margin-products-section');
+            const mpBody = document.getElementById('rep-margin-products-body');
+            const mpEmpty = document.getElementById('rep-margin-products-empty');
+            try {
+                const mp = await apiFetch('/api/reports/margin-by-product' + qs);
+                mpSection?.classList.remove('hidden');
+                if (!mp || !mp.length) { if (mpBody) mpBody.innerHTML = ''; mpEmpty?.classList.remove('hidden'); }
+                else {
+                    mpEmpty?.classList.add('hidden');
+                    mpBody.innerHTML = mp.map(x => {
+                        const col = x.margin_pct >= 30 ? 'text-green-400' : x.margin_pct >= 0 ? 'text-yellow-400' : 'text-red-400';
+                        const variant = (x.variant_type && x.variant_type !== 'null') ? esc(x.variant_type) : '—';
+                        return `<tr class="border-t border-white/5">
+                            <td class="p-3 font-medium">${esc(x.product || '—')}</td>
+                            <td class="p-3 text-white/55">${variant}</td>
+                            <td class="p-3 text-right text-white/70">${x.qty}</td>
+                            <td class="p-3 text-right">${repRp(x.revenue)}</td>
+                            <td class="p-3 text-right text-amber-300/90">${repRp(x.cogs)}</td>
+                            <td class="p-3 text-right font-bold text-emerald-400">${repRp(x.gross_profit)}</td>
+                            <td class="p-3 text-right font-bold ${col}">${x.margin_pct}%</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } catch (e) { mpSection?.classList.add('hidden'); }
+        } else { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); document.getElementById('rep-margin-products-section')?.classList.add('hidden'); }
 
         const types = await apiFetch('/api/reports/sales-type' + qs);
         document.getElementById('rep-type-body').innerHTML = (types || []).map(t => `
