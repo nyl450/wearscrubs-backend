@@ -1327,6 +1327,26 @@
                 </div>
             </div>
             <p class="text-xs text-white/40"><span id="rep-orders" class="font-bold text-white/60">0</span> order dibayar dalam periode. Net = Gross − Discount − Refunds.</p>
+            <!-- Margin / Profit (admin only) -->
+            <div id="rep-margin-section" class="hidden grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">COGS (HPP)</div>
+                    <div id="rep-cogs" class="text-lg lg:text-xl font-bold text-amber-300 mt-1">—</div>
+                </div>
+                <div class="bg-darkcard border border-emerald-400/30 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Gross Profit</div>
+                    <div id="rep-gp" class="text-lg lg:text-xl font-bold text-emerald-400 mt-1">—</div>
+                </div>
+                <div class="bg-darkcard border border-emerald-400/30 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Margin</div>
+                    <div id="rep-margin" class="text-lg lg:text-xl font-bold text-emerald-400 mt-1">—</div>
+                </div>
+                <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
+                    <div class="text-[10px] uppercase tracking-wider text-white/40">Net Revenue (basis)</div>
+                    <div id="rep-netrev" class="text-lg lg:text-xl font-bold text-white/80 mt-1">—</div>
+                </div>
+            </div>
+            <p id="rep-margin-note" class="hidden text-xs text-white/40">Profit = Net Revenue (produk − diskon, tanpa ongkir) − COGS. COGS dari snapshot saat order, termasuk item bonus. <span class="text-amber-300/70 font-semibold">Admin only.</span></p>
         </div>
 
         <!-- Tab: Sales Type -->
@@ -1480,6 +1500,32 @@
     <!-- ═══ SETTINGS ═══════════════════════════════════════════════════════ -->
     <div id="module-settings" class="hidden p-6 space-y-8 max-w-4xl">
         <h2 class="text-xl font-bold">Pengaturan</h2>
+
+        <!-- ── Biaya COGS: Bordir (global) ──────────────────────────────── -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
+            <div class="flex items-center gap-3 mb-1">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-coins text-sm text-amber-300"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base">Biaya COGS — Bordir</h3>
+                    <p class="text-xs text-white/40">Biaya pokok jasa bordir (global). Dipakai hitung margin tiap order. Tersimpan saat order dibuat (order lama tidak berubah).</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Cost Bordir Nama (Rp)</label>
+                    <input type="number" id="set-cogs-bordir-nama" min="0" placeholder="mis. 12000" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Cost Bordir Logo (Rp)</label>
+                    <input type="number" id="set-cogs-bordir-logo" min="0" placeholder="mis. 20000" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30">
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button onclick="saveCogsSettings()" class="bg-amber-500/20 border border-amber-400/30 text-amber-200 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-amber-500/30 transition">Simpan Biaya Bordir</button>
+            </div>
+        </div>
 
         <!-- ── Ganti Password ──────────────────────────────────────────── -->
         <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
@@ -1803,6 +1849,16 @@
             <div class="space-y-3">
                 <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Ukuran Tersedia</label>
                 <div id="size-btns" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <!-- HPP / COGS (admin only) -->
+            <div id="pf-cogs-wrap" class="hidden space-y-2 pt-3 border-t border-white/8">
+                <div class="flex items-center justify-between gap-2">
+                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">HPP / COGS per pcs (Rp) <span class="text-amber-300/70 normal-case font-normal">· admin</span></label>
+                    <span id="pf-margin-hint" class="text-[10px] font-semibold"></span>
+                </div>
+                <input type="number" id="pf-cogs-default" min="0" placeholder="mis. 135000" oninput="updateMarginHint()" class="!py-1.5">
+                <p class="text-[10px] text-white/30">Biaya pokok rata-rata per pcs (kain + jahit + packaging). Dipakai hitung margin di Report. Kosong/0 = belum diisi.</p>
             </div>
 
             <div class="flex justify-between pt-2 border-t border-white/8">
@@ -2757,6 +2813,22 @@ async function loadReport() {
         document.getElementById('rep-net').textContent      = repRp(s.net);
         document.getElementById('rep-orders').textContent   = s.orders || 0;
 
+        // Margin / Profit (admin-only — endpoint balas 403 utk non-admin, di-skip diam-diam)
+        const _isAdminRep = (JSON.parse(localStorage.getItem('ws_admin_user') || '{}').role === 'admin');
+        const mSection = document.getElementById('rep-margin-section');
+        const mNote = document.getElementById('rep-margin-note');
+        if (_isAdminRep) {
+            try {
+                const m = await apiFetch('/api/reports/margin' + qs);
+                document.getElementById('rep-cogs').textContent   = m.cogs ? '−' + repRp(m.cogs) : repRp(0);
+                document.getElementById('rep-gp').textContent     = repRp(m.gross_profit);
+                document.getElementById('rep-margin').textContent = (m.margin_pct ?? 0) + '%';
+                document.getElementById('rep-netrev').textContent = repRp(m.net_revenue);
+                mSection?.classList.remove('hidden');
+                mNote?.classList.remove('hidden');
+            } catch (e) { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); }
+        } else { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); }
+
         const types = await apiFetch('/api/reports/sales-type' + qs);
         document.getElementById('rep-type-body').innerHTML = (types || []).map(t => `
             <tr class="border-t border-white/5">
@@ -2814,6 +2886,10 @@ async function exportReportExcel() {
             apiFetch('/api/reports/items-detail' + qs),
         ]);
         const list = rows || [];
+        // COGS hanya ada di payload kalau admin (backend strip utk non-admin).
+        const showCogs = list.length > 0 && list[0].total_cogs !== undefined;
+        const lastCol = showCogs ? 19 : 16;
+        let totCogs = 0, totGP = 0;
 
         // Header rows + col definition.
         // Mental model (revisi): Bordir IKUT consignment/discount, ongkir TIDAK.
@@ -2830,7 +2906,8 @@ async function exportReportExcel() {
             [`Periode: ${from} s/d ${to}`],
             [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Discount: Rp ${Number(salesKpi.discount||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
             ['Logika: Subtotal = (Harga Satuan + Bordir/unit) × Qty · Disc % dipotong dari Subtotal (BORDIR IKUT consignment) · Total = Subtotal − Disc. Ongkir tidak dihitung per-baris.'],
-            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales'],
+            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales',
+                ...(showCogs ? ['Total HPP','Gross Profit','Margin %'] : [])],
         ];
 
         let totQty=0, totBordir=0, totSubtotal=0, totDisc=0, totSales=0;
@@ -2861,6 +2938,12 @@ async function exportReportExcel() {
 
             totQty += qty; totBordir += bordirLineTotal; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
 
+            // COGS per baris (snapshot total_cogs sudah ×qty). GP = Total Sales − HPP.
+            const lineCogs = showCogs ? Number(r.total_cogs || 0) : 0;
+            const lineGP = totalLine - lineCogs;
+            const lineMargin = totalLine > 0 ? Math.round(lineGP / totalLine * 100) : 0;
+            if (showCogs) { totCogs += lineCogs; totGP += lineGP; }
+
             const dt = r.paid_at ? new Date(r.paid_at) : null;
             const dtStr = dt ? `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
             let nameTag = r.product_name || '';
@@ -2885,13 +2968,15 @@ async function exportReportExcel() {
                 discPct,                            // 14
                 discAmt,                            // 15
                 totalLine,                          // 16
+                ...(showCogs ? [lineCogs, lineGP, lineMargin] : []),  // 17,18,19
             ];
         });
 
         // TOTAL row — kolom Bordir diisi total bordir Rp agregat (text "Rp X").
         const totalRow = ['TOTAL','','','','','','','','','', totQty,
             totBordir > 0 ? `Rp ${totBordir.toLocaleString('id-ID')}` : '—',
-            '', totSubtotal, '', totDisc, totSales];
+            '', totSubtotal, '', totDisc, totSales,
+            ...(showCogs ? [totCogs, totGP, (totSales > 0 ? Math.round(totGP / totSales * 100) : 0)] : [])];
 
         const aoa = [...header, ...dataRows];
         if (dataRows.length === 0) {
@@ -2906,15 +2991,16 @@ async function exportReportExcel() {
         // Bordir (11) lebih lebar — text panjang ("Nama+Logo - Rp 20.000+30.000")
         ws['!cols'] = [
             {wch:18},{wch:16},{wch:24},{wch:18},{wch:32},{wch:14},{wch:12},{wch:14},{wch:14},{wch:8},
-            {wch:6},{wch:26},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14}
+            {wch:6},{wch:26},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14},
+            ...(showCogs ? [{wch:14},{wch:14},{wch:9}] : [])
         ];
 
-        // Merge header rows across 17 cols (idx 0..16)
+        // Merge header rows across semua kolom (idx 0..lastCol)
         ws['!merges'] = [
-            {s:{r:0,c:0}, e:{r:0,c:16}},
-            {s:{r:1,c:0}, e:{r:1,c:16}},
-            {s:{r:2,c:0}, e:{r:2,c:16}},
-            {s:{r:3,c:0}, e:{r:3,c:16}},
+            {s:{r:0,c:0}, e:{r:0,c:lastCol}},
+            {s:{r:1,c:0}, e:{r:1,c:lastCol}},
+            {s:{r:2,c:0}, e:{r:2,c:lastCol}},
+            {s:{r:3,c:0}, e:{r:3,c:lastCol}},
         ];
 
         // Number format — Qty:10  Bordir(text):11  Harga:12  Subtotal:13  Disc%:14  DiscRp:15  Total:16
@@ -2925,12 +3011,14 @@ async function exportReportExcel() {
         for (let r = dataStart; r <= lastRow; r++) {
             const cellQty = XLSX.utils.encode_cell({r, c:10});
             if (ws[cellQty] && typeof ws[cellQty].v === 'number') ws[cellQty].z = fmtInt;
-            [12,13,15,16].forEach(c => {
+            [12,13,15,16, ...(showCogs ? [17,18] : [])].forEach(c => {
                 const a = XLSX.utils.encode_cell({r, c});
                 if (ws[a] && typeof ws[a].v === 'number') ws[a].z = fmtRp;
             });
-            const cellPct = XLSX.utils.encode_cell({r, c:14});
-            if (ws[cellPct] && typeof ws[cellPct].v === 'number') ws[cellPct].z = fmtInt;
+            [14, ...(showCogs ? [19] : [])].forEach(c => {
+                const cellPct = XLSX.utils.encode_cell({r, c});
+                if (ws[cellPct] && typeof ws[cellPct].v === 'number') ws[cellPct].z = fmtInt;
+            });
         }
 
         const wb = XLSX.utils.book_new();
@@ -4052,6 +4140,15 @@ async function openProductModal(product = null) {
             if (pantsEl) pantsEl.value = product.price || '';
         }
     }
+    // HPP / COGS (admin only) — tampil + isi dari produk
+    const _u = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    const _isAdmin = _u.role === 'admin';
+    const cogsWrap = document.getElementById('pf-cogs-wrap');
+    if (cogsWrap) cogsWrap.classList.toggle('hidden', !_isAdmin);
+    const cogsEl = document.getElementById('pf-cogs-default');
+    if (cogsEl) cogsEl.value = (product && product.cogs_default) ? product.cogs_default : '';
+    updateMarginHint();
+
     // Fetch full product data (including variants with photos) for edit mode
     _editProductFull = null;
     if (product) {
@@ -4066,6 +4163,23 @@ async function openProductModal(product = null) {
 function closeProductModal() {
     document.getElementById('product-modal').classList.add('hidden');
     document.getElementById('product-modal').classList.remove('flex');
+}
+
+// Margin otomatis di editor produk = (harga terendah − COGS) / harga. Admin-only field.
+function updateMarginHint() {
+    const hint = document.getElementById('pf-margin-hint');
+    if (!hint) return;
+    const cogs = parseInt(document.getElementById('pf-cogs-default')?.value) || 0;
+    const priceIds = ['price-type-pendek','price-type-panjang','price-type-polos','price-type-ber-design','pf-price-single','pf-price-caps'];
+    const prices = priceIds.map(id => parseInt(document.getElementById(id)?.value) || 0).filter(v => v > 0);
+    const price = prices.length ? Math.min(...prices) : 0;
+    if (!cogs) { hint.textContent = '⚠ COGS belum diisi'; hint.className = 'text-[10px] font-semibold text-amber-300/80'; return; }
+    if (!price) { hint.textContent = ''; return; }
+    const gp = price - cogs;
+    const pct = Math.round(gp / price * 100);
+    const col = pct >= 30 ? 'text-green-400' : pct >= 0 ? 'text-yellow-400' : 'text-red-400';
+    hint.textContent = `Margin ±${pct}% (Rp ${gp.toLocaleString('id-ID')}/pcs)`;
+    hint.className = `text-[10px] font-semibold ${col}`;
 }
 
 document.getElementById('product-form').addEventListener('submit', async e => {
@@ -4092,6 +4206,9 @@ document.getElementById('product-form').addEventListener('submit', async e => {
         fd.append('sku', document.getElementById('pf-sku').value);
         fd.append('name', document.getElementById('pf-name').value);
         fd.append('category', cat);
+        // HPP/COGS (admin-only field; backend juga gate by role). Kirim kalau ada nilainya.
+        const _cogsEl = document.getElementById('pf-cogs-default');
+        if (_cogsEl && _cogsEl.value !== '') fd.append('cogs_default', parseInt(_cogsEl.value) || 0);
 
         // Build price_by_type for tops; use single price for others
         let priceByType = null;
@@ -8305,7 +8422,27 @@ async function loadSettings() {
     initSidebar();
     const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
     if (user.role !== 'admin') return;
+    loadCogsSettings();
     await loadUsers();
+}
+
+// ── COGS Settings: cost bordir global (admin-only) ────────────────────────────
+async function loadCogsSettings() {
+    try {
+        const s = await apiFetch('/api/settings/cogs');
+        const bn = document.getElementById('set-cogs-bordir-nama');
+        const bl = document.getElementById('set-cogs-bordir-logo');
+        if (bn) bn.value = s.cogs_bordir_nama || '';
+        if (bl) bl.value = s.cogs_bordir_logo || '';
+    } catch (e) { /* non-admin / belum ada — abaikan */ }
+}
+async function saveCogsSettings() {
+    const bn = parseInt(document.getElementById('set-cogs-bordir-nama')?.value) || 0;
+    const bl = parseInt(document.getElementById('set-cogs-bordir-logo')?.value) || 0;
+    try {
+        await apiFetch('/api/settings/cogs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cogs_bordir_nama: bn, cogs_bordir_logo: bl }) });
+        if (typeof toast === 'function') toast('✓ Biaya bordir tersimpan'); else alert('Tersimpan');
+    } catch (e) { alert('Gagal menyimpan: ' + (e?.message || e)); }
 }
 
 // ── Load users into table ─────────────────────────────────────────────────────
@@ -8616,6 +8753,7 @@ async function waInitModule() {
 function waAddItem() {
     waItemCount++;
     const idx = waItemCount;
+    const _isAdmin = (JSON.parse(localStorage.getItem('ws_admin_user') || '{}').role === 'admin');
     const container = document.getElementById('wa-items-container');
     const div = document.createElement('div');
     div.id = `wa-item-${idx}`;
@@ -8672,6 +8810,10 @@ function waAddItem() {
                         <input type="number" id="wa-cprod-price-${idx}" min="0" placeholder="mis. 280000" class="input-sm" oninput="waUpdateTotal()" />
                     </div>
                 </div>
+                ${_isAdmin ? `<div class="mt-2">
+                    <label class="wa-field-label">HPP / COGS per pcs (Rp) <span class="wa-optional">admin · utk margin</span></label>
+                    <input type="number" id="wa-cprod-cogs-${idx}" min="0" placeholder="mis. 180000" class="input-sm" />
+                </div>` : ''}
             </div>
             <div id="wa-catalog-fields-${idx}" class="grid grid-cols-3 gap-2">
                 <div>
@@ -11545,11 +11687,12 @@ function _kasirCollectSingleItems() {
             const isBonusCP    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
             const bNP = parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000;
             const bLP = parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000;
+            const cpCogs = parseInt(document.getElementById(`wa-cprod-cogs-${idx}`)?.value) || 0;
             items.push({ product_id: null, is_custom_product: true, custom_product_name: cpName,
                 custom_product_category: cpCat, color: cpColor, variant_type: cpVariant || 'null',
                 size: cpSize, quantity: cpQty, bordir_nama: bordirNamaCP, bordir_logo: bordirLogoCP,
                 bordir_nama_price: bNP, bordir_logo_price: bLP, is_bonus: isBonusCP,
-                custom_price: cpPrice, is_custom_size: false, is_po: false });
+                custom_price: cpPrice, custom_cogs: cpCogs, is_custom_size: false, is_po: false });
             const cpBaseSub = cpPrice * cpQty;
             const cpBordirSub = ((bordirNamaCP ? bNP : 0) + (bordirLogoCP ? bLP : 0)) * cpQty;
             productSubtotal += cpBaseSub + cpBordirSub;

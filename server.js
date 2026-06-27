@@ -555,6 +555,25 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_label TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dp_amount INTEGER DEFAULT 0`);
 
+    // ── COGS / HPP (Cost of Goods Sold) ───────────────────────────────────────
+    // Granularitas: per produk + per variant (cogs_by_type cermin price_by_type).
+    // cost_config (JSON) RESERVED utk kalkulator komponen (Langkah 2). Snapshot di
+    // order_items supaya report margin historis tidak berubah saat harga vendor naik.
+    await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cogs_default INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cogs_by_type TEXT DEFAULT NULL`);
+    await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_config TEXT DEFAULT NULL`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS unit_cogs INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_nama_cogs INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_logo_cogs INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS packaging_cogs INTEGER DEFAULT 0`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS total_cogs INTEGER DEFAULT 0`);
+    // Key-value settings global (cost bordir nama/logo, dll). Admin-only via endpoint.
+    await dbRun(`CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT DEFAULT '',
+        updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+
     // ── Migrate: add gown to category constraint ──────────────────────────────
     // Drop old constraint and recreate to include gown (PostgreSQL approach)
     await dbRun(`ALTER TABLE products DROP CONSTRAINT IF EXISTS products_category_check`).catch(() => {});
@@ -891,6 +910,24 @@ function sanitizeCourier(s) {
     return String(s == null ? '' : s).replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
+// ── app_settings (key-value global config) ────────────────────────────────────
+async function getAppSetting(key, fallback = '') {
+    const row = await dbGet('SELECT value FROM app_settings WHERE key = $1', [key]);
+    return row ? row.value : fallback;
+}
+async function setAppSetting(key, value) {
+    await dbRun(`INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW())
+                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, [key, String(value)]);
+}
+// Cost add-on global utk snapshot COGS (bordir nama/logo). Default 0 kalau belum diset.
+async function getCogsSettings() {
+    const [bn, bl] = await Promise.all([
+        getAppSetting('cogs_bordir_nama', '0'),
+        getAppSetting('cogs_bordir_logo', '0'),
+    ]);
+    return { bordirNama: parseInt(bn) || 0, bordirLogo: parseInt(bl) || 0 };
+}
+
 // Kurir 'ambil langsung' utk event/walk-in. Order dgn courier ini auto-skip
 // Kemas+Kirim — di confirm-payment / bordir-done langsung jadi 'done' karena
 // barang udah diambil customer di tempat. Single source of truth — selalu
@@ -953,9 +990,9 @@ const PRODUCT_COLOR_HEX_OVERRIDES = {
     'WS-GWN-AVERY': { 'purple': '#362136' }
 };
 
-function formatProduct(p, mainPhoto = null) {
+function formatProduct(p, mainPhoto = null, opts = {}) {
     const priceByType = safeJSON(p.price_by_type, null);
-    return {
+    const out = {
         ...p,
         sizes: safeJSON(p.sizes, []),
         colors: safeJSON(p.colors, []),
@@ -970,6 +1007,15 @@ function formatProduct(p, mainPhoto = null) {
         short_description_en: p.short_description_en || '',
         long_description_en: p.long_description_en || ''
     };
+    // COGS rahasia → hanya untuk admin (opts.includeCogs). Default: strip dari payload
+    // publik (catalog) supaya cost tidak bocor.
+    if (opts.includeCogs) {
+        out.cogs_default = p.cogs_default || 0;
+        out.cogs_by_type = safeJSON(p.cogs_by_type, null);
+    } else {
+        delete out.cogs_default; delete out.cogs_by_type; delete out.cost_config;
+    }
+    return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1137,7 +1183,9 @@ app.get('/api/products', async (req, res) => {
 
         sql += ' ORDER BY p.created_at DESC';
         const rows = await dbAll(sql, params);
-        res.json(rows.map(r => formatProduct(r, r.main_photo)));
+        const u = getOptionalUser(req);
+        const includeCogs = !!u && u.role === 'admin';
+        res.json(rows.map(r => formatProduct(r, r.main_photo, { includeCogs })));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1202,7 +1250,27 @@ app.get('/api/products/:id', async (req, res) => {
         });
         const variants = Object.values(variantMap);
 
-        res.json({ ...formatProduct(p, mainPhoto), variants, inventory });
+        const u = getOptionalUser(req);
+        const includeCogs = !!u && u.role === 'admin';
+        res.json({ ...formatProduct(p, mainPhoto, { includeCogs }), variants, inventory });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── COGS Settings (cost add-on global: bordir nama/logo) — ADMIN ONLY ─────────
+app.get('/api/settings/cogs', requireAuth(['admin']), async (req, res) => {
+    try {
+        const s = await getCogsSettings();
+        res.json({ cogs_bordir_nama: s.bordirNama, cogs_bordir_logo: s.bordirLogo });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.put('/api/settings/cogs', requireAuth(['admin']), async (req, res) => {
+    try {
+        const bn = parseInt(req.body.cogs_bordir_nama);
+        const bl = parseInt(req.body.cogs_bordir_logo);
+        if (Number.isInteger(bn) && bn >= 0) await setAppSetting('cogs_bordir_nama', bn);
+        if (Number.isInteger(bl) && bl >= 0) await setAppSetting('cogs_bordir_logo', bl);
+        const s = await getCogsSettings();
+        res.json({ cogs_bordir_nama: s.bordirNama, cogs_bordir_logo: s.bordirLogo });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1211,12 +1279,16 @@ app.post('/api/products', requireMenu('products','edit'), upload.any(), async (r
     try {
         const { sku, name, category, price, short_description, long_description,
             short_description_en, long_description_en,
-            sizes, colors, types, is_popular, status, price_by_type } = req.body;
+            sizes, colors, types, is_popular, status, price_by_type, cogs_default, cogs_by_type } = req.body;
 
         if (!sku || !name || !category)
             return res.status(400).json({ error: 'SKU, nama, dan kategori wajib diisi' });
 
         const priceByTypeObj = price_by_type ? safeJSON(price_by_type, null) : null;
+        // COGS admin-only (cost rahasia). Staff non-admin tidak bisa set walau punya products:edit.
+        const isAdminUser = req.user && req.user.role === 'admin';
+        const cogsDefault = isAdminUser ? (parseInt(cogs_default) || 0) : 0;
+        const cogsByTypeObj = (isAdminUser && cogs_by_type) ? safeJSON(cogs_by_type, null) : null;
         const values = priceByTypeObj
             ? Object.values(priceByTypeObj).map(Number).filter(v => v > 0)
             : [];
@@ -1258,8 +1330,8 @@ app.post('/api/products', requireMenu('products','edit'), upload.any(), async (r
             const result = await client.query(
                 `INSERT INTO products (sku, name, category, price, price_by_type,
                   short_description, long_description, short_description_en, long_description_en,
-                  sizes, colors, types, is_popular, status)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+                  sizes, colors, types, is_popular, status, cogs_default, cogs_by_type)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
                 [sku, name, category, basePrice,
                     priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
                     short_description || '', long_description || '',
@@ -1268,7 +1340,8 @@ app.post('/api/products', requireMenu('products','edit'), upload.any(), async (r
                     typeof colors === 'string' ? colors : JSON.stringify(colors),
                     typeof types === 'string' ? types : JSON.stringify(types),
                     is_popular === '1' || is_popular === true ? 1 : 0,
-                    status || 'active']
+                    status || 'active',
+                    cogsDefault, cogsByTypeObj ? JSON.stringify(cogsByTypeObj) : null]
             );
             const pid = result.rows[0].id;
 
@@ -1310,9 +1383,13 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
     try {
         const { name, category, price, short_description, long_description,
             short_description_en, long_description_en,
-            sizes, colors, types, is_popular, status, sku, price_by_type } = req.body;
+            sizes, colors, types, is_popular, status, sku, price_by_type, cogs_default, cogs_by_type } = req.body;
 
         const priceByTypeObj = price_by_type ? safeJSON(price_by_type, null) : null;
+        // COGS admin-only: non-admin tidak boleh ubah (SET cogs di-skip → nilai lama dipertahankan).
+        const isAdminUser = req.user && req.user.role === 'admin';
+        const cogsDefault = parseInt(cogs_default) || 0;
+        const cogsByTypeObj = cogs_by_type ? safeJSON(cogs_by_type, null) : null;
         const priceValues = priceByTypeObj
             ? Object.values(priceByTypeObj).map(Number).filter(v => v > 0)
             : [];
@@ -1365,13 +1442,15 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
 
         // Phase 2 (ATOMIK): update product + operasi foto + pastikan baris variant/inventory.
         await withTransaction(async (client) => {
+            const cogsSet = isAdminUser ? ', cogs_default=$15, cogs_by_type=$16' : '';
+            const cogsParams = isAdminUser ? [cogsDefault, cogsByTypeObj ? JSON.stringify(cogsByTypeObj) : null] : [];
             await client.query(
                 `UPDATE products SET name=$1, category=$2, price=$3, price_by_type=$4,
                  short_description=$5, long_description=$6,
                  short_description_en=$7, long_description_en=$8,
                  sizes=$9, colors=$10, types=$11,
-                 is_popular=$12, status=$13, sku=$14
-                 WHERE id = $15`,
+                 is_popular=$12, status=$13, sku=$14${cogsSet}
+                 WHERE id = $${15 + cogsParams.length}`,
                 [name, category, basePrice,
                     priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
                     short_description || '', long_description || '',
@@ -1381,6 +1460,7 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
                     typeof types === 'string' ? types : JSON.stringify(types),
                     is_popular === '1' || is_popular === true ? 1 : 0,
                     status || 'active', sku,
+                    ...cogsParams,
                     req.params.id]
             );
 
@@ -1953,6 +2033,38 @@ app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => 
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/margin — ringkasan profit dari snapshot COGS. ADMIN ONLY.
+// Net product revenue = gross produk − diskon (ongkir TIDAK termasuk). COGS dijumlah
+// dari order_items.total_cogs (TERMASUK item bonus karena tetap memakan biaya,
+// EXCLUDE item trial yang dikembalikan). Gross profit = net revenue − COGS.
+app.get('/api/reports/margin', requireAuth(['admin']), async (req, res) => {
+    try {
+        const r = reportRange(req);
+        if (!r) return res.status(400).json({ error: 'Parameter from & to wajib (format YYYY-MM-DD)' });
+        const rev = await dbGet(
+            `SELECT COALESCE(SUM(total_amount - shipping_cost + discount_amount),0)::bigint AS gross,
+                    COALESCE(SUM(discount_amount),0)::bigint AS discount
+               FROM orders
+              WHERE payment_status='paid' AND order_status<>'cancelled'
+                AND paid_at >= $1::date AND paid_at < ($2::date + 1)`,
+            [r.from, r.to]
+        );
+        const cogsRow = await dbGet(
+            `SELECT COALESCE(SUM(oi.total_cogs),0)::bigint AS cogs
+               FROM order_items oi JOIN orders o ON o.id = oi.order_id
+              WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+                AND COALESCE(oi.is_test_returned, FALSE) = FALSE
+                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)`,
+            [r.from, r.to]
+        );
+        const gross = Number(rev.gross), discount = Number(rev.discount), cogs = Number(cogsRow.cogs);
+        const net = gross - discount;
+        const grossProfit = net - cogs;
+        const marginPct = net > 0 ? +(grossProfit / net * 100).toFixed(1) : 0;
+        res.json({ from: r.from, to: r.to, gross_revenue: gross, discount, net_revenue: net, cogs, gross_profit: grossProfit, margin_pct: marginPct });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/reports/sales-type — breakdown per channel (website/whatsapp/event_offline/offline)
 app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res) => {
     try {
@@ -2017,7 +2129,11 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
                     oi.is_bonus,
                     oi.is_custom_size,
                     oi.is_custom_product,
-                    oi.is_po
+                    oi.is_po,
+                    oi.unit_cogs::bigint AS unit_cogs,
+                    oi.bordir_nama_cogs::bigint AS bordir_nama_cogs,
+                    oi.bordir_logo_cogs::bigint AS bordir_logo_cogs,
+                    oi.total_cogs::bigint AS total_cogs
                FROM order_items oi
                JOIN orders o ON o.id = oi.order_id
                LEFT JOIN products p ON p.id = oi.product_id
@@ -2028,6 +2144,9 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
               ORDER BY o.paid_at ASC, o.order_code ASC`,
             [r.from, r.to]
         );
+        // COGS rahasia → strip dari payload kalau bukan admin (report:view bisa dipunya staf).
+        const isAdmin = req.user && req.user.role === 'admin';
+        if (!isAdmin) rows.forEach(row => { delete row.unit_cogs; delete row.bordir_nama_cogs; delete row.bordir_logo_cogs; delete row.total_cogs; });
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2239,6 +2358,8 @@ app.post('/api/orders', async (req, res) => {
 
         let productTotal = 0;
         const itemDetails = [];
+        // COGS add-on global (bordir) — di-load sekali utk snapshot per item.
+        const cogsSettings = await getCogsSettings();
         // Allowed categories for custom_product (mirrors products.category CHECK).
         const CUSTOM_PROD_CATS = ['tops', 'pants', 'caps', 'gown'];
         for (const item of items) {
@@ -2294,8 +2415,22 @@ app.post('/api/orders', async (req, res) => {
             const itemEmbroidery = isBonus ? 0 : ((item.bordir_nama ? namaPrice : 0) + (item.bordir_logo ? logoPrice : 0));
             const basePrice = isBonus ? 0 : customBase;
             const unitPrice = basePrice + itemEmbroidery;
+            // ── COGS snapshot (admin-only; cost tidak pernah dari caller publik) ──
+            // Custom Product → cost manual admin. Lainnya (termasuk custom size/warna)
+            // → cogs_by_type[variant] ?? cogs_default produk. Item BONUS tetap kena cost
+            // (cuma harga jual yg di-nol-kan), supaya margin tidak terlihat lebih bagus
+            // dari realita.
+            const cogsByType = safeJSON(product.cogs_by_type, null);
+            const baseCogs = isCustomProduct
+                ? ((isAdmin && Number.isInteger(item.custom_cogs) && item.custom_cogs >= 0) ? item.custom_cogs : 0)
+                : ((cogsByType && item.variant_type && cogsByType[item.variant_type] != null)
+                    ? Number(cogsByType[item.variant_type]) : Number(product.cogs_default || 0));
+            const bordirNamaCogs = item.bordir_nama ? cogsSettings.bordirNama : 0;
+            const bordirLogoCogs = item.bordir_logo ? cogsSettings.bordirLogo : 0;
+            const totalCogs = (baseCogs + bordirNamaCogs + bordirLogoCogs) * item.quantity;
             itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, is_custom_product: isCustomProduct, is_po: isPO, price: unitPrice, product_name: product.name, custom_product_name: isCustomProduct ? product.name : null, custom_product_category: isCustomProduct ? product.category : null, base_price: basePrice, embroidery_cost: itemEmbroidery,
-                bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null });
+                bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null,
+                unit_cogs: baseCogs, bordir_nama_cogs: bordirNamaCogs, bordir_logo_cogs: bordirLogoCogs, packaging_cogs: 0, total_cogs: totalCogs });
             productTotal += unitPrice * item.quantity;
         }
 
@@ -2422,13 +2557,14 @@ app.post('/api/orders', async (req, res) => {
 
             for (const item of itemDetails) {
                 await client.query(
-                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size, is_po, is_custom_product, custom_product_name, custom_product_category)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+                    `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price, bordir_nama, bordir_logo, is_bonus, bordir_nama_price, bordir_logo_price, is_custom_size, is_po, is_custom_product, custom_product_name, custom_product_category, unit_cogs, bordir_nama_cogs, bordir_logo_cogs, packaging_cogs, total_cogs)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
                     [newOrderId, item.is_custom_product ? null : item.product_id, item.size, item.color,
                         item.variant_type || 'null', item.quantity, item.price,
                         item.bordir_nama || false, item.bordir_logo || false, item.is_bonus || false,
                         item.bordir_nama_price ?? null, item.bordir_logo_price ?? null, item.is_custom_size || false, item.is_po || false,
-                        item.is_custom_product || false, item.custom_product_name || null, item.custom_product_category || null]
+                        item.is_custom_product || false, item.custom_product_name || null, item.custom_product_category || null,
+                        item.unit_cogs || 0, item.bordir_nama_cogs || 0, item.bordir_logo_cogs || 0, item.packaging_cogs || 0, item.total_cogs || 0]
                 );
             }
             return newOrderId;
