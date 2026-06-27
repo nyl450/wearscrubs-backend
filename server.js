@@ -561,6 +561,9 @@ async function initDB() {
     // order_items supaya report margin historis tidak berubah saat harga vendor naik.
     await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cogs_default INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cogs_by_type TEXT DEFAULT NULL`);
+    // Override COGS per warna (mis. charcoal/light grey beda kain). JSON {color:{variant:cost}}.
+    // Warna yang tidak ada di sini → pakai cogs_by_type/cogs_default.
+    await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cogs_by_color TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_config TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS unit_cogs INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bordir_nama_cogs INTEGER DEFAULT 0`);
@@ -1012,9 +1015,10 @@ function formatProduct(p, mainPhoto = null, opts = {}) {
     if (opts.includeCogs) {
         out.cogs_default = p.cogs_default || 0;
         out.cogs_by_type = safeJSON(p.cogs_by_type, null);
+        out.cogs_by_color = safeJSON(p.cogs_by_color, null);
         out.cost_config = safeJSON(p.cost_config, null);
     } else {
-        delete out.cogs_default; delete out.cogs_by_type; delete out.cost_config;
+        delete out.cogs_default; delete out.cogs_by_type; delete out.cogs_by_color; delete out.cost_config;
     }
     return out;
 }
@@ -1290,6 +1294,7 @@ app.post('/api/products', requireMenu('products','edit'), upload.any(), async (r
         const isAdminUser = req.user && req.user.role === 'admin';
         const cogsDefault = isAdminUser ? (parseInt(cogs_default) || 0) : 0;
         const cogsByTypeObj = (isAdminUser && cogs_by_type) ? safeJSON(cogs_by_type, null) : null;
+        const cogsByColorObj = (isAdminUser && req.body.cogs_by_color) ? safeJSON(req.body.cogs_by_color, null) : null;
         const costConfigJson = (isAdminUser && typeof req.body.cost_config === 'string' && safeJSON(req.body.cost_config, null)) ? req.body.cost_config : null;
         const values = priceByTypeObj
             ? Object.values(priceByTypeObj).map(Number).filter(v => v > 0)
@@ -1332,8 +1337,8 @@ app.post('/api/products', requireMenu('products','edit'), upload.any(), async (r
             const result = await client.query(
                 `INSERT INTO products (sku, name, category, price, price_by_type,
                   short_description, long_description, short_description_en, long_description_en,
-                  sizes, colors, types, is_popular, status, cogs_default, cogs_by_type, cost_config)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+                  sizes, colors, types, is_popular, status, cogs_default, cogs_by_type, cost_config, cogs_by_color)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
                 [sku, name, category, basePrice,
                     priceByTypeObj ? JSON.stringify(priceByTypeObj) : null,
                     short_description || '', long_description || '',
@@ -1343,7 +1348,8 @@ app.post('/api/products', requireMenu('products','edit'), upload.any(), async (r
                     typeof types === 'string' ? types : JSON.stringify(types),
                     is_popular === '1' || is_popular === true ? 1 : 0,
                     status || 'active',
-                    cogsDefault, cogsByTypeObj ? JSON.stringify(cogsByTypeObj) : null, costConfigJson]
+                    cogsDefault, cogsByTypeObj ? JSON.stringify(cogsByTypeObj) : null, costConfigJson,
+                    cogsByColorObj ? JSON.stringify(cogsByColorObj) : null]
             );
             const pid = result.rows[0].id;
 
@@ -1392,6 +1398,7 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
         const isAdminUser = req.user && req.user.role === 'admin';
         const cogsDefault = parseInt(cogs_default) || 0;
         const cogsByTypeObj = cogs_by_type ? safeJSON(cogs_by_type, null) : null;
+        const cogsByColorObj = req.body.cogs_by_color ? safeJSON(req.body.cogs_by_color, null) : null;
         const costConfigJson = (typeof req.body.cost_config === 'string' && safeJSON(req.body.cost_config, null)) ? req.body.cost_config : null;
         const priceValues = priceByTypeObj
             ? Object.values(priceByTypeObj).map(Number).filter(v => v > 0)
@@ -1445,8 +1452,8 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
 
         // Phase 2 (ATOMIK): update product + operasi foto + pastikan baris variant/inventory.
         await withTransaction(async (client) => {
-            const cogsSet = isAdminUser ? ', cogs_default=$15, cogs_by_type=$16, cost_config=$17' : '';
-            const cogsParams = isAdminUser ? [cogsDefault, cogsByTypeObj ? JSON.stringify(cogsByTypeObj) : null, costConfigJson] : [];
+            const cogsSet = isAdminUser ? ', cogs_default=$15, cogs_by_type=$16, cost_config=$17, cogs_by_color=$18' : '';
+            const cogsParams = isAdminUser ? [cogsDefault, cogsByTypeObj ? JSON.stringify(cogsByTypeObj) : null, costConfigJson, cogsByColorObj ? JSON.stringify(cogsByColorObj) : null] : [];
             await client.query(
                 `UPDATE products SET name=$1, category=$2, price=$3, price_by_type=$4,
                  short_description=$5, long_description=$6,
@@ -2456,10 +2463,14 @@ app.post('/api/orders', async (req, res) => {
             // (cuma harga jual yg di-nol-kan), supaya margin tidak terlihat lebih bagus
             // dari realita.
             const cogsByType = safeJSON(product.cogs_by_type, null);
+            const cogsByColor = safeJSON(product.cogs_by_color, null);
+            // Resolusi cost: override warna (per variant) > per variant > default produk.
+            const colorOv = cogsByColor && item.color ? cogsByColor[item.color] : null;
             const baseCogs = isCustomProduct
                 ? ((isAdmin && Number.isInteger(item.custom_cogs) && item.custom_cogs >= 0) ? item.custom_cogs : 0)
-                : ((cogsByType && item.variant_type && cogsByType[item.variant_type] != null)
-                    ? Number(cogsByType[item.variant_type]) : Number(product.cogs_default || 0));
+                : ((colorOv && item.variant_type && colorOv[item.variant_type] != null) ? Number(colorOv[item.variant_type])
+                    : (cogsByType && item.variant_type && cogsByType[item.variant_type] != null) ? Number(cogsByType[item.variant_type])
+                    : Number(product.cogs_default || 0));
             const bordirNamaCogs = item.bordir_nama ? cogsSettings.bordirNama : 0;
             const bordirLogoCogs = item.bordir_logo ? cogsSettings.bordirLogo : 0;
             const totalCogs = (baseCogs + bordirNamaCogs + bordirLogoCogs) * item.quantity;

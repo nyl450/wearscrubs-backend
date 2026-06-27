@@ -1877,6 +1877,15 @@
                 <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">HPP / COGS per Variant (Rp) <span class="text-amber-300/70 normal-case font-normal">· admin</span></label>
                 <div id="pf-cogs-rows" class="space-y-1.5"></div>
                 <p class="text-[10px] text-white/30">Biaya pokok per pcs (kain + jahit + packaging) per variant. Lengan Panjang biasanya lebih mahal dari Pendek. Margin = (harga jual − HPP) / harga. Dipakai di Report. Kosong = belum diisi.</p>
+                <div class="pt-2 mt-1 border-t border-white/5">
+                    <label class="text-[10px] font-bold text-white/45 uppercase tracking-wider">Override COGS per Warna <span class="normal-case font-normal text-white/30">(opsional — mis. grey beda kain)</span></label>
+                    <div id="pf-cogs-overrides" class="space-y-2 mt-1.5"></div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <select id="pf-cogs-add-color" class="!py-1 !text-xs"></select>
+                        <button type="button" onclick="addColorOverrideFromSelect()" class="text-[11px] font-bold text-cyan-300 hover:text-cyan-200 shrink-0">+ Tambah Warna Override</button>
+                    </div>
+                    <p class="text-[10px] text-white/30 mt-1">Warna yang tidak di-override pakai COGS base di atas.</p>
+                </div>
             </div>
 
             <div class="flex justify-between pt-2 border-t border-white/8">
@@ -3982,6 +3991,7 @@ function handleCategoryChange() {
         buildGownMotifBtns([]);
     }
     if (typeof renderCogsRows === 'function') renderCogsRows();
+    if (typeof renderColorOverrides === 'function') renderColorOverrides();
 }
 
 function updateTypePriceFields() {
@@ -3994,6 +4004,7 @@ function updateTypePriceFields() {
         }
     });
     if (typeof renderCogsRows === 'function') renderCogsRows();
+    if (typeof renderColorOverrides === 'function') renderColorOverrides();
 }
 
 function buildSizeBtns(cat, selected) {
@@ -4062,6 +4073,7 @@ function handleGownSubTypeChange() {
     if (colorSection) colorSection.classList.toggle('hidden', !polosChecked);
     if (motifSection) motifSection.classList.toggle('hidden', !designChecked);
     if (typeof renderCogsRows === 'function') renderCogsRows();
+    if (typeof renderColorOverrides === 'function') renderColorOverrides();
 }
 
 function toggleSize(btn) {
@@ -4239,6 +4251,7 @@ async function openProductModal(product = null) {
     const cogsWrap = document.getElementById('pf-cogs-wrap');
     if (cogsWrap) cogsWrap.classList.toggle('hidden', !_isAdmin);
     _cogsConfig = (product && product.cost_config && typeof product.cost_config === 'object') ? product.cost_config : {};
+    _cogsByColor = (product && product.cogs_by_color && typeof product.cogs_by_color === 'object') ? product.cogs_by_color : {};
     if (_isAdmin) {
         renderCogsRows();
         const cbt = (product && product.cogs_by_type) || null;
@@ -4247,6 +4260,7 @@ async function openProductModal(product = null) {
             if (k === 'single') inp.value = (product && product.cogs_default) ? product.cogs_default : '';
             else if (cbt && cbt[k] != null) inp.value = cbt[k];
         });
+        renderColorOverrides();
         updateCogsMargins();
     }
 
@@ -4304,10 +4318,10 @@ function renderCogsRows() {
     updateCogsMargins();
 }
 function updateCogsMargins() {
-    document.querySelectorAll('#pf-cogs-rows [data-cogs-key]').forEach(inp => {
+    document.querySelectorAll('#pf-cogs-wrap [data-cogs-key]').forEach(inp => {
         const cogs = parseInt(inp.value) || 0;
         const price = parseInt(document.getElementById(inp.dataset.priceId)?.value) || 0;
-        const span = document.querySelector(`#pf-cogs-rows .cogs-margin[data-for="${inp.dataset.cogsKey}"]`);
+        const span = document.querySelector(`#pf-cogs-wrap .cogs-margin[data-for="${inp.dataset.cogsKey}"]`);
         if (!span) return;
         if (!cogs) { span.textContent = '⚠ kosong'; span.className = 'cogs-margin text-[10px] font-semibold w-24 text-right text-amber-300/70'; return; }
         if (!price) { span.textContent = ''; return; }
@@ -4411,14 +4425,84 @@ function cogsCalcCompute() {
 }
 function cogsCalcApply() {
     const state = _cogsCalcReadState();
-    if (_cogsCalcVariant) {
-        _cogsConfig[_cogsCalcVariant] = state;
-        const inp = document.querySelector(`#pf-cogs-rows [data-cogs-key="${_cogsCalcVariant}"]`);
+    const key = _cogsCalcVariant;
+    if (key) {
+        _cogsConfig[key] = state;
+        const inp = document.querySelector(`#pf-cogs-wrap [data-cogs-key="${key}"]`);
         if (inp) inp.value = _cogsCalcAvg || '';
+        // Kalau key adalah override warna (c::color::variant), update juga state _cogsByColor.
+        if (key.startsWith('c::')) {
+            const [, color, variant] = key.split('::');
+            if (!_cogsByColor[color]) _cogsByColor[color] = {};
+            if (_cogsCalcAvg > 0) _cogsByColor[color][variant] = _cogsCalcAvg; else delete _cogsByColor[color][variant];
+        }
         updateCogsMargins();
     }
     closeCogsCalc();
 }
+
+// ── Override COGS per warna (mis. charcoal/light grey beda kain) ───────────────
+let _cogsByColor = {};   // { colorId: { variant: cost } }
+function _cogsPrettyColor(c) { return String(c||'').replace(/[-_]/g,' ').replace(/\b\w/g, m => m.toUpperCase()); }
+function _cogsActiveVariants() {
+    const cat = document.getElementById('pf-category')?.value || 'tops';
+    const out = [];
+    if (cat === 'tops') {
+        [['pendek','Lengan Pendek'],['panjang','Lengan Panjang']].forEach(([t,lbl]) => { if (document.getElementById(`type-${t}`)?.checked) out.push({ key:t, label:lbl, priceId:`price-type-${t}` }); });
+    } else if (cat === 'gown') {
+        [['polos','Polos','type-gown-polos'],['ber-design','Ber Design','type-gown-design']].forEach(([t,lbl,chk]) => { if (document.getElementById(chk)?.checked) out.push({ key:t, label:lbl, priceId:`price-type-${t}` }); });
+    } else if (cat === 'pants') out.push({ key:'single', label:'Harga', priceId:'pf-price-single' });
+    else if (cat === 'caps') out.push({ key:'single', label:'Harga', priceId:'pf-price-caps' });
+    return out;
+}
+function _cogsProductColors() {
+    return [...new Set([...document.querySelectorAll('#color-btns .color-toggle.selected, #gown-color-btns .color-toggle.selected, #gown-motif-btns .color-toggle.selected')].map(b => b.dataset.color))];
+}
+function renderColorOverrides() {
+    const wrap = document.getElementById('pf-cogs-overrides');
+    if (!wrap) return;
+    const variants = _cogsActiveVariants();
+    wrap.innerHTML = Object.keys(_cogsByColor).map(color => `
+        <div class="bg-white/3 border border-white/8 rounded-lg p-2.5">
+            <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[11px] font-bold text-white/70">${esc(_cogsPrettyColor(color))}</span>
+                <button type="button" onclick="removeColorOverride('${color}')" class="text-red-400/60 hover:text-red-400 text-[10px]">✕ hapus</button>
+            </div>
+            <div class="space-y-1.5">
+                ${variants.map(v => {
+                    const val = (_cogsByColor[color] && _cogsByColor[color][v.key] != null) ? _cogsByColor[color][v.key] : '';
+                    const key = `c::${color}::${v.key}`;
+                    return `<div class="flex items-center gap-2">
+                        <span class="text-[10px] text-white/45 w-28 shrink-0">${esc(v.label)}</span>
+                        <div class="flex items-center gap-1 flex-1"><span class="text-[10px] text-white/30">Rp</span>
+                          <input type="number" min="0" data-cogs-key="${esc(key)}" data-price-id="${v.priceId}" data-ov-color="${esc(color)}" data-ov-variant="${esc(v.key)}" value="${val}" placeholder="HPP" oninput="onOverrideInput(this)" class="!py-1 !text-xs flex-1"></div>
+                        <span class="cogs-margin text-[10px] font-semibold w-14 text-right" data-for="${esc(key)}"></span>
+                        <button type="button" onclick="openCogsCalc('${esc(key)}', '${esc(_cogsPrettyColor(color))} · ${esc(v.label)}')" title="Kalkulator" class="text-sm shrink-0">🧮</button>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`).join('');
+    const sel = document.getElementById('pf-cogs-add-color');
+    if (sel) {
+        const avail = _cogsProductColors().filter(c => !(c in _cogsByColor));
+        sel.innerHTML = avail.length ? avail.map(c => `<option value="${esc(c)}">${esc(_cogsPrettyColor(c))}</option>`).join('') : '<option value="">(pilih/aktifkan warna dulu)</option>';
+    }
+    updateCogsMargins();
+}
+function onOverrideInput(inp) {
+    const color = inp.dataset.ovColor, variant = inp.dataset.ovVariant;
+    if (!_cogsByColor[color]) _cogsByColor[color] = {};
+    const v = parseInt(inp.value) || 0;
+    if (v > 0) _cogsByColor[color][variant] = v; else delete _cogsByColor[color][variant];
+    updateCogsMargins();
+}
+function addColorOverrideFromSelect() {
+    const c = document.getElementById('pf-cogs-add-color')?.value;
+    if (!c) return;
+    if (!_cogsByColor[c]) _cogsByColor[c] = {};
+    renderColorOverrides();
+}
+function removeColorOverride(color) { delete _cogsByColor[color]; renderColorOverrides(); }
 
 document.getElementById('product-form').addEventListener('submit', async e => {
     e.preventDefault();
@@ -4463,6 +4547,14 @@ document.getElementById('product-form').addEventListener('submit', async e => {
             }
             // Config kalkulator komponen (per variant) — supaya bisa di-edit ulang & recompute.
             if (_cogsConfig && Object.keys(_cogsConfig).length) fd.append('cost_config', JSON.stringify(_cogsConfig));
+            // Override COGS per warna (mis. grey beda kain) — buang yang kosong.
+            const cbcClean = {};
+            Object.keys(_cogsByColor || {}).forEach(c => {
+                const vs = {};
+                Object.keys(_cogsByColor[c] || {}).forEach(v => { if (_cogsByColor[c][v] > 0) vs[v] = _cogsByColor[c][v]; });
+                if (Object.keys(vs).length) cbcClean[c] = vs;
+            });
+            if (Object.keys(cbcClean).length) fd.append('cogs_by_color', JSON.stringify(cbcClean));
         }
 
         // Build price_by_type for tops; use single price for others
