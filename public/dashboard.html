@@ -1851,14 +1851,11 @@
                 <div id="size-btns" class="flex flex-wrap gap-2"></div>
             </div>
 
-            <!-- HPP / COGS (admin only) -->
+            <!-- HPP / COGS per variant (admin only) -->
             <div id="pf-cogs-wrap" class="hidden space-y-2 pt-3 border-t border-white/8">
-                <div class="flex items-center justify-between gap-2">
-                    <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">HPP / COGS per pcs (Rp) <span class="text-amber-300/70 normal-case font-normal">· admin</span></label>
-                    <span id="pf-margin-hint" class="text-[10px] font-semibold"></span>
-                </div>
-                <input type="number" id="pf-cogs-default" min="0" placeholder="mis. 135000" oninput="updateMarginHint()" class="!py-1.5">
-                <p class="text-[10px] text-white/30">Biaya pokok rata-rata per pcs (kain + jahit + packaging). Dipakai hitung margin di Report. Kosong/0 = belum diisi.</p>
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">HPP / COGS per Variant (Rp) <span class="text-amber-300/70 normal-case font-normal">· admin</span></label>
+                <div id="pf-cogs-rows" class="space-y-1.5"></div>
+                <p class="text-[10px] text-white/30">Biaya pokok per pcs (kain + jahit + packaging) per variant. Lengan Panjang biasanya lebih mahal dari Pendek. Margin = (harga jual − HPP) / harga. Dipakai di Report. Kosong = belum diisi.</p>
             </div>
 
             <div class="flex justify-between pt-2 border-t border-white/8">
@@ -3891,6 +3888,7 @@ function handleCategoryChange() {
         buildGownColorBtns([]);
         buildGownMotifBtns([]);
     }
+    if (typeof renderCogsRows === 'function') renderCogsRows();
 }
 
 function updateTypePriceFields() {
@@ -3902,6 +3900,7 @@ function updateTypePriceFields() {
             if (!checkbox.checked) priceEl.value = '';
         }
     });
+    if (typeof renderCogsRows === 'function') renderCogsRows();
 }
 
 function buildSizeBtns(cat, selected) {
@@ -3969,6 +3968,7 @@ function handleGownSubTypeChange() {
     const motifSection = document.getElementById('gown-motif-section');
     if (colorSection) colorSection.classList.toggle('hidden', !polosChecked);
     if (motifSection) motifSection.classList.toggle('hidden', !designChecked);
+    if (typeof renderCogsRows === 'function') renderCogsRows();
 }
 
 function toggleSize(btn) {
@@ -4140,14 +4140,21 @@ async function openProductModal(product = null) {
             if (pantsEl) pantsEl.value = product.price || '';
         }
     }
-    // HPP / COGS (admin only) — tampil + isi dari produk
+    // HPP / COGS per variant (admin only) — render baris sesuai variant aktif, isi dari produk
     const _u = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
     const _isAdmin = _u.role === 'admin';
     const cogsWrap = document.getElementById('pf-cogs-wrap');
     if (cogsWrap) cogsWrap.classList.toggle('hidden', !_isAdmin);
-    const cogsEl = document.getElementById('pf-cogs-default');
-    if (cogsEl) cogsEl.value = (product && product.cogs_default) ? product.cogs_default : '';
-    updateMarginHint();
+    if (_isAdmin) {
+        renderCogsRows();
+        const cbt = (product && product.cogs_by_type) || null;
+        document.querySelectorAll('#pf-cogs-rows [data-cogs-key]').forEach(inp => {
+            const k = inp.dataset.cogsKey;
+            if (k === 'single') inp.value = (product && product.cogs_default) ? product.cogs_default : '';
+            else if (cbt && cbt[k] != null) inp.value = cbt[k];
+        });
+        updateCogsMargins();
+    }
 
     // Fetch full product data (including variants with photos) for edit mode
     _editProductFull = null;
@@ -4165,21 +4172,55 @@ function closeProductModal() {
     document.getElementById('product-modal').classList.remove('flex');
 }
 
-// Margin otomatis di editor produk = (harga terendah − COGS) / harga. Admin-only field.
-function updateMarginHint() {
-    const hint = document.getElementById('pf-margin-hint');
-    if (!hint) return;
-    const cogs = parseInt(document.getElementById('pf-cogs-default')?.value) || 0;
-    const priceIds = ['price-type-pendek','price-type-panjang','price-type-polos','price-type-ber-design','pf-price-single','pf-price-caps'];
-    const prices = priceIds.map(id => parseInt(document.getElementById(id)?.value) || 0).filter(v => v > 0);
-    const price = prices.length ? Math.min(...prices) : 0;
-    if (!cogs) { hint.textContent = '⚠ COGS belum diisi'; hint.className = 'text-[10px] font-semibold text-amber-300/80'; return; }
-    if (!price) { hint.textContent = ''; return; }
-    const gp = price - cogs;
-    const pct = Math.round(gp / price * 100);
-    const col = pct >= 30 ? 'text-green-400' : pct >= 0 ? 'text-yellow-400' : 'text-red-400';
-    hint.textContent = `Margin ±${pct}% (Rp ${gp.toLocaleString('id-ID')}/pcs)`;
-    hint.className = `text-[10px] font-semibold ${col}`;
+// COGS per variant di editor produk (admin-only). Baris COGS MENGIKUTI variant harga
+// yang aktif: tops → Lengan Pendek/Panjang; gown → Polos/Ber Design; pants/caps → 1 baris.
+// Margin per baris = (harga jual variant − HPP variant) / harga.
+function renderCogsRows() {
+    const wrap = document.getElementById('pf-cogs-rows');
+    if (!wrap) return;
+    const cat = document.getElementById('pf-category')?.value || 'tops';
+    // simpan nilai yang sudah diketik supaya tidak hilang saat re-render
+    const prev = {};
+    wrap.querySelectorAll('[data-cogs-key]').forEach(inp => { prev[inp.dataset.cogsKey] = inp.value; });
+    let rows = [];
+    if (cat === 'tops') {
+        [['pendek','Lengan Pendek'],['panjang','Lengan Panjang']].forEach(([t,lbl]) => {
+            if (document.getElementById(`type-${t}`)?.checked) rows.push({ key:t, label:lbl, priceId:`price-type-${t}` });
+        });
+    } else if (cat === 'gown') {
+        [['polos','Polos','type-gown-polos'],['ber-design','Ber Design','type-gown-design']].forEach(([t,lbl,chk]) => {
+            if (document.getElementById(chk)?.checked) rows.push({ key:t, label:lbl, priceId:`price-type-${t}` });
+        });
+    } else if (cat === 'pants') {
+        rows.push({ key:'single', label:'Harga', priceId:'pf-price-single' });
+    } else if (cat === 'caps') {
+        rows.push({ key:'single', label:'Harga', priceId:'pf-price-caps' });
+    }
+    if (rows.length === 0) { wrap.innerHTML = '<p class="text-[10px] text-white/30">Pilih tipe/variant dulu untuk isi COGS.</p>'; return; }
+    wrap.innerHTML = rows.map(r => `
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] text-white/55 w-28 shrink-0">${r.label}</span>
+            <div class="flex items-center gap-1 flex-1">
+                <span class="text-[10px] text-white/30">Rp</span>
+                <input type="number" min="0" data-cogs-key="${r.key}" data-price-id="${r.priceId}" oninput="updateCogsMargins()" placeholder="HPP" class="!py-1 !text-sm flex-1" value="${prev[r.key] || ''}">
+            </div>
+            <span class="cogs-margin text-[10px] font-semibold w-24 text-right" data-for="${r.key}"></span>
+        </div>`).join('');
+    updateCogsMargins();
+}
+function updateCogsMargins() {
+    document.querySelectorAll('#pf-cogs-rows [data-cogs-key]').forEach(inp => {
+        const cogs = parseInt(inp.value) || 0;
+        const price = parseInt(document.getElementById(inp.dataset.priceId)?.value) || 0;
+        const span = document.querySelector(`#pf-cogs-rows .cogs-margin[data-for="${inp.dataset.cogsKey}"]`);
+        if (!span) return;
+        if (!cogs) { span.textContent = '⚠ kosong'; span.className = 'cogs-margin text-[10px] font-semibold w-24 text-right text-amber-300/70'; return; }
+        if (!price) { span.textContent = ''; return; }
+        const pct = Math.round((price - cogs) / price * 100);
+        const col = pct >= 30 ? 'text-green-400' : pct >= 0 ? 'text-yellow-400' : 'text-red-400';
+        span.textContent = `${pct}%`;
+        span.className = `cogs-margin text-[10px] font-semibold w-24 text-right ${col}`;
+    });
 }
 
 document.getElementById('product-form').addEventListener('submit', async e => {
@@ -4206,9 +4247,24 @@ document.getElementById('product-form').addEventListener('submit', async e => {
         fd.append('sku', document.getElementById('pf-sku').value);
         fd.append('name', document.getElementById('pf-name').value);
         fd.append('category', cat);
-        // HPP/COGS (admin-only field; backend juga gate by role). Kirim kalau ada nilainya.
-        const _cogsEl = document.getElementById('pf-cogs-default');
-        if (_cogsEl && _cogsEl.value !== '') fd.append('cogs_default', parseInt(_cogsEl.value) || 0);
+        // HPP/COGS per variant (admin-only; backend juga gate by role).
+        const _cogsRows = document.querySelectorAll('#pf-cogs-rows [data-cogs-key]');
+        if (_cogsRows.length) {
+            const cogsByType = {};
+            let cogsSingle = null;
+            _cogsRows.forEach(inp => {
+                const v = parseInt(inp.value) || 0;
+                if (inp.dataset.cogsKey === 'single') cogsSingle = v;
+                else cogsByType[inp.dataset.cogsKey] = v;
+            });
+            if (Object.keys(cogsByType).length) {
+                const cbtVals = Object.values(cogsByType).filter(v => v > 0);
+                fd.append('cogs_by_type', JSON.stringify(cogsByType));
+                fd.append('cogs_default', cbtVals.length ? Math.min(...cbtVals) : 0);
+            } else if (cogsSingle !== null) {
+                fd.append('cogs_default', cogsSingle);
+            }
+        }
 
         // Build price_by_type for tops; use single price for others
         let priceByType = null;
