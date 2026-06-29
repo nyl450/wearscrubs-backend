@@ -2220,13 +2220,17 @@ app.get('/api/reports/items', requireMenu('report','view'), async (req, res) => 
 
 // ── CITIES & SHIPPING ──────────────────────────────────────────────────────────
 
-// GET /api/cities — Daftar kota Indonesia
+// GET /api/cities — Daftar kota Indonesia (+ international untuk admin)
+// kasir_only entries (Malaysia/Singapore) di-hide dari public checkout supaya
+// customer tidak bisa pilih sendiri — admin entry di Kasir saja.
 app.get('/api/cities', (req, res) => {
     const { q } = req.query;
-    let list = CITIES;
+    const authUser = getOptionalUser(req);
+    const isAdmin = !!authUser && (authUser.role === 'admin' || hasMenu(authUser, 'manual-order', 'edit'));
+    let list = isAdmin ? CITIES : CITIES.filter(c => !c.kasir_only);
     if (q) {
         const lq = q.toLowerCase();
-        list = CITIES.filter(c => c.name.toLowerCase().includes(lq));
+        list = list.filter(c => c.name.toLowerCase().includes(lq));
     }
     res.json(list);
 });
@@ -2519,6 +2523,11 @@ app.post('/api/orders', async (req, res) => {
             shippingCost = parseInt(shipping_cost || 0);
         } else {
             const ci = CITIES.find(c => c.name === shipping_city);
+            // Block international (kasir_only) dari public checkout — anti DOM-bypass:
+            // dropdown /api/cities sudah filter, tapi attacker bisa POST shipping_city
+            // langsung. Reject di sini.
+            if (ci && ci.kasir_only)
+                return res.status(403).json({ error: 'Tujuan international hanya tersedia via Kasir admin' });
             const totalQty = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
             const wKg = Math.ceil(totalQty / 3);
             if (!ci) shippingCost = 0;
@@ -2553,7 +2562,8 @@ app.post('/api/orders', async (req, res) => {
         const weightKg = parseFloat(shipping_weight_kg || 0);
         let autoCourier = 'JNE / J&T Reguler';
         if (cityInfo) {
-            if (cityInfo.zone !== 1 && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
+            if (cityInfo.is_international) autoCourier = 'Ekspedisi Internasional (pilih manual)';
+            else if (cityInfo.zone !== 1 && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
             else autoCourier = cityInfo.zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
         }
         const courier = (req_shipping_courier && req_shipping_courier.trim()) ? sanitizeCourier(req_shipping_courier) : autoCourier;

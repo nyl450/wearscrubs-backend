@@ -7270,10 +7270,11 @@ function openEditOrderModal() {
         toast('Pesanan ini tidak bisa diedit (sudah dibatalkan/dikirim/selesai)', true);
         return;
     }
-    // Prefill kota dropdown dari CITIES (lazy: ambil dari cities.json sekali)
+    // Prefill kota dropdown dari CITIES (apiFetch kirim Bearer → backend return
+    // kasir_only entries spt Malaysia/Singapore untuk admin).
     const citySel = document.getElementById('edit-shipping-city');
     if (citySel && citySel.options.length <= 1) {
-        fetch(API + '/api/cities').then(r => r.json()).then(cities => {
+        apiFetch('/api/cities').then(cities => {
             cities.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.name; opt.textContent = c.name;
@@ -9075,8 +9076,8 @@ async function waInitModule() {
     const citySelect = document.getElementById('wa-shipping-city');
     if (citySelect.options.length <= 1) {
         try {
-            const res = await fetch(API + '/api/cities');
-            const cities = await res.json();
+            // apiFetch kirim Bearer → backend return kasir_only (Malaysia/Singapore) untuk admin
+            const cities = await apiFetch('/api/cities');
             cities.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.name; opt.textContent = c.name;

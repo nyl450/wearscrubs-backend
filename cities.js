@@ -191,6 +191,13 @@ const CITY_RATES = {
   // Kalimantan Barat (8 kota — Kab Pontianak ikut Pontianak)
   "Pontianak": 35000, "Kabupaten Pontianak": 35000, "Singkawang": 50000, "Sambas": 55000,
   "Sanggau": 55000, "Sintang": 55000, "Ketapang": 55000, "Mempawah": 55000,
+
+  // ── INTERNATIONAL (28 Jun 2026) — kasir-only, admin input ongkir manual ──
+  // Tidak punya zone; default rate 0 supaya form kasir tidak auto-isi nominal salah.
+  // Admin WAJIB override shipping_cost dari quotation ekspedisi (Pos Indonesia EMS,
+  // Lion Parcel Intl, J&T Cargo Intl, dll). Public checkout TIDAK lihat (filter di
+  // /api/cities + gate di POST/PUT orders).
+  "Malaysia": 0, "Singapore": 0,
 };
 
 function rateForZone(zone) {
@@ -198,9 +205,11 @@ function rateForZone(zone) {
 }
 
 // Resolusi tarif per kota. Cek CITY_RATES dulu (override), fallback ke zone rate.
+// International (zone null) → CITY_RATES default 0; admin override di form.
 function rateForCity(cityName, zone) {
   if (cityName && Object.prototype.hasOwnProperty.call(CITY_RATES, cityName))
     return CITY_RATES[cityName];
+  if (zone == null) return 0;
   return rateForZone(zone);
 }
 
@@ -328,6 +337,13 @@ const DKI_NAMES = new Set([
   "Jakarta Pusat", "Jakarta Utara", "Jakarta Barat", "Jakarta Selatan", "Jakarta Timur", "Kepulauan Seribu",
 ]);
 
+// International destinations — kasir-only (admin entry), tarif admin override.
+// zone=null sentinel; is_international+kasir_only di-gate /api/cities & order endpoints.
+const INTERNATIONAL_CITIES = [
+  { name: "Malaysia",  zone: null, is_dki: false, is_international: true, kasir_only: true },
+  { name: "Singapore", zone: null, is_dki: false, is_international: true, kasir_only: true },
+];
+
 const CITIES = [];
 for (const [zone, names] of Object.entries(ZONE_CITIES)) {
   const z = Number(zone);
@@ -336,10 +352,12 @@ for (const [zone, names] of Object.entries(ZONE_CITIES)) {
   }
 }
 
-// Sorting: DKI dulu, lalu alfabetis
+// Sorting: DKI dulu, lalu domestik alfabetis. International di-append setelah sort
+// supaya selalu nongol di bagian bawah dropdown (visual grouping).
 CITIES.sort((a, b) => {
   if (a.is_dki !== b.is_dki) return b.is_dki - a.is_dki;
   return a.name.localeCompare(b.name, 'id');
 });
+for (const c of INTERNATIONAL_CITIES) CITIES.push(c);
 
-module.exports = { CITIES, ZONE_RATES, CITY_RATES, rateForZone, rateForCity };
+module.exports = { CITIES, INTERNATIONAL_CITIES, ZONE_RATES, CITY_RATES, rateForZone, rateForCity };
