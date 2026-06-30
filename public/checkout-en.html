@@ -728,6 +728,12 @@ function buildBordirForm() {
                             class="${cls}" required>
                         <p class="text-[10px] text-gray-400 dark:text-white/25 mt-1">Letter height ~1.2 cm · check spelling & capitalization</p>
                     </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Second line <span class="text-gray-400 font-normal">(optional — e.g. title/degree)</span></label>
+                        <input type="text" id="bordir-nama-text2-${itemIdx}-${q}"
+                            placeholder="e.g. M.D., Ph.D., Sp.PD"
+                            class="${cls}">
+                    </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Thread Color</label>
@@ -840,10 +846,15 @@ async function submitBordirStep() {
 
         if (item.bordir_nama) {
             const val   = document.getElementById(`bordir-nama-${itemIdx}-${q}`)?.value?.trim();
+            const val2  = document.getElementById(`bordir-nama-text2-${itemIdx}-${q}`)?.value?.trim() || '';
             const color = document.getElementById(`bordir-nama-color-${itemIdx}-${q}`)?.value?.trim() || '';
             namaPos     = document.getElementById(`bordir-nama-pos-${itemIdx}-${q}`)?.value || 'kanan';
             if (!val) { errors.push(`Embroidery name for "${item.name}" is empty.`); continue; }
-            embroideryData.push({ item_label: itemLabel, type: 'nama', value: val, color, position: namaPos });
+            // value_line2 dikirim hanya kalau diisi (anti-noise di JSON).
+            // Renderer/invoice/WA gracefully handle absence (1-baris).
+            const payload = { item_label: itemLabel, type: 'nama', value: val, color, position: namaPos };
+            if (val2) payload.value_line2 = val2;
+            embroideryData.push(payload);
         }
         if (item.bordir_logo) {
             const color = document.getElementById(`bordir-logo-color-${itemIdx}-${q}`)?.value?.trim() || '';
