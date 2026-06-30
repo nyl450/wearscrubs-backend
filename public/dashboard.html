@@ -10346,7 +10346,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         catch { return []; }
     })();
     const fmtRp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
-    const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+    const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
 
     let itemRowsHTML = '';
     let productSubtotal = 0;
@@ -10379,14 +10379,14 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         // Fallback: capitalize value lain (mis. variant produk masa depan). Skip kalau null/empty
         // (produk single-variant mis. Cap).
         const vtRaw = item.variant_type && item.variant_type !== 'null' ? item.variant_type : '';
-        const vtFull = vtRaw === 'pendek' ? 'Lengan Pendek'
-                     : vtRaw === 'panjang' ? 'Lengan Panjang'
+        const vtFull = vtRaw === 'pendek' ? 'Short Sleeve'
+                     : vtRaw === 'panjang' ? 'Long Sleeve'
                      : vtRaw ? vtRaw.charAt(0).toUpperCase() + vtRaw.slice(1)
                      : '';
         const vt = vtFull ? ` <span style="color:#6b7280">·</span> ${esc(vtFull)}` : '';
         itemRowsHTML += `<tr>
-            <td>${esc(item.product_name || 'Produk')} <strong>${esc(item.color || '')}</strong>${vt} Size: ${esc(item.size || '')}${customTag}${cprodTag}${poTag}${bonusTag}</td>
-            <td>${isBonus ? 'Gratis' : fmtRp(basePrice)}</td>
+            <td>${esc(item.product_name || 'Product')} <strong>${esc(item.color || '')}</strong>${vt} Size: ${esc(item.size || '')}${customTag}${cprodTag}${poTag}${bonusTag}</td>
+            <td>${isBonus ? 'Free' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
             <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>
         </tr>`;
@@ -10394,11 +10394,11 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     // Consolidated bordir rows — max 2 lines regardless of how many items have bordir
     let bordirLineRowsHTML = '';
     if (totalBordirNamaQty > 0)
-        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Nama</td><td>${fmtRp(Math.round(totalBordirNamaCost / totalBordirNamaQty))}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(totalBordirNamaCost)}</td></tr>`;
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Embroidery Name / Text</td><td>${fmtRp(Math.round(totalBordirNamaCost / totalBordirNamaQty))}</td><td>${totalBordirNamaQty}</td><td>${fmtRp(totalBordirNamaCost)}</td></tr>`;
     if (totalBordirLogoQty > 0)
-        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Bordir Logo</td><td>${fmtRp(Math.round(totalBordirLogoCost / totalBordirLogoQty))}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(totalBordirLogoCost)}</td></tr>`;
+        bordirLineRowsHTML += `<tr class="bordir-row"><td>↳ Embroidery Logo</td><td>${fmtRp(Math.round(totalBordirLogoCost / totalBordirLogoQty))}</td><td>${totalBordirLogoQty}</td><td>${fmtRp(totalBordirLogoCost)}</td></tr>`;
     const shippingCost = order.shipping_cost || 0;
-    const courier = order.shipping_courier || 'Kurir';
+    const courier = order.shipping_courier || 'Courier';
     const shippingCity = order.shipping_city || '';
     const total = order.total_amount || 0;
 
@@ -10408,20 +10408,26 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     // tampilkan urutan: item base → bordir → Subtotal (Produk + Bordir) → Discount → Ongkir → Total.
     // Subtotal di invoice = sum(base * qty) + sum(bordir * qty) = base discount applies to.
     const discountAmt = order.discount_amount || 0;
-    const discountLbl = order.discount_label || '';
+    // Translate DB-stored Indonesian labels → English for invoice display only.
+    // Backend tetap simpan label asli (untuk konsistensi report/Excel domestik).
+    const discLblRaw = order.discount_label || '';
+    const discountLbl = discLblRaw
+        .replace(/^Diskon\s+(\d+)%$/i, '$1% Discount')
+        .replace(/^Diskon per produk$/i, 'Per-item Discount')
+        .replace(/^Diskon$/i, 'Discount');
     const grossSubtotal = productSubtotal + totalBordirNamaCost + totalBordirLogoCost;
     const subtotalRowHTML = discountAmt > 0
-        ? `<tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal (Produk + Bordir)</td><td>${fmtRp(grossSubtotal)}</td></tr>`
+        ? `<tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal (Product + Embroidery)</td><td>${fmtRp(grossSubtotal)}</td></tr>`
         : '';
     const discountRowHTML = discountAmt > 0
         ? `<tr class="totals-row" style="color:#16a34a;"><td colspan="3" style="text-align:right;font-weight:500;">🏷️ ${discountLbl}</td><td style="font-weight:600;">-${fmtRp(discountAmt)}</td></tr>`
         : '';
     const weightKg = order.shipping_weight_kg || 0;
     const weightLabel = weightKg > 0 ? ` · ${weightKg} kg` : '';
-    const ongkirRow = `<tr><td>Ongkir ${courier}${shippingCity ? ' → ' + shippingCity : ''}${weightLabel}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
+    const ongkirRow = `<tr><td>Shipping ${courier}${shippingCity ? ' → ' + shippingCity : ''}${weightLabel}</td><td>-</td><td>-</td><td>${fmtRp(shippingCost)}</td></tr>`;
 
     const photosHTML = (extraPhotos && extraPhotos.length > 0)
-        ? `<div class="invoice-photos"><div class="section-label">Referensi Produk</div><div class="photos-grid">${extraPhotos.map(s=>`<img loading="lazy" decoding="async" src="${s}" alt="Foto" />`).join('')}</div></div>`
+        ? `<div class="invoice-photos"><div class="section-label">Product Reference</div><div class="photos-grid">${extraPhotos.map(s=>`<img loading="lazy" decoding="async" src="${s}" alt="Photo" />`).join('')}</div></div>`
         : '';
 
     let bordirHTML = '';
@@ -10431,19 +10437,19 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         const renderVisCell = (emb) => {
             if (emb.type === 'nama') {
                 const col = emb.color && emb.color.toLowerCase() !== 'putih' ? emb.color : '#1a1a1a';
-                const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
                 return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;">
                     <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
                     ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;color:${col};margin:3px 0 0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
-                    <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Tinggi ~1,2 cm · ${posLbl}</p>
+                    <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Height ~1.2 cm · ${posLbl}</p>
                 </div>`;
             } else {
-                const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
                 // Use logo from emb.value — base64 (legacy) or Storage URL (new) — else WA form upload, else placeholder
                 const imgSrc = (emb.value && (emb.value.startsWith('data:image/') || emb.value.startsWith('http'))) ? emb.value : (bordirRefPhoto || null);
                 const imgTag = imgSrc
                     ? `<img loading="lazy" decoding="async" src="${imgSrc}" alt="Logo" style="max-width:120px;max-height:80px;object-fit:contain;display:block;margin:0 auto;border:1px solid #e5e5e5;border-radius:4px;padding:4px;" />`
-                    : `<div class="bordir-placeholder">Logo dikirim<br>via WA</div>`;
+                    : `<div class="bordir-placeholder">Logo sent<br>via WhatsApp</div>`;
                 return `<div style="text-align:center;">${imgTag}<p style="font-size:10px;color:#aaa;margin:6px 0 0;">${posLbl}</p></div>`;
             }
         };
@@ -10470,22 +10476,22 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const rightEmb = [nama, logo].find(e => e.position === 'kanan') || nama;
                 const leftEmb  = [nama, logo].find(e => e.position === 'kiri')  || logo;
 
-                const namaDet = `<p style="margin:0 0 6px;font-weight:700;">✏️ Bordir Nama</p>
-                    <p style="margin:2px 0;">Nama: <strong>${esc(nama.value||'-')}</strong></p>
-                    <p style="margin:2px 0;">Benang: ${esc(nama.color||'-')}</p>
-                    <p style="margin:2px 0;">Posisi: ${nama.position==='kanan'?'Kanan':'Kiri'} Dada</p>
-                    <p style="margin:4px 0 0;font-size:10px;color:#999;">Tinggi huruf ~1,2 cm</p>`;
-                const logoDet = `<p style="margin:0 0 6px;font-weight:700;">🎨 Bordir Logo</p>
-                    <p style="margin:2px 0;">Benang: ${esc(logo.color||'-')}</p>
-                    <p style="margin:2px 0;">Posisi: ${logo.position==='kanan'?'Kanan':'Kiri'} Dada</p>`;
+                const namaDet = `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
+                    <p style="margin:2px 0;">Name: <strong>${esc(nama.value||'-')}</strong></p>
+                    <p style="margin:2px 0;">Thread: ${esc(nama.color||'-')}</p>
+                    <p style="margin:2px 0;">Position: ${nama.position==='kanan'?'Right':'Left'} Chest</p>
+                    <p style="margin:4px 0 0;font-size:10px;color:#999;">Letter height ~1.2 cm</p>`;
+                const logoDet = `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
+                    <p style="margin:2px 0;">Thread: ${esc(logo.color||'-')}</p>
+                    <p style="margin:2px 0;">Position: ${logo.position==='kanan'?'Right':'Left'} Chest</p>`;
 
                 sections += `
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;">
                     <thead>
-                        <tr><th colspan="2" style="${thStyle}text-align:left;background:#f0f0f0;">Produk: ${esc(itemLbl)}</th></tr>
+                        <tr><th colspan="2" style="${thStyle}text-align:left;background:#f0f0f0;">Product: ${esc(itemLbl)}</th></tr>
                         <tr>
-                            <th style="${thStyle}width:50%;text-align:left;border-right:1px solid #e8e8e8;">Detail Permintaan — Bordir Nama</th>
-                            <th style="${thStyle}text-align:left;">Detail Permintaan — Bordir Logo</th>
+                            <th style="${thStyle}width:50%;text-align:left;border-right:1px solid #e8e8e8;">Request Details — Embroidery Name / Text</th>
+                            <th style="${thStyle}text-align:left;">Request Details — Embroidery Logo</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -10494,15 +10500,15 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                             <td style="${cellStyle}">${logoDet}</td>
                         </tr>
                         <tr>
-                            <td colspan="2" style="background:#f5f5f5;padding:6px 12px;font-size:10px;font-weight:700;color:#666;text-align:center;letter-spacing:0.06em;border-top:1px solid #e8e8e8;">MOCKUP VISUAL</td>
+                            <td colspan="2" style="background:#f5f5f5;padding:6px 12px;font-size:10px;font-weight:700;color:#666;text-align:center;letter-spacing:0.06em;border-top:1px solid #e8e8e8;">VISUAL MOCKUP</td>
                         </tr>
                         <tr>
                             <td style="padding:14px 10px;text-align:center;border-right:1px solid #e8e8e8;border-top:1px solid #f0f0f0;">
-                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">KANAN</div>
+                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">RIGHT</div>
                                 ${renderVisCell(rightEmb)}
                             </td>
                             <td style="padding:14px 10px;text-align:center;border-top:1px solid #f0f0f0;">
-                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">KIRI</div>
+                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">LEFT</div>
                                 ${renderVisCell(leftEmb)}
                             </td>
                         </tr>
@@ -10512,23 +10518,23 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             } else {
                 // ── Single bordir: detail | mockup side by side ──
                 const emb = nama || logo;
-                const posLbl = emb.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+                const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
                 const det = emb.type === 'nama'
-                    ? `<p style="margin:0 0 4px;font-weight:700;">✏️ Bordir Nama</p>
-                       <p style="margin:2px 0;font-size:11px;">Produk: ${esc(emb.item_label||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Nama: <strong style="font-size:13px;">${esc(emb.value||'-')}</strong></p>
-                       <p style="margin:2px 0;font-size:11px;">Benang: ${esc(emb.color||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Posisi: ${posLbl}</p>
-                       <p style="color:#999;font-size:10px;margin:4px 0 0;">Tinggi ~1,2 cm · panjang menyesuaikan</p>`
-                    : `<p style="margin:0 0 4px;font-weight:700;">🎨 Bordir Logo</p>
-                       <p style="margin:2px 0;font-size:11px;">Produk: ${esc(emb.item_label||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Benang: ${esc(emb.color||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Posisi: ${posLbl}</p>`;
+                    ? `<p style="margin:0 0 4px;font-weight:700;">✏️ Embroidery Name / Text</p>
+                       <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
+                       <p style="margin:2px 0;font-size:11px;">Name: <strong style="font-size:13px;">${esc(emb.value||'-')}</strong></p>
+                       <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
+                       <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>
+                       <p style="color:#999;font-size:10px;margin:4px 0 0;">Height ~1.2 cm · length follows</p>`
+                    : `<p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
+                       <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
+                       <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
+                       <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>`;
                 sections += `
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
                     <thead><tr>
-                        <th style="${thStyle}width:52%;text-align:left;">Detail Permintaan</th>
-                        <th style="${thStyle}border-left:1px solid #e5e5e5;text-align:center;">Mockup Visual</th>
+                        <th style="${thStyle}width:52%;text-align:left;">Request Details</th>
+                        <th style="${thStyle}border-left:1px solid #e5e5e5;text-align:center;">Visual Mockup</th>
                     </tr></thead>
                     <tbody><tr>
                         <td class="bordir-detail">${det}</td>
@@ -10538,7 +10544,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             }
         }
 
-        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Detail Bordir</div>${sections}</div>`;
+        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Embroidery Details</div>${sections}</div>`;
     }
 
     return `<div class="invoice-wrap">
@@ -10562,9 +10568,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             <div class="invoice-meta">
                 <p><strong>Invoice Number:</strong> ${esc(order.order_code||'-')}</p>
                 <p><strong>Invoice Date:</strong> ${fmtDate(order.invoice_date || order.created_at)}</p>
-                ${order.order_source ? `<p><strong>Sumber Order:</strong> ${esc(repSourceLabel(order.order_source))}</p>` : ''}
-                ${order.payment_method ? `<p><strong>Metode Bayar:</strong> ${esc(order.payment_method)}</p>` : ''}
-                ${order.billing_to ? `<p><strong>Ditagihkan ke (Partner):</strong> ${esc(order.billing_to)}</p>` : ''}
+                ${order.order_source ? `<p><strong>Order Source:</strong> ${esc(repSourceLabel(order.order_source))}</p>` : ''}
+                ${order.payment_method ? `<p><strong>Payment Method:</strong> ${esc(order.payment_method)}</p>` : ''}
+                ${order.billing_to ? `<p><strong>Billed To (Partner):</strong> ${esc(order.billing_to)}</p>` : ''}
             </div>
         </div>
         <div class="invoice-table-wrap">
@@ -10582,7 +10588,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     ${subtotalRowHTML}
                     ${discountRowHTML}
                     ${ongkirRow}
-                    <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Total Pembayaran</td><td>${fmtRp(total)}</td></tr>
+                    <tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Total Payment</td><td>${fmtRp(total)}</td></tr>
                 </tbody>
                 <tfoot><tr class="grand-total"><td colspan="3" style="text-align:right;">Total</td><td>${fmtRp(total)}</td></tr></tfoot>
             </table>
@@ -10599,11 +10605,11 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         <div class="invoice-tnc">
             <div class="section-label">Terms &amp; Conditions</div>
             <ol>
-                <li>Produksi akan dilakukan setelah dilakukan pembayaran.</li>
-                <li>Pembayaran dapat dilakukan secara transfer via bank BCA 8780269791 atau Mandiri 1220010735721 a/n Priscilla Lavine.</li>
-                <li>Mohon untuk mengirimkan bukti transfer melalui WhatsApp atau email.</li>
-                <li>Segala hal yang membutuhkan approval sebelum pengerjaan akan dilakukan komunikasi via WhatsApp dengan PIC yang bertanggung jawab.</li>
-                <li>Biaya ongkir masih estimasi, apabila biaya tambahan/kelebihan akan diinfokan sebelum pengiriman.</li>
+                <li>Production will begin after payment is received.</li>
+                <li>Payment can be made via bank transfer to BCA 8780269791 or Mandiri 1220010735721 under the name Priscilla Lavine.</li>
+                <li>Please send the transfer receipt via WhatsApp or email.</li>
+                <li>Any matters requiring approval before production will be communicated via WhatsApp with the responsible PIC.</li>
+                <li>Shipping cost is still an estimate; any additional charges will be communicated before shipment.</li>
             </ol>
         </div>
     </div>`;
