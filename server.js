@@ -3724,10 +3724,16 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                 totalAdditional += namaPrice * Number(item.quantity);
             }
             if (wantLogo) {
+                // logo_data opsional — admin bisa upload file di modal (base64 dataURL)
+                // atau kosongkan (placeholder 'Logo dikirim via WA' — file diminta via WA).
+                // externalizeEmbroideryLogos akan upload base64 → Supabase Storage saat save.
+                const logoData = typeof r.logo_data === 'string' && r.logo_data.startsWith('data:image/')
+                    ? r.logo_data
+                    : 'Logo dikirim via WA';
                 newEntries.push({
                     type: 'logo',
                     item_label: itemLabel,
-                    value: 'Logo dikirim via WA', // admin minta nanti via flow existing
+                    value: logoData,
                     color: String(r.logo_color || '').trim(),
                     position: r.logo_pos || 'kiri'
                 });
@@ -3743,9 +3749,12 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
         if (totalAdditional <= 0)
             return res.status(400).json({ error: 'Total harga bordir tambahan harus > 0' });
 
-        // Rebuild embroidery_details: keep yg lama + append baru
+        // Rebuild embroidery_details: keep yg lama + append baru.
+        // Externalize base64 logo dataURL → Supabase Storage (anti DB bloat, mirror
+        // POST /api/orders behavior). Yg gagal upload di-fallback ke base64 (never block).
         const existingEntries = safeJSON(order.embroidery_details, []);
-        const mergedEntries = [...(Array.isArray(existingEntries) ? existingEntries : []), ...newEntries];
+        const newEntriesStored = await externalizeEmbroideryLogos(newEntries);
+        const mergedEntries = [...(Array.isArray(existingEntries) ? existingEntries : []), ...newEntriesStored];
 
         const newHasNama = order.has_bordir_nama || newEntries.some(e => e.type === 'nama');
         const newHasLogo = order.has_bordir_logo || newEntries.some(e => e.type === 'logo');

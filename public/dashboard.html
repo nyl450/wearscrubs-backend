@@ -7424,27 +7424,40 @@ function openAddBordirModal() {
                 <div class="bg-blue-500/5 border border-blue-400/15 rounded-lg p-2.5">
                     <label class="flex items-center gap-2 text-[11px] font-bold text-blue-200 mb-2">
                         <input type="checkbox" class="ab-want-logo w-3.5 h-3.5 accent-blue-500" onchange="abOnToggleLogo(this)">
-                        🎨 Bordir Logo <span class="text-white/40 font-normal">(file logo minta via WA nanti)</span>
+                        🎨 Bordir Logo
                     </label>
-                    <div class="ab-logo-fields hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input type="text" class="ab-logo-color !py-1.5 !text-xs" placeholder="Warna benang">
-                        <select class="ab-logo-pos !py-1.5 !text-xs">
-                            <option value="kiri">Posisi: Kiri Dada</option>
-                            <option value="kanan">Posisi: Kanan Dada</option>
-                        </select>
-                        <input type="number" class="ab-logo-price !py-1.5 !text-xs sm:col-span-2" placeholder="Harga (default 30000)" value="30000" min="0" oninput="updateAddBordirPreview()">
+                    <div class="ab-logo-fields hidden space-y-2">
+                        <div>
+                            <label class="block text-[10px] font-semibold text-white/50 mb-1">Upload Logo <span class="text-white/40 font-normal">(PNG/JPG, opsional — kosongkan kalau file dikirim via WA)</span></label>
+                            <label class="w-full py-2 rounded-lg border border-dashed border-white/15 text-white/50 text-[11px] font-medium flex items-center justify-center gap-2 cursor-pointer hover:border-blue-400/50 transition">
+                                <i class="fa-solid fa-upload text-[10px]"></i> Pilih File
+                                <input type="file" class="ab-logo-file hidden" accept="image/*" onchange="abHandleLogoFile(this)" />
+                            </label>
+                            <div class="ab-logo-preview hidden mt-1.5"></div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input type="text" class="ab-logo-color !py-1.5 !text-xs" placeholder="Warna benang">
+                            <select class="ab-logo-pos !py-1.5 !text-xs">
+                                <option value="kiri">Posisi: Kiri Dada</option>
+                                <option value="kanan">Posisi: Kanan Dada</option>
+                            </select>
+                            <input type="number" class="ab-logo-price !py-1.5 !text-xs sm:col-span-2" placeholder="Harga (default 30000)" value="30000" min="0" oninput="updateAddBordirPreview()">
+                        </div>
                     </div>
                 </div>
             </div>
         </div>`).join('');
 
     updateAddBordirPreview();
+    // Reset uploaded logo cache per modal-open (anti stale kalau admin buka lagi order beda)
+    window._abLogoFiles = {};
     document.getElementById('add-bordir-modal').classList.remove('hidden');
     document.getElementById('add-bordir-modal').classList.add('flex');
 }
 function closeAddBordirModal() {
     const m = document.getElementById('add-bordir-modal');
     m.classList.add('hidden'); m.classList.remove('flex');
+    window._abLogoFiles = {};
 }
 // Toggle visibility detail bordir per item saat checkbox utama dicentang
 function abOnPickChange(cb) {
@@ -7462,6 +7475,18 @@ function abOnToggleNama(cb) {
 }
 function abOnToggleLogo(cb) {
     cb.closest('.ab-detail').querySelector('.ab-logo-fields').classList.toggle('hidden', !cb.checked);
+    // Reset upload state kalau di-uncheck (anti stale base64 kalau admin ganti pikiran)
+    if (!cb.checked) {
+        const wrap = cb.closest('[data-item-id]');
+        if (wrap) {
+            const itemId = Number(wrap.dataset.itemId);
+            if (window._abLogoFiles) delete window._abLogoFiles[itemId];
+            const fileEl = wrap.querySelector('.ab-logo-file');
+            if (fileEl) fileEl.value = '';
+            const prev = wrap.querySelector('.ab-logo-preview');
+            if (prev) { prev.classList.add('hidden'); prev.innerHTML = ''; }
+        }
+    }
     updateAddBordirPreview();
 }
 // Live total: sum bordir baru × qty per item
@@ -7491,6 +7516,34 @@ function updateAddBordirPreview() {
         preview.classList.add('hidden');
     }
 }
+// Per-item logo base64 (idempoten reset saat modal dibuka/ditutup).
+window._abLogoFiles = window._abLogoFiles || {};
+
+function abHandleLogoFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    // Guard 1.5MB — server body limit 2MB, base64 overhead ~33%. Aman < 2MB.
+    if (file.size > 1.5 * 1024 * 1024) {
+        toast('File logo terlalu besar (>1.5MB). Kompres dulu atau kirim via WA.', true);
+        input.value = ''; return;
+    }
+    if (!file.type.startsWith('image/')) {
+        toast('File harus gambar (PNG/JPG)', true); input.value = ''; return;
+    }
+    const wrap = input.closest('[data-item-id]');
+    const itemId = Number(wrap.dataset.itemId);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        window._abLogoFiles[itemId] = e.target.result;
+        const prev = wrap.querySelector('.ab-logo-preview');
+        if (prev) {
+            prev.classList.remove('hidden');
+            prev.innerHTML = `<img loading="lazy" decoding="async" src="${e.target.result}" style="max-height:60px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);object-fit:contain;" />`;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
 async function submitAddBordir() {
     const o = window._currentOrder;
     if (!o) return;
@@ -7521,6 +7574,11 @@ async function submitAddBordir() {
             itemPayload.logo_color = w.querySelector('.ab-logo-color')?.value.trim() || '';
             itemPayload.logo_pos = w.querySelector('.ab-logo-pos')?.value || 'kiri';
             itemPayload.logo_price = parseInt(w.querySelector('.ab-logo-price')?.value || 30000);
+            // logo_data optional — kalau admin upload file, kirim base64 dataURL.
+            // Backend externalize ke Supabase Storage (anti DB bloat). Kalau kosong
+            // → backend simpan placeholder 'Logo dikirim via WA' seperti dulu.
+            const logoB64 = window._abLogoFiles[itemId];
+            if (logoB64) itemPayload.logo_data = logoB64;
             // Posisi must differ kalau both
             if (wantNama && itemPayload.nama_pos === itemPayload.logo_pos) {
                 validationErr = 'Posisi nama & logo tidak boleh sama'; return;
