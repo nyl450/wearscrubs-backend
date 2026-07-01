@@ -2293,7 +2293,9 @@ app.get('/api/orders', requireAuth(), async (req, res) => {
         for (const order of orders) {
             // GANTI: ? → $1
             order.items = await dbAll(
-                `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) as product_name FROM order_items oi
+                `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) as product_name,
+                        COALESCE(p.category, oi.custom_product_category) as category
+                 FROM order_items oi
                  LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
                 [order.id]
             );
@@ -2309,6 +2311,7 @@ app.get('/api/orders/:id', requireAuth(), async (req, res) => {
         // Join product name + fetch first photo for each item
         order.items = await dbAll(
             `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) as product_name,
+                    COALESCE(p.category, oi.custom_product_category) as category,
                     COALESCE(
                         -- Exact match on variant_type (e.g. lengan pendek vs panjang), prefer slot 1.
                         -- NULLIF maps the string 'null' (no-variant sentinel) to real NULL;

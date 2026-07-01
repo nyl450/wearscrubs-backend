@@ -12502,6 +12502,9 @@ function openFormatOrderModal() {
 
 function _generateFormatOrderText(o) {
     const rp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
+    // Label satuan produk per kategori — dulu hardcoded 'baju' bikin salah utk
+    // celana/cap/gown. Custom product tanpa category → fallback 'pcs'.
+    const unitLabel = (cat) => ({ tops: 'baju', pants: 'celana', caps: 'cap', gown: 'gown' }[cat] || 'pcs');
     let bordirDetails = [];
     try { bordirDetails = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch(e) {}
 
@@ -12545,7 +12548,7 @@ function _generateFormatOrderText(o) {
                 text += `\nBordir logo:\nwarna bordir ${b.color || '-'}\n(${rp(bLP)})\n`;
             }
         }
-        text += `Jumlah: ${qty} baju\n\n`;
+        text += `Jumlah: ${qty} ${unitLabel(it.category)}\n\n`;
     }
 
     const shippingCost   = o.shipping_cost || 0;
