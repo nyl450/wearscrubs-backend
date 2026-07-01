@@ -172,11 +172,11 @@
     <dl class="meta">
       <div>
         <dt>Versi Dokumen</dt>
-        <dd>1.2</dd>
+        <dd>1.3</dd>
       </div>
       <div>
         <dt>Tanggal Terbit</dt>
-        <dd>26 Juni 2026</dd>
+        <dd>1 Juli 2026</dd>
       </div>
       <div>
         <dt>Pemilik Produk</dt>
@@ -257,7 +257,7 @@
       <li><strong>Infrastruktur & Operasi</strong> <span class="dots">.................................</span></li>
       <li><strong>Roadmap & Pending Items</strong> <span class="dots">.................................</span></li>
       <li><strong>Glossarium</strong> <span class="dots">.....................................................</span></li>
-      <li><strong>Pembaruan Fitur (Sprint Juni 2026)</strong> <span class="dots">..............</span>
+      <li><strong>Pembaruan Fitur (Sprint Juni – Awal Juli 2026)</strong> <span class="dots">........</span>
         <ol>
           <li>Keranjang Kasir (Cart Staging)</li>
           <li>Mode Bulk Bordir (Banyak Produk Sekaligus)</li>
@@ -268,6 +268,12 @@
           <li>Tanggal Order di Invoice</li>
           <li>Export Excel di Report</li>
           <li>Perbaikan Keamanan & Akurasi Harga</li>
+          <li>COGS / HPP — Cost Accounting per Produk</li>
+          <li>Kirim Malaysia & Singapore (Kasir)</li>
+          <li>Invoice Full Bahasa Inggris</li>
+          <li>Bordir Nama 2-Baris di Checkout Publik</li>
+          <li>Upload File Logo di Tambah Bordir Post-Payment</li>
+          <li>Format Order Sesuai Kategori Produk</li>
         </ol>
       </li>
     </ol>
@@ -1155,8 +1161,8 @@ git -C "D:/ws/wearscrubs-backend" push origin main
      12. PEMBARUAN FITUR (SPRINT JUNI 2026)
      ──────────────────────────────────────────────────────────── -->
 <section>
-  <h1 class="chapter"><span class="num">12</span>Pembaruan Fitur (Sprint Juni 2026)</h1>
-  <p>Bab ini merangkum fitur-fitur baru yang ditambahkan sepanjang Juni 2026, ditulis dengan bahasa sederhana supaya mudah dipahami siapa pun. Semua fitur di bawah sudah aktif (live) di dashboard.</p>
+  <h1 class="chapter"><span class="num">12</span>Pembaruan Fitur (Sprint Juni – Awal Juli 2026)</h1>
+  <p>Bab ini merangkum fitur-fitur baru yang ditambahkan dari Juni sampai awal Juli 2026, ditulis dengan bahasa sederhana supaya mudah dipahami siapa pun. Semua fitur di bawah sudah aktif (live) di dashboard.</p>
 
   <h2>12.1 Keranjang Kasir (Cart Staging)</h2>
   <p><strong>Masalah lama:</strong> Saat input pesanan, begitu klik tombol simpan, sistem langsung membuat invoice. Padahal sering kali satu pesanan berisi campuran — misalnya atasan Minna pakai bordir (butuh ukuran &amp; nama), digabung celana atau topi yang tidak pakai bordir. Alurnya jadi kaku karena tiap jenis produk harus dibuat invoice terpisah.</p>
@@ -1241,6 +1247,82 @@ git -C "D:/ws/wearscrubs-backend" push origin main
     </tbody>
   </table>
   <p>Catatan: pengaman utama di sisi server tetap menjadi sumber kebenaran — perbaikan di atas membuat tampilan dashboard akurat dan mencegah kebingungan sejak awal.</p>
+
+  <h2>12.10 COGS / HPP — Cost Accounting per Produk</h2>
+  <p><strong>Masalah lama:</strong> Sistem hanya mencatat harga jual, tidak biaya produksi. Untuk tahu margin per produk, owner harus buka spreadsheet terpisah dan menghitung manual — rawan salah dan tidak real-time.</p>
+  <p><strong>Sekarang:</strong> Sistem memiliki modul <strong>Cost of Goods Sold (COGS)</strong> lengkap. Tiap produk punya biaya produksi per varian (bahkan bisa per-warna) yang otomatis ke-snapshot di setiap transaksi. Laporan margin per produk tersedia real-time. Semua field COGS <strong>khusus admin</strong> — data biaya tidak pernah bocor ke customer atau API publik.</p>
+  <ul>
+    <li><strong>COGS per produk + varian.</strong> Meniru struktur harga jual: satu produk bisa punya biaya beda antara Lengan Pendek vs Lengan Panjang, atau antara Size M vs XXL. Contoh nyata (diverifikasi dari sheet asli): Gown Size XXL = 156.705 vs Size M = 146.925, Headcap = 22.366.</li>
+    <li><strong>Override per-warna.</strong> Beberapa warna pakai kain lebih mahal (mis. Charcoal beda kain dari Light Grey). Kalau ada override warna → resolusi: <em>override warna &gt; per-variant &gt; default produk</em>.</li>
+    <li><strong>Kalkulator komponen (modal).</strong> Bukan input flat, tapi hitung dari komponen: panjang kain per size × harga vendor per meter + komponen lain (flat vendor / per-meter / per-m²). Sistem menghitung COGS per-size, lalu rata-rata jadi COGS efektif. Config tersimpan di produk — kalau harga vendor naik, tinggal update angka, sistem re-compute.</li>
+    <li><strong>Cost bordir global di Setting.</strong> Biaya ke penjahit untuk bordir nama/logo disetel sekali di menu Setting (bukan per produk). Bordir <strong>ikut COGS</strong> karena bagi owner ini biaya nyata ke penjahit — sisi jual bordir tetap revenue, sisi cost tetap terpisah.</li>
+    <li><strong>Snapshot di order_items.</strong> Saat order dibuat, COGS tiap item di-snapshot (<code>unit_cogs</code>, <code>bordir_nama_cogs</code>, <code>bordir_logo_cogs</code>, <code>total_cogs</code>) — pakai harga saat itu, bukan harga sekarang. Barang bonus ikut kena cost (karena barang tetap keluar).</li>
+    <li><strong>Report margin.</strong> Dua endpoint: <code>/api/reports/margin</code> (Gross Profit total per periode: Net = produk − diskon, tanpa ongkir; GP = Net − COGS) dan <code>/api/reports/margin-by-product</code> (breakdown per produk/variant, diurutkan profit terbesar — payoff utama).</li>
+    <li><strong>Kolom HPP / GP / Margin di Excel export.</strong> Report per-transaksi Excel sekarang punya kolom HPP + Gross Profit + Margin %.</li>
+    <li><strong>Payload publik bersih.</strong> Fungsi <code>formatProduct</code> strip field <code>cost_config</code> dan turunan COGS sebelum kirim ke website publik — biaya produksi tidak pernah terlihat customer.</li>
+  </ul>
+  <p><strong>Catatan bisnis:</strong> Consignment 30% dan ongkir <em>bukan</em> COGS (mereka pengurang revenue / pass-through, bukan biaya bahan). Report margin di-desain supaya angka Net Sales sinkron dengan Excel report yang sudah ada.</p>
+
+  <h2>12.11 Kirim Malaysia &amp; Singapore (Kasir)</h2>
+  <p><strong>Konteks:</strong> Beberapa customer international minta dikirim ke luar negeri (Malaysia, Singapore). Sebelumnya dropdown kota di Kasir hanya Indonesia — admin harus akal-akalan pilih kota Indonesia dan override ongkir manual, tidak konsisten.</p>
+  <p><strong>Sekarang:</strong> Malaysia dan Singapore muncul di dropdown Kasir (paling bawah setelah kota Indonesia). Admin pilih negara → isi nominal ongkir sesuai quotation ekspedisi international (Pos EMS, Lion Parcel Intl, J&amp;T Cargo Intl, dsb).</p>
+  <ul>
+    <li><strong>Kasir-only.</strong> Tidak muncul di checkout publik — customer tidak bisa pilih sendiri, hanya admin. Ini disengaja karena order international butuh koordinasi manual (alamat, ongkir, dokumen).</li>
+    <li><strong>Ongkir manual, tanpa default.</strong> Field ongkir auto-isi Rp 0 saat dipilih; admin harus isi angka sesuai kesepakatan dengan customer.</li>
+    <li><strong>Auto-courier default</strong> = "Ekspedisi Internasional (pilih manual)" — admin ganti ke nama ekspedisi yang dipakai.</li>
+    <li><strong>Pengamanan berlapis:</strong> endpoint <code>/api/cities</code> filter dua tujuan international ini kalau caller bukan admin (public checkout tidak lihat mereka), dan POST orders juga menolak <em>submit langsung</em> shipping_city international kalau bukan admin (anti-bypass via DOM).</li>
+  </ul>
+
+  <h2>12.12 Invoice Full Bahasa Inggris</h2>
+  <p><strong>Konteks:</strong> Beberapa customer international (dokter asing, WNA praktek di Indonesia, dan kini customer Malaysia/Singapore) minta invoice dalam Bahasa Inggris. Sebelumnya invoice PDF campur ID/EN — bagian branding sudah English (Billed To, Description, Unit Price) tapi bagian item/bordir/T&amp;C masih Indonesia.</p>
+  <p><strong>Sekarang:</strong> Semua label di invoice PDF konsisten Bahasa Inggris:</p>
+  <table class="keep">
+    <thead><tr><th>Area</th><th>Sebelum</th><th>Sesudah</th></tr></thead>
+    <tbody>
+      <tr><td>Header meta</td><td>Sumber Order / Metode Bayar / Ditagihkan ke</td><td>Order Source / Payment Method / Billed To (Partner)</td></tr>
+      <tr><td>Varian produk</td><td>Lengan Pendek / Panjang, Gratis</td><td>Short Sleeve / Long Sleeve, Free</td></tr>
+      <tr><td>Baris bordir</td><td>Bordir Nama / Bordir Logo</td><td>Embroidery Name / Text — Embroidery Logo</td></tr>
+      <tr><td>Subtotal &amp; Ongkir</td><td>Subtotal (Produk + Bordir), Ongkir, Total Pembayaran</td><td>Subtotal (Product + Embroidery), Shipping, Total Payment</td></tr>
+      <tr><td>Detail bordir</td><td>Detail Permintaan / Mockup Visual / Detail Bordir</td><td>Request Details / Visual Mockup / Embroidery Details</td></tr>
+      <tr><td>Field bordir</td><td>Nama / Benang / Posisi / Kanan-Kiri Dada</td><td>Name / Thread / Position / Right-Left Chest</td></tr>
+      <tr><td>Tinggi huruf</td><td>Tinggi ~1,2 cm · panjang menyesuaikan</td><td>Height ~1.2 cm · length follows</td></tr>
+      <tr><td>Placeholder logo</td><td>Logo dikirim via WA</td><td>Logo sent via WhatsApp</td></tr>
+      <tr><td>Terms &amp; Conditions</td><td>5 poin dalam Bahasa Indonesia</td><td>5 poin diterjemahkan (Production after payment, BCA/Mandiri, send receipt via WA/email, approval via PIC, shipping estimate)</td></tr>
+      <tr><td>Diskon label (dari DB)</td><td>"Diskon 5%" / "Diskon per produk"</td><td>Auto-map ke "5% Discount" / "Per-item Discount" saat render</td></tr>
+      <tr><td>Format tanggal</td><td>26 Juni 2026 (locale id-ID)</td><td>26 June 2026 (locale en-GB)</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Yang tidak berubah:</strong> Currency tetap <code>Rp 1.000.000</code> dengan pemisah ribuan titik (standar Indonesia — comma terasa asing untuk IDR). Pesan WhatsApp dan Excel report tetap Bahasa Indonesia (target audience masih customer domestik). Label diskon di DB tidak diubah — hanya di-translate saat render invoice supaya report/Excel domestik konsisten.</p>
+
+  <h2>12.13 Bordir Nama 2-Baris di Checkout Publik</h2>
+  <p><strong>Konteks:</strong> Fitur baris ke-2 nama bordir (mis. "dr. James, M.Ked" di baris 1 dan "Sp.PD" di baris 2) sudah ada di Kasir sejak awal Juni, tapi belum tersedia di checkout publik — customer yang order langsung dari website hanya bisa isi satu baris.</p>
+  <p><strong>Sekarang:</strong> Checkout publik ID dan EN sama-sama punya field <strong>"Baris ke-2 (opsional — mis. jabatan/gelar)"</strong> di bawah field nama utama. Format storage konsisten dengan Kasir (<code>value_line2</code> di JSON), sehingga renderer invoice / mockup visual / pesan WhatsApp yang sudah ada langsung mendukung tanpa perubahan tambahan.</p>
+
+  <h2>12.14 Upload File Logo di Tambah Bordir Post-Payment</h2>
+  <p><strong>Masalah lama:</strong> Fitur "Tambah Bordir Setelah Bayar" (untuk customer yang baru minta bordir setelah order lunas) tidak punya field upload logo. Semua bordir logo yang di-add lewat modal ini otomatis disimpan sebagai placeholder "Logo dikirim via WA", padahal customer kadang sudah kasih file lewat WhatsApp — admin tidak bisa attach ke sistem.</p>
+  <p><strong>Sekarang:</strong> Modal "Tambah Bordir" punya section <strong>Upload Logo</strong> (PNG/JPG, opsional):</p>
+  <ul>
+    <li>Admin pilih file → thumbnail preview muncul.</li>
+    <li>Guard file &lt; 1,5 MB (server body limit 2 MB, base64 overhead ~33%).</li>
+    <li>File di-upload ke Supabase Storage bucket <code>logos</code> (bukan disimpan sebagai base64 di DB — anti bloat, sama pattern dengan checkout website).</li>
+    <li>Kalau admin biarkan kosong → tetap simpan placeholder "Logo dikirim via WA" (behavior lama).</li>
+  </ul>
+  <p><strong>Konteks flow lengkap:</strong> Customer bayar → admin add bordir → status order otomatis pindah ke <code>bordir</code> dengan <code>bordir_status='pending'</code>. Setelah selisih bordir tambahan lunas + bordir approved, tombol "Tandai Bordir Selesai" muncul (bukan "Kemas Barang") — sesuai gate 4-state yang sudah ada.</p>
+
+  <h2>12.15 Format Order Sesuai Kategori Produk</h2>
+  <p><strong>Bug minor:</strong> Tombol "Format Order" (generate teks WhatsApp untuk grup tim internal) selalu menulis <code>Jumlah: N baju</code> untuk semua produk — padahal celana harusnya "celana", gown harusnya "gown", cap harusnya "cap".</p>
+  <p><strong>Sekarang:</strong> Label satuan mengikuti kategori produk:</p>
+  <table class="keep">
+    <thead><tr><th>Kategori</th><th>Label</th></tr></thead>
+    <tbody>
+      <tr><td>tops (Alex, Minna, Taylor, dst.)</td><td>baju</td></tr>
+      <tr><td>pants (Dylan, dst.)</td><td>celana</td></tr>
+      <tr><td>caps (Kade, dst.)</td><td>cap</td></tr>
+      <tr><td>gown (Marchie, Avery, dst.)</td><td>gown</td></tr>
+      <tr><td>custom / unknown</td><td>pcs (fallback aman)</td></tr>
+    </tbody>
+  </table>
+  <p>Backend <code>/api/orders</code> sekarang mengembalikan field <code>category</code> di setiap item (COALESCE ke <code>custom_product_category</code> untuk custom product), sehingga frontend bisa langsung memetakan tanpa lookup tambahan.</p>
 </section>
 
 <!-- ────────────────────────────────────────────────────────────
@@ -1251,6 +1333,22 @@ git -C "D:/ws/wearscrubs-backend" push origin main
   <table>
     <thead><tr><th>Versi</th><th>Tanggal</th><th>Perubahan</th></tr></thead>
     <tbody>
+      <tr>
+        <td><strong>1.3</strong></td>
+        <td>1 Juli 2026</td>
+        <td>
+          Catch-up sprint 27 Juni – 1 Juli. Bab 12 di-extend dengan 6 sub-section baru (§12.10 – §12.15):
+          <ul>
+            <li>§12.10 — <strong>COGS / HPP</strong> lengkap: cost per produk + variant + override per-warna, kalkulator komponen, snapshot di order_items, report margin per-produk (<code>/api/reports/margin</code> + <code>margin-by-product</code>), kolom HPP/GP/Margin di Excel, semua admin-only.</li>
+            <li>§12.11 — <strong>Kirim Malaysia &amp; Singapore</strong> di Kasir (kasir-only, ongkir admin input manual, filter di <code>/api/cities</code> + gate POST orders anti-bypass).</li>
+            <li>§12.12 — <strong>Invoice full Bahasa Inggris</strong> (semua label, T&amp;C, diskon-label mapping, date locale en-GB; currency Rp tetap id-ID).</li>
+            <li>§12.13 — <strong>Bordir nama 2-baris</strong> di checkout publik ID+EN (parity dengan Kasir; format storage <code>value_line2</code>).</li>
+            <li>§12.14 — <strong>Upload file logo</strong> di modal "Tambah Bordir" post-payment (guard 1,5 MB, upload ke Supabase Storage bucket <code>logos</code>).</li>
+            <li>§12.15 — <strong>Format Order</strong> satuan sesuai kategori produk (tops→baju, pants→celana, caps→cap, gown→gown, custom→pcs).</li>
+            <li>Bab 12 title extended: "Sprint Juni – Awal Juli 2026". Backend order items query tambah field <code>category</code>.</li>
+          </ul>
+        </td>
+      </tr>
       <tr>
         <td><strong>1.2</strong></td>
         <td>26 Juni 2026</td>
