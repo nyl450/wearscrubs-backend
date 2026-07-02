@@ -12107,7 +12107,10 @@ function _kasirCollectSingleItems() {
                 custom_price: cpPrice, custom_cogs: cpCogs, is_custom_size: false, is_po: false });
             const cpBaseSub = cpPrice * cpQty;
             const cpBordirSub = ((bordirNamaCP ? bNP : 0) + (bordirLogoCP ? bLP : 0)) * cpQty;
-            productSubtotal += cpBaseSub + cpBordirSub;
+            // Bonus items = gratis; jangan masuk ke productSubtotal (backend juga
+            // menganggap harga 0 saat submit). Kalau tidak di-gate, cart preview
+            // & Grand Total salah menampilkan harga padahal admin tandai [Bonus].
+            if (!isBonusCP) productSubtotal += cpBaseSub + cpBordirSub;
             if (!isBonusCP) {
                 const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
                 const d = discAmountFor(tok, cpBaseSub, cpBordirSub);
@@ -12169,7 +12172,9 @@ function _kasirCollectSingleItems() {
         const approxBase = customPrice !== null ? customPrice : waCatalogUnitPrice(idx);
         const baseSub = approxBase * qtyVal;
         const bordirSub = ((bordirNama ? bNP : 0) + (bordirLogo ? bLP : 0)) * qtyVal;
-        productSubtotal += baseSub + bordirSub;
+        // Bonus items = gratis; jangan masuk ke productSubtotal (backend juga
+        // menganggap harga 0 saat submit — lihat is_bonus gate di server.js).
+        if (!isBonus) productSubtotal += baseSub + bordirSub;
         if (!isBonus) {
             const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
             const d = discAmountFor(tok, baseSub, bordirSub);
