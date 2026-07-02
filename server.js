@@ -2626,6 +2626,36 @@ app.post('/api/orders', async (req, res) => {
                         item.unit_cogs || 0, item.bordir_nama_cogs || 0, item.bordir_logo_cogs || 0, item.packaging_cogs || 0, item.total_cogs || 0]
                 );
             }
+
+            // Auto-confirm order gratis (total = 0): kalau semua produk bonus + ongkir 0
+            // (mis. free giveaway internal, endorsement barang), lewati step "Konfirmasi
+            // Bayar" — tidak ada bukti bayar yg perlu diupload. Set langsung ke status
+            // berikutnya (mirror confirm-payment logic). Gate isAdmin: hanya admin yg bisa
+            // set is_bonus, jadi total=0 hanya bisa muncul dari Kasir admin.
+            if (isAdmin && total === 0) {
+                const isPickupAuto = (courier || '').trim() === PICKUP_COURIER;
+                // Bordir → 'bordir'; pickup no-bordir → langsung 'done'; else → 'confirmed' (kemas).
+                const autoStatus = (hasBordirLogo || hasBordirNama)
+                    ? 'bordir'
+                    : (isPickupAuto ? 'done' : 'confirmed');
+                const actor = authUser?.username || 'admin';
+                await client.query(
+                    `UPDATE orders SET payment_status = 'paid', order_status = $1, paid_at = NOW(), updated_at = NOW() WHERE id = $2`,
+                    [autoStatus, newOrderId]
+                );
+                // Audit photo step 'payment' tanpa foto — tidak ada bukti bayar untuk order gratis.
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'payment',NULL,$2,$3)`,
+                    [newOrderId, 'Auto-confirmed: total Rp 0 (bonus/free)', actor]
+                );
+                // Pickup langsung done → catat audit 'done' juga (konsisten dgn confirm-payment).
+                if (autoStatus === 'done') {
+                    await client.query(
+                        `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'done',NULL,$2,$3)`,
+                        [newOrderId, 'Diambil langsung di event/walk-in', actor]
+                    );
+                }
+            }
             return newOrderId;
         });
 
