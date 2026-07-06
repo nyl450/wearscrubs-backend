@@ -10633,11 +10633,12 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     : '';
                 // Sub-info "Height" tetap abu-abu, tapi kalau bg gelap pakai abu-terang.
                 const subCol = dark ? '#cbd5e1' : '#aaa';
-                return `<div style="background:${garmentBg};border-radius:6px;padding:14px 10px;text-align:center;color:${col};">
+                // Info "Height ~1.2 cm · Position" dihilangkan — sudah ada di Request
+                // Details, redundant di mockup (user request).
+                return `<div style="background:${garmentBg};border-radius:6px;padding:16px 10px;text-align:center;color:${col};">
                     <p style="font-size:17px;font-weight:700;margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
                     ${dividerHTML}
                     ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;margin:${emb.value_underline ? '0' : '3px 0 0'};font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
-                    <p style="font-size:10px;color:${subCol};margin:6px 0 0;">Height ~1.2 cm · ${posLbl}</p>
                 </div>`;
             } else {
                 const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
@@ -10656,9 +10657,10 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                         ? `<span style="background:linear-gradient(90deg,#ef4444,#f59e0b,#eab308,#22c55e,#3b82f6,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:700;">Multi warna</span>`
                         : `<span style="color:${THREAD_HEX[rawCol.toLowerCase()] || rawCol};font-weight:600;">${esc(rawCol)}</span>`)
                     : '';
-                return `<div style="background:${garmentBg};border-radius:6px;padding:14px 10px;text-align:center;">
+                // Info Position + Thread color di bawah logo dihilangkan — sudah ada
+                // di Request Details, redundant di mockup (user request).
+                return `<div style="background:${garmentBg};border-radius:6px;padding:16px 10px;text-align:center;">
                     ${imgTag}
-                    <p style="font-size:10px;color:${subCol};margin:6px 0 0;">${posLbl}${colorHint ? ' · Thread: ' + colorHint : ''}</p>
                 </div>`;
             }
         };
@@ -10683,7 +10685,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         }
 
         let sections = '';
-        const cellStyle = 'padding:10px 12px;vertical-align:top;font-size:11px;color:#333;line-height:1.55;';
+        // Request Details: font-size 13px (dari 11px) + color near-black #1a1a1a
+        // (dari #333) supaya lebih kebaca. User request setelah cleanup mockup.
+        const cellStyle = 'padding:12px 14px;vertical-align:top;font-size:13px;color:#1a1a1a;line-height:1.6;';
         const thStyle   = 'padding:7px 12px;font-size:10px;font-weight:700;color:#555;background:#fafafa;border-bottom:1px solid #e8e8e8;';
 
         // Helper: cari logo unused dgn item_label sama (utk pair hasBoth).
@@ -10711,13 +10715,13 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const leftEmb  = [nama, logo].find(e => e.position === 'kiri')  || logo;
 
                 const namaDet = `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
-                    <p style="margin:2px 0;">Name: <strong>${esc(nama.value||'-')}</strong></p>
-                    <p style="margin:2px 0;">Thread: ${esc(nama.color||'-')}</p>
-                    <p style="margin:2px 0;">Position: ${nama.position==='kanan'?'Right':'Left'} Chest</p>
-                    <p style="margin:4px 0 0;font-size:10px;color:#999;">Letter height ~1.2 cm</p>`;
+                    <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(nama.value||'-')}</strong></p>
+                    <p style="margin:3px 0;">Thread: ${esc(nama.color||'-')}</p>
+                    <p style="margin:3px 0;">Position: ${nama.position==='kanan'?'Right':'Left'} Chest</p>
+                    <p style="margin:5px 0 0;font-size:11px;color:#555;">Letter height ~1.2 cm</p>`;
                 const logoDet = `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
-                    <p style="margin:2px 0;">Thread: ${esc(logo.color||'-')}</p>
-                    <p style="margin:2px 0;">Position: ${logo.position==='kanan'?'Right':'Left'} Chest</p>`;
+                    <p style="margin:3px 0;">Thread: ${esc(logo.color||'-')}</p>
+                    <p style="margin:3px 0;">Position: ${logo.position==='kanan'?'Right':'Left'} Chest</p>`;
 
                 sections += `
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;">
@@ -10754,16 +10758,16 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const emb = nama || logo;
                 const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
                 const det = emb.type === 'nama'
-                    ? `<p style="margin:0 0 4px;font-weight:700;">✏️ Embroidery Name / Text</p>
-                       <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Name: <strong style="font-size:13px;">${esc(emb.value||'-')}</strong></p>
-                       <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>
-                       <p style="color:#999;font-size:10px;margin:4px 0 0;">Height ~1.2 cm · length follows</p>`
-                    : `<p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
-                       <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
-                       <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>`;
+                    ? `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
+                       <p style="margin:3px 0;">Product: ${esc(emb.item_label||'-')}</p>
+                       <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(emb.value||'-')}</strong></p>
+                       <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
+                       <p style="margin:3px 0;">Position: ${posLbl}</p>
+                       <p style="color:#555;font-size:11px;margin:5px 0 0;">Height ~1.2 cm · length follows</p>`
+                    : `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
+                       <p style="margin:3px 0;">Product: ${esc(emb.item_label||'-')}</p>
+                       <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
+                       <p style="margin:3px 0;">Position: ${posLbl}</p>`;
                 sections += `
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
                     <thead><tr>
