@@ -10551,19 +10551,42 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         // Helper: render one visual mockup cell
         const renderVisCell = (emb) => {
             if (emb.type === 'nama') {
-                const col = emb.color && emb.color.toLowerCase() !== 'putih' ? emb.color : '#1a1a1a';
+                // Warna benang dari user — bisa Bahasa Indonesia (mis. "Kuning", "Merah")
+                // yg BUKAN nama CSS valid. Map Indonesia → CSS keyword umum; kalau tidak
+                // dikenal biarkan raw (kalau valid CSS/hex akan render, kalau tidak
+                // browser fallback ke currentColor pada parent). "Putih" → dark supaya
+                // tetap terbaca di background terang.
+                const colorMap = {
+                    'putih': '#1a1a1a', 'hitam': '#000000',
+                    'kuning': '#eab308', 'merah': '#dc2626', 'hijau': '#16a34a',
+                    'biru': '#2563eb', 'ungu': '#7c3aed', 'pink': '#ec4899',
+                    'oranye': '#ea580c', 'orange': '#ea580c',
+                    'abu-abu': '#6b7280', 'abu abu': '#6b7280', 'abu': '#6b7280',
+                    'coklat': '#78350f', 'cokelat': '#78350f',
+                    'emas': '#b45309', 'gold': '#b45309',
+                    'perak': '#94a3b8', 'silver': '#94a3b8',
+                    'navy': '#1e3a8a', 'krem': '#d97706', 'cream': '#d97706',
+                    'toska': '#0d9488', 'tosca': '#0d9488',
+                    'maroon': '#7f1d1d', 'ungu tua': '#5b21b6',
+                    'hijau tua': '#166534', 'hijau muda': '#22c55e',
+                    'biru muda': '#38bdf8', 'biru tua': '#1e40af',
+                };
+                const rawCol = (emb.color || '').trim();
+                const col = colorMap[rawCol.toLowerCase()] || rawCol || '#1a1a1a';
                 const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
-                // value_underline: opsional. Kalau true → render garis solid warna
-                // benang di antara baris 1 & baris 2 (meniru real bordir divider).
-                // Width 60% supaya tidak melebar sampai edge, konsisten dgn contoh
-                // real (foto user: garis lebih pendek dari nama).
+                // value_underline: opsional. Pakai currentColor supaya garis SELALU
+                // mengikuti warna text — meskipun colorMap tidak kenal warna user,
+                // fallback text color & garis tetap konsisten (user: "garis sesuai
+                // warna text saja karena ini contoh visual").
                 const dividerHTML = emb.value_underline
-                    ? `<div style="border-top:1.5px solid ${col};margin:5px auto 3px;width:60%;"></div>`
+                    ? `<div style="border-top:1.5px solid currentColor;margin:5px auto 3px;width:60%;"></div>`
                     : '';
-                return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;">
-                    <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
+                // Warna diset di wrapper — <p> individu inherit. Divider pakai
+                // currentColor → auto match. "Height" line override ke abu-abu.
+                return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;color:${col};">
+                    <p style="font-size:17px;font-weight:700;margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
                     ${dividerHTML}
-                    ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;color:${col};margin:${emb.value_underline ? '0' : '3px 0 0'};font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
+                    ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;margin:${emb.value_underline ? '0' : '3px 0 0'};font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
                     <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Height ~1.2 cm · ${posLbl}</p>
                 </div>`;
             } else {
