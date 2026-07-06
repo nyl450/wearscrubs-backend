@@ -10428,10 +10428,14 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             if (item.bordir_logo) { totalBordirLogoQty += qty; totalBordirLogoCost += logoP * qty; }
         }
 
-        const bonusTag = isBonus ? ' <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">🎁 BONUS</span>' : '';
-        const customTag = item.is_custom_size ? ' <span style="background:#e0f2fe;color:#075985;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM</span>' : '';
-        const cprodTag = item.is_custom_product ? ' <span style="background:#f3e8ff;color:#6b21a8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">CUSTOM PRODUCT</span>' : '';
-        const poTag = item.is_po ? ` <span style="background:#ffedd5;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;">PRE-ORDER${item.po_fulfilled ? ' ✓' : ''}</span>` : '';
+        // Badge styles — inline-block + nowrap supaya multi-word badge (mis.
+        // "CUSTOM PRODUCT", "PRE-ORDER") tidak wrap paksa di tengah kata di PDF
+        // (Edge headless kadang break di space kalau cell sempit).
+        const badgeBase = 'font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:0.04em;white-space:nowrap;display:inline-block;';
+        const bonusTag = isBonus ? `<span style="background:#fef3c7;color:#92400e;${badgeBase}">BONUS</span>` : '';
+        const customTag = item.is_custom_size ? `<span style="background:#e0f2fe;color:#075985;${badgeBase}">CUSTOM</span>` : '';
+        const cprodTag = item.is_custom_product ? `<span style="background:#f3e8ff;color:#6b21a8;${badgeBase}">CUSTOM PRODUCT</span>` : '';
+        const poTag = item.is_po ? `<span style="background:#ffedd5;color:#9a3412;${badgeBase}">PRE-ORDER${item.po_fulfilled ? ' ✓' : ''}</span>` : '';
         // Variant type — DB simpan short form 'pendek'/'panjang', tampilkan full
         // "Lengan Pendek"/"Lengan Panjang" di invoice biar customer paham (bukan disingkat).
         // Fallback: capitalize value lain (mis. variant produk masa depan). Skip kalau null/empty
@@ -10442,8 +10446,17 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                      : vtRaw ? vtRaw.charAt(0).toUpperCase() + vtRaw.slice(1)
                      : '';
         const vt = vtFull ? ` <span style="color:#6b7280">·</span> ${esc(vtFull)}` : '';
+        // Struktur 2 baris: (1) info produk, (2) badge collection dengan gap kecil.
+        // Sebelumnya semua inline → PDF break di tengah "CUSTOM PRODUCT" dan
+        // membuat cell terlihat berantakan.
+        const badgeStrip = (customTag || cprodTag || poTag || bonusTag)
+            ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${customTag}${cprodTag}${poTag}${bonusTag}</div>`
+            : '';
         itemRowsHTML += `<tr>
-            <td>${esc(item.product_name || 'Product')} <strong>${esc(item.color || '')}</strong>${vt} Size: ${esc(item.size || '')}${customTag}${cprodTag}${poTag}${bonusTag}</td>
+            <td>
+                <div style="line-height:1.45;">${esc(item.product_name || 'Product')} <strong>${esc(item.color || '')}</strong>${vt} Size: ${esc(item.size || '')}</div>
+                ${badgeStrip}
+            </td>
             <td>${isBonus ? 'Free' : fmtRp(basePrice)}</td>
             <td>${qty}</td>
             <td>${isBonus ? 'Rp 0' : fmtRp(basePrice * qty)}</td>
@@ -10512,22 +10525,47 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             }
         };
 
-        // Group embDetails by item_label so multi-product orders show all items
-        const groups = {};
-        for (const emb of embDetails) {
-            const key = emb.item_label || '(produk)';
-            if (!groups[key]) groups[key] = { nama: null, logo: null };
-            if (emb.type === 'nama' && !groups[key].nama) groups[key].nama = emb;
-            if (emb.type === 'logo' && !groups[key].logo) groups[key].logo = emb;
+        // Render setiap entry embroidery (bukan collapse per item_label).
+        // Sebelumnya: grouping by item_label + keep 1 nama per group → di bulk
+        // mode dgn beberapa nama utk item_label sama (2 dokter pakai size XS
+        // dari produk yg sama), nama ke-2..N HILANG dari invoice.
+        // Sekarang: iterate berurutan. Untuk tiap nama, coba pair dgn logo
+        // (unused) yg item_label-nya sama → render hasBoth block. Kalau tidak
+        // ada logo pasangan → render single-nama block. Logo tanpa pasangan
+        // di-render single-logo di akhir loop.
+        const usedLogoIdx = new Set();
+        // Pre-scan: index logo per item_label untuk pairing cepat.
+        const logosByLabel = {};
+        for (let i = 0; i < embDetails.length; i++) {
+            if (embDetails[i].type === 'logo') {
+                const k = embDetails[i].item_label || '(produk)';
+                if (!logosByLabel[k]) logosByLabel[k] = [];
+                logosByLabel[k].push(i);
+            }
         }
 
         let sections = '';
         const cellStyle = 'padding:10px 12px;vertical-align:top;font-size:11px;color:#333;line-height:1.55;';
         const thStyle   = 'padding:7px 12px;font-size:10px;font-weight:700;color:#555;background:#fafafa;border-bottom:1px solid #e8e8e8;';
 
-        for (const [itemLbl, g] of Object.entries(groups)) {
-            const { nama, logo } = g;
-            const hasBoth = nama && logo;
+        // Helper: cari logo unused dgn item_label sama (utk pair hasBoth).
+        const claimLogoFor = (itemLbl) => {
+            const pool = logosByLabel[itemLbl] || [];
+            for (const idx of pool) {
+                if (!usedLogoIdx.has(idx)) { usedLogoIdx.add(idx); return embDetails[idx]; }
+            }
+            return null;
+        };
+
+        // Iterate entry berurutan. Handle nama dulu (bisa pair logo);
+        // logo unused akan di-render sebagai single di pass kedua.
+        for (let i = 0; i < embDetails.length; i++) {
+            const emb = embDetails[i];
+            if (emb.type !== 'nama') continue;
+            const itemLbl = emb.item_label || '(produk)';
+            const nama = emb;
+            const logo = claimLogoFor(itemLbl);
+            const hasBoth = !!logo;
 
             if (hasBoth) {
                 // ── Both bordir selected: detail side-by-side, mockup full-width below ──
@@ -10600,6 +10638,30 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     </tr></tbody>
                 </table>`;
             }
+        }
+
+        // Pass kedua: render logo yg tidak sempat dipair dgn nama (item_label
+        // hanya punya logo, tanpa nama). Rare — biasanya bordir logo saja tanpa
+        // nama tetap masuk ke embDetails sebagai satu entri utuh.
+        for (let i = 0; i < embDetails.length; i++) {
+            if (embDetails[i].type !== 'logo' || usedLogoIdx.has(i)) continue;
+            const emb = embDetails[i];
+            const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+            const det = `<p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
+                <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
+                <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
+                <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>`;
+            sections += `
+            <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+                <thead><tr>
+                    <th style="${thStyle}width:52%;text-align:left;">Request Details</th>
+                    <th style="${thStyle}border-left:1px solid #e5e5e5;text-align:center;">Visual Mockup</th>
+                </tr></thead>
+                <tbody><tr>
+                    <td class="bordir-detail">${det}</td>
+                    <td class="bordir-visual">${renderVisCell(emb)}</td>
+                </tr></tbody>
+            </table>`;
         }
 
         bordirHTML = `<div class="invoice-bordir"><div class="section-label">Embroidery Details</div>${sections}</div>`;
