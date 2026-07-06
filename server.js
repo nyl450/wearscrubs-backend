@@ -610,6 +610,12 @@ async function initDB() {
     // created_at — perilaku lama tidak berubah utk order existing.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_date TIMESTAMPTZ DEFAULT NULL`);
 
+    // ── Migrate: invoice_notes (catatan customer-facing di PDF invoice) ───────
+    // Terpisah dari `notes` (internal — dipakai audit trail spt "Tambah bordir
+    // post-payment"). invoice_notes muncul di PDF invoice di atas Payment
+    // Information; kalau NULL/empty tidak render section (invoice bersih).
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_notes TEXT DEFAULT NULL`);
+
     // ── Migrate: Temporary Order (loan/trial) feature ─────────────────────────
     // Customer pinjam barang sementara — bisa Size Trial (coba muat), Endorsement
     // (foto/video), atau Other (sponsorship/sample reseller). Stock potong saat kirim
@@ -2344,7 +2350,8 @@ app.post('/api/orders', async (req, res) => {
             payment_method,  // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
             discount_percent,// 0, 5, atau 30 — hanya untuk WA order
             billing_to,      // nama partner yang ditagih (collaboration_event), admin-only
-            invoice_date     // override tanggal invoice (admin-only, opsional)
+            invoice_date,    // override tanggal invoice (admin-only, opsional)
+            invoice_notes    // catatan customer-facing di PDF invoice (admin-only, opsional)
         } = req.body;
         if (!items || items.length === 0) return res.status(400).json({ error: 'Keranjang kosong' });
 
@@ -2518,6 +2525,14 @@ app.post('/api/orders', async (req, res) => {
             if (!isNaN(d.getTime())) safeInvoiceDate = d.toISOString();
         }
 
+        // invoice_notes: catatan customer-facing yg muncul di PDF invoice (di atas
+        // Payment Information). Admin-only — public order tidak bisa set (anti-abuse,
+        // customer bisa selipin pesan/link di invoice). Max 500 char utk mencegah
+        // invoice bloat + attack via giant strings.
+        const safeInvoiceNotes = (isAdmin && typeof invoice_notes === 'string' && invoice_notes.trim())
+            ? invoice_notes.trim().slice(0, 500)
+            : null;
+
         // shipping_cost: admin sets it manually (trusted). Public orders are RECOMPUTED
         // server-side from city + qty (same rule as /api/shipping-cost) so the client
         // can't tamper the amount (e.g. send 0).
@@ -2594,8 +2609,8 @@ app.post('/api/orders', async (req, res) => {
                 `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
-                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
+                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount, invoice_notes)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
@@ -2610,7 +2625,8 @@ app.post('/api/orders', async (req, res) => {
                  logoAlreadyProvided,
                  safeBillingTo,
                  safeInvoiceDate,
-                 safeDpAmount]
+                 safeDpAmount,
+                 safeInvoiceNotes]
             );
             const newOrderId = orderResult.rows[0].id;
 
@@ -3379,7 +3395,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             customer_name, customer_phone, customer_address,
             shipping_city, shipping_courier, shipping_weight_kg,
             shipping_cost, payment_method,
-            order_source, billing_to, notes
+            order_source, billing_to, notes, invoice_notes
         } = req.body;
 
         const setClauses = [];
@@ -3473,6 +3489,12 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
         // Notes — bebas teks, batasi panjang anti-abuse.
         if (notes !== undefined) {
             setClauses.push(`notes = $${idx++}`); params.push(String(notes).slice(0, 1000));
+        }
+        // invoice_notes: catatan customer-facing untuk PDF invoice. Empty string
+        // → NULL (biar invoice tidak render section kosong). Max 500 char.
+        if (invoice_notes !== undefined) {
+            const trimmed = String(invoice_notes).trim().slice(0, 500);
+            setClauses.push(`invoice_notes = $${idx++}`); params.push(trimmed || null);
         }
 
         if (setClauses.length === 0)

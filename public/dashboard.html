@@ -981,6 +981,16 @@
             </div>
           </div>
 
+          <!-- SECTION: Catatan Invoice -->
+          <div class="p-5 space-y-2">
+            <div class="flex items-center justify-between">
+              <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Catatan Invoice (Opsional)</p>
+              <span class="text-[10px] text-white/20">Muncul di PDF invoice customer</span>
+            </div>
+            <textarea id="wa-invoice-notes" rows="2" maxlength="500" placeholder="Mis. Terima kasih atas pesanannya! Estimasi produksi 5-7 hari kerja."></textarea>
+            <p class="text-[10px] text-white/30 leading-relaxed">Kalau diisi, teks ini muncul di PDF invoice di atas <b>Payment Information</b>. Kosongkan kalau tidak perlu — invoice tetap bersih tanpa section catatan.</p>
+          </div>
+
           <!-- SECTION: Diskon -->
           <div class="p-5 space-y-3">
             <div class="flex items-center justify-between">
@@ -2042,8 +2052,13 @@
         <p class="text-[11px] text-amber-300/70 mt-1">Wajib diisi untuk Collaboration Event. Tampil di invoice & detail.</p>
       </div>
       <div>
-        <label class="text-[11px] text-white/60 mb-1 block">Catatan <span class="text-white/30">(opsional)</span></label>
-        <textarea id="edit-notes" rows="2" placeholder="Mis. minta packing extra, request khusus, dll"></textarea>
+        <label class="text-[11px] text-white/60 mb-1 block">Catatan Internal <span class="text-white/30">(opsional)</span></label>
+        <textarea id="edit-notes" rows="2" placeholder="Mis. minta packing extra, request khusus, dll — hanya untuk tim internal"></textarea>
+      </div>
+      <div>
+        <label class="text-[11px] text-white/60 mb-1 block">Catatan Invoice <span class="text-white/30">(opsional — muncul di PDF invoice customer)</span></label>
+        <textarea id="edit-invoice-notes" rows="2" maxlength="500" placeholder="Mis. Terima kasih! Estimasi produksi 5-7 hari kerja."></textarea>
+        <p class="text-[10px] text-white/30 mt-1">Kalau diisi, teks ini muncul di atas <b>Payment Information</b> di PDF invoice. Kosongkan untuk hilangkan section.</p>
       </div>
       <div id="edit-total-preview" class="hidden bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2.5 text-[11px] text-amber-200">
         <i class="fa-solid fa-info-circle"></i> Ongkir berubah → total order akan disesuaikan dari <span id="edit-total-old"></span> jadi <strong id="edit-total-new"></strong>.
@@ -7296,6 +7311,8 @@ function openEditOrderModal() {
     document.getElementById('edit-order-source').value = o.order_source || 'whatsapp';
     document.getElementById('edit-billing-to').value = o.billing_to || '';
     document.getElementById('edit-notes').value = o.notes || '';
+    const invNotesEl = document.getElementById('edit-invoice-notes');
+    if (invNotesEl) invNotesEl.value = o.invoice_notes || '';
     editOnSourceChange(); // toggle box Bill To sesuai sumber awal
     // Live total preview: kalau admin ubah ongkir, tampilkan delta total
     const updatePreview = () => {
@@ -7354,6 +7371,7 @@ async function submitEditOrder() {
             order_source:        orderSource,
             billing_to:          billingTo,
             notes:               document.getElementById('edit-notes').value.trim(),
+            invoice_notes:       (document.getElementById('edit-invoice-notes')?.value || '').trim(),
         };
         await apiFetch(`/api/orders/${o.id}/edit`, {
             method: 'PUT',
@@ -10359,7 +10377,7 @@ function waResetForm() {
     // fresh-item rebuild below.
     try {
         ['wa-customer-name','wa-customer-phone','wa-customer-address','wa-shipping-cost',
-         'wa-payment-method','wa-notes','wa-shipping-city','wa-shipping-courier']
+         'wa-payment-method','wa-notes','wa-invoice-notes','wa-shipping-city','wa-shipping-courier']
             .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const wWeightEl = document.getElementById('wa-shipping-weight'); if (wWeightEl) wWeightEl.value = '1';
         ['wa-photo-previews','wa-bordir-ref-preview'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
@@ -10499,6 +10517,17 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
     const photosHTML = (extraPhotos && extraPhotos.length > 0)
         ? `<div class="invoice-photos"><div class="section-label">Product Reference</div><div class="photos-grid">${extraPhotos.map(s=>`<img loading="lazy" decoding="async" src="${s}" alt="Photo" />`).join('')}</div></div>`
+        : '';
+    // Catatan Invoice — admin-set optional message di atas Payment Information.
+    // Style match invoice-payment (soft box) tapi tanpa background biar tidak
+    // kompetisi visual dgn payment info di bawahnya. white-space:pre-wrap
+    // supaya line break user (Shift+Enter di textarea) tetap render.
+    const invoiceNotesRaw = (order.invoice_notes || '').trim();
+    const invoiceNotesHTML = invoiceNotesRaw
+        ? `<div style="margin:0 40px 20px;padding:16px 20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+             <div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#92400e;margin-bottom:8px;">Notes</div>
+             <p style="margin:0;font-size:13px;color:#78350f;line-height:1.55;white-space:pre-wrap;">${esc(invoiceNotesRaw)}</p>
+           </div>`
         : '';
 
     let bordirHTML = '';
@@ -10713,6 +10742,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 <tfoot><tr class="grand-total"><td colspan="3" style="text-align:right;">Total</td><td>${fmtRp(total)}</td></tr></tfoot>
             </table>
         </div>
+        ${invoiceNotesHTML}
         <div class="invoice-payment">
             <div class="section-label">Payment Information</div>
             <table>
@@ -11940,6 +11970,7 @@ async function bulkSubmitOrder() {
                 shipping_courier: shippingCourier,
                 shipping_weight_kg: shippingWeight,
                 notes: notes,
+                invoice_notes: (document.getElementById('wa-invoice-notes')?.value || '').trim() || null,
                 order_source: orderSource,
                 payment_method: paymentMethod,
                 discount_percent: (typeof waSelectedDiscount !== 'undefined' ? waSelectedDiscount : 0),
