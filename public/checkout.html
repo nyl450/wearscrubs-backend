@@ -738,7 +738,16 @@ function buildBordirForm() {
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Warna Benang</label>
-                            <input type="text" id="bordir-nama-color-${itemIdx}-${q}" placeholder="Putih, hitam, merah..." class="${cls}">
+                            <select id="bordir-nama-color-${itemIdx}-${q}" class="${cls} cursor-pointer">
+                                <option value="">Pilih warna...</option>
+                                <option value="Putih">Putih</option><option value="Hitam">Hitam</option>
+                                <option value="Kuning">Kuning</option><option value="Pink">Pink</option>
+                                <option value="Navy">Navy</option><option value="Terracotta">Terracotta</option>
+                                <option value="Biru">Biru</option><option value="Abu-abu">Abu-abu</option>
+                                <option value="Silver">Silver</option><option value="Hijau">Hijau</option>
+                                <option value="Toska">Toska</option><option value="Merah">Merah</option>
+                                <option value="Ungu">Ungu</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Posisi di Dada</label>
@@ -767,7 +776,17 @@ function buildBordirForm() {
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Warna Benang</label>
-                            <input type="text" id="bordir-logo-color-${itemIdx}-${q}" placeholder="Putih, hitam..." class="${cls}">
+                            <select id="bordir-logo-color-${itemIdx}-${q}" class="${cls} cursor-pointer">
+                                <option value="">Pilih warna...</option>
+                                <option value="Putih">Putih</option><option value="Hitam">Hitam</option>
+                                <option value="Kuning">Kuning</option><option value="Pink">Pink</option>
+                                <option value="Navy">Navy</option><option value="Terracotta">Terracotta</option>
+                                <option value="Biru">Biru</option><option value="Abu-abu">Abu-abu</option>
+                                <option value="Silver">Silver</option><option value="Hijau">Hijau</option>
+                                <option value="Toska">Toska</option><option value="Merah">Merah</option>
+                                <option value="Ungu">Ungu</option>
+                                <option value="Multi warna">Multi warna (bawaan logo)</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Posisi di Dada</label>

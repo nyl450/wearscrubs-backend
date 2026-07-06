@@ -741,7 +741,16 @@ function buildBordirForm() {
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Thread Color</label>
-                            <input type="text" id="bordir-nama-color-${itemIdx}-${q}" placeholder="White, black, red..." class="${cls}">
+                            <select id="bordir-nama-color-${itemIdx}-${q}" class="${cls} cursor-pointer">
+                                <option value="">Select color...</option>
+                                <option value="Putih">White (Putih)</option><option value="Hitam">Black (Hitam)</option>
+                                <option value="Kuning">Yellow (Kuning)</option><option value="Pink">Pink</option>
+                                <option value="Navy">Navy</option><option value="Terracotta">Terracotta</option>
+                                <option value="Biru">Blue (Biru)</option><option value="Abu-abu">Grey (Abu-abu)</option>
+                                <option value="Silver">Silver</option><option value="Hijau">Green (Hijau)</option>
+                                <option value="Toska">Teal (Toska)</option><option value="Merah">Red (Merah)</option>
+                                <option value="Ungu">Purple (Ungu)</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Chest Position</label>
@@ -770,7 +779,17 @@ function buildBordirForm() {
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Thread Color</label>
-                            <input type="text" id="bordir-logo-color-${itemIdx}-${q}" placeholder="White, black..." class="${cls}">
+                            <select id="bordir-logo-color-${itemIdx}-${q}" class="${cls} cursor-pointer">
+                                <option value="">Select color...</option>
+                                <option value="Putih">White (Putih)</option><option value="Hitam">Black (Hitam)</option>
+                                <option value="Kuning">Yellow (Kuning)</option><option value="Pink">Pink</option>
+                                <option value="Navy">Navy</option><option value="Terracotta">Terracotta</option>
+                                <option value="Biru">Blue (Biru)</option><option value="Abu-abu">Grey (Abu-abu)</option>
+                                <option value="Silver">Silver</option><option value="Hijau">Green (Hijau)</option>
+                                <option value="Toska">Teal (Toska)</option><option value="Merah">Red (Merah)</option>
+                                <option value="Ungu">Purple (Ungu)</option>
+                                <option value="Multi warna">Multi-color (from logo)</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Chest Position</label>
