@@ -7430,6 +7430,10 @@ function openAddBordirModal() {
                     <div class="ab-nama-fields hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input type="text" class="ab-nama-text !py-1.5 !text-xs" placeholder="Teks nama (mis. Dr. Andi)" oninput="updateAddBordirPreview()">
                         <input type="text" class="ab-nama-text2 !py-1.5 !text-xs" placeholder="Baris ke-2 — opsional (mis. Sp.PD)">
+                        <label class="flex items-center gap-1.5 text-[10px] text-white/60 sm:col-span-2 cursor-pointer select-none">
+                            <input type="checkbox" class="ab-nama-underline w-3 h-3 accent-purple-400">
+                            Beri garis pemisah di antara baris 1 &amp; baris 2
+                        </label>
                         <input type="text" class="ab-nama-color !py-1.5 !text-xs" placeholder="Warna benang">
                         <select class="ab-nama-pos !py-1.5 !text-xs">
                             <option value="kanan">Posisi: Kanan Dada</option>
@@ -7583,6 +7587,9 @@ async function submitAddBordir() {
             // Baris ke-2 opsional (mis. jabatan/gelar). Hanya dikirim kalau diisi.
             const t2 = w.querySelector('.ab-nama-text2')?.value.trim() || '';
             if (t2) itemPayload.nama_text2 = t2;
+            // Garis pemisah opsional di antara baris 1 & baris 2 (visual mockup di invoice).
+            const ul = w.querySelector('.ab-nama-underline')?.checked === true;
+            if (ul) itemPayload.nama_underline = true;
             itemPayload.nama_color = w.querySelector('.ab-nama-color')?.value.trim() || '';
             itemPayload.nama_pos = w.querySelector('.ab-nama-pos')?.value || 'kanan';
             itemPayload.nama_price = parseInt(w.querySelector('.ab-nama-price')?.value || 20000);
@@ -9343,6 +9350,10 @@ function waAddItem() {
                     <label class="wa-field-label">Baris ke-2 <span class="wa-optional">(opsional — mis. jabatan/gelar)</span></label>
                     <input type="text" id="wa-bordir-nama-text2-${idx}" placeholder="mis. Sp.PD, M.Kes" class="input-sm" />
                 </div>
+                <label class="flex items-center gap-2 text-[11px] text-white/70 cursor-pointer select-none">
+                    <input type="checkbox" id="wa-bordir-nama-underline-${idx}" class="w-3.5 h-3.5 accent-purple-400" />
+                    Beri garis pemisah di antara baris 1 &amp; baris 2
+                </label>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="wa-field-label">Warna Benang</label>
@@ -10018,12 +10029,14 @@ async function waSubmitOrder() {
                 if (bordirNamaCP) {
                     const t  = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
                     const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                    const ul = document.getElementById(`wa-bordir-nama-underline-${idx}`)?.checked === true;
                     const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
                     namaPosCP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                     if (!t) { posErrors.push(`${itemLabel}: isi teks bordir nama.`); continue; }
                     // Key MUST be `color` (not `thread_color`) — renderer/WA/invoice all read e.color.
                     const namaPayloadCP = { item_label: itemLabel, type: 'nama', value: t, color: c, position: namaPosCP };
                     if (t2) namaPayloadCP.value_line2 = t2;
+                    if (ul) namaPayloadCP.value_underline = true;
                     embroideryDetails.push(namaPayloadCP);
                 }
                 if (bordirLogoCP) {
@@ -10119,13 +10132,15 @@ async function waSubmitOrder() {
             if (bordirNama) {
                 const namaText  = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
                 const namaText2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                const namaUL   = document.getElementById(`wa-bordir-nama-underline-${idx}`)?.checked === true;
                 const namaColor = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
                 namaPos = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                 if (!namaText) { posErrors.push(`Nama bordir untuk ${prodName} belum diisi.`); continue; }
-                // value_line2 dikirim hanya kalau diisi (anti-noise di JSON). Renderer
-                // graceful: kalau field absent → render 1 baris seperti dulu.
+                // value_line2 + value_underline dikirim hanya kalau ada (anti-noise
+                // di JSON). Renderer graceful: kalau absent → render seperti dulu.
                 const namaPayload = { type: 'nama', item_label: itemLabel, value: namaText, color: namaColor, position: namaPos };
                 if (namaText2) namaPayload.value_line2 = namaText2;
+                if (namaUL) namaPayload.value_underline = true;
                 embroideryDetails.push(namaPayload);
             }
             if (bordirLogo) {
@@ -10538,9 +10553,17 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             if (emb.type === 'nama') {
                 const col = emb.color && emb.color.toLowerCase() !== 'putih' ? emb.color : '#1a1a1a';
                 const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+                // value_underline: opsional. Kalau true → render garis solid warna
+                // benang di antara baris 1 & baris 2 (meniru real bordir divider).
+                // Width 60% supaya tidak melebar sampai edge, konsisten dgn contoh
+                // real (foto user: garis lebih pendek dari nama).
+                const dividerHTML = emb.value_underline
+                    ? `<div style="border-top:1.5px solid ${col};margin:5px auto 3px;width:60%;"></div>`
+                    : '';
                 return `<div style="background:#f9f9f9;border-radius:6px;padding:14px 10px;text-align:center;">
                     <p style="font-size:17px;font-weight:700;color:${col};margin:0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value||'')}</p>
-                    ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;color:${col};margin:3px 0 0;font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
+                    ${dividerHTML}
+                    ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;color:${col};margin:${emb.value_underline ? '0' : '3px 0 0'};font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
                     <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Height ~1.2 cm · ${posLbl}</p>
                 </div>`;
             } else {
@@ -11113,7 +11136,11 @@ function bulkAddPanel() {
                         </select>
                     </div>
                 </div>
-                <p class="text-[10px] text-white/30 mt-1.5">Warna benang & posisi berlaku untuk semua nama di panel ini.</p>
+                <label class="flex items-center gap-2 text-[11px] text-white/70 mt-2 cursor-pointer select-none">
+                    <input type="checkbox" class="bulk-cell-nama-underline w-3.5 h-3.5 accent-purple-400" />
+                    Beri garis pemisah di antara baris 1 &amp; baris 2 (semua nama di panel)
+                </label>
+                <p class="text-[10px] text-white/30 mt-1.5">Warna benang, posisi, &amp; garis pemisah berlaku untuk semua nama di panel ini.</p>
             </div>
 
             <div class="bulk-logo-panel hidden bg-white/3 border border-white/8 rounded-lg p-3 space-y-2">
@@ -11868,6 +11895,9 @@ async function bulkSubmitOrder() {
         }
         const namaPos = 'kanan';
         const logoPos = panel.querySelector('.bulk-cell-logo-pos').value || 'kiri';
+        // Panel-level toggle: garis pemisah antara baris 1 & baris 2. Applied ke
+        // SEMUA nama di panel ini (konsisten dgn warna benang & posisi yg juga panel-level).
+        const namaUL = panel.querySelector('.bulk-cell-nama-underline')?.checked === true;
         if (namaActive && logoActive && namaPos === logoPos) {
             errors.push(panelLabel + ': Posisi Bordir Nama (kanan) dan Logo (' + logoPos + ') sama. Ubah posisi Logo.'); continue;
         }
@@ -11937,6 +11967,7 @@ async function bulkSubmitOrder() {
                 if (namaActive) {
                     const namaPayload = { type: 'nama', item_label: itemLabel, value: namaText, color: '', position: namaPos };
                     if (namaLine2) namaPayload.value_line2 = namaLine2;
+                    if (namaUL) namaPayload.value_underline = true;
                     allEmbroideryDetails.push(namaPayload);
                 }
                 if (logoActive) {
@@ -12215,11 +12246,13 @@ function _kasirCollectSingleItems() {
                 if (bordirNamaCP) {
                     const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim() || '';
                     const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                    const ul = document.getElementById(`wa-bordir-nama-underline-${idx}`)?.checked === true;
                     const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
                     nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                     if (!t) { posErrors.push(`${il}: isi teks bordir nama.`); continue; }
                     const payload = { item_label: il, type: 'nama', value: t, color: c, position: nP };
                     if (t2) payload.value_line2 = t2;
+                    if (ul) payload.value_underline = true;
                     embroideryDetails.push(payload);
                 }
                 if (bordirLogoCP) {
@@ -12284,11 +12317,13 @@ function _kasirCollectSingleItems() {
             if (bordirNama) {
                 const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
                 const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
+                const ul = document.getElementById(`wa-bordir-nama-underline-${idx}`)?.checked === true;
                 const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
                 nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
                 if (!t) { posErrors.push(`Nama bordir untuk ${pName} belum diisi.`); continue; }
                 const payload = { type: 'nama', item_label: il, value: t, color: c, position: nP };
                 if (t2) payload.value_line2 = t2;
+                if (ul) payload.value_underline = true;
                 embroideryDetails.push(payload);
             }
             if (bordirLogo) {
@@ -12384,6 +12419,7 @@ function kasirAddToCartBulk() {
         const logoPrice   = parseInt(panel.querySelector('.bulk-cell-logo-price').value) || 30000;
         const logoColor   = panel.querySelector('.bulk-cell-logo-color').value.trim() || '';
         const namaColor   = panel.querySelector('.bulk-cell-nama-color')?.value.trim() || '';
+        const namaUL      = panel.querySelector('.bulk-cell-nama-underline')?.checked === true;
         const panelDiscToken = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
         const approxBase  = isCustomColor ? customPrice : waResolveUnitPrice(panel._state.selectedProduct, variant);
 
@@ -12412,6 +12448,7 @@ function kasirAddToCartBulk() {
                 if (namaActive) {
                     const p = { type: 'nama', item_label: il, value: namaText, color: namaColor, position: namaPos };
                     if (namaLine2) p.value_line2 = namaLine2;
+                    if (namaUL) p.value_underline = true;
                     panelEmb.push(p);
                 }
                 if (logoActive) panelEmb.push({ type: 'logo', item_label: il, value: panel._state.logoFile, color: logoColor, position: logoPos });

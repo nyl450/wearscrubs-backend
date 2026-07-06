@@ -3775,6 +3775,8 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                     position: r.nama_pos || 'kanan'
                 };
                 if (t2) entry.value_line2 = t2;
+                // Garis pemisah opsional di antara baris 1 & baris 2 (visual mockup).
+                if (r.nama_underline === true) entry.value_underline = true;
                 newEntries.push(entry);
                 totalAdditional += namaPrice * Number(item.quantity);
             }

@@ -730,6 +730,10 @@ function buildBordirForm() {
                         <input type="text" id="bordir-nama-text2-${itemIdx}-${q}"
                             placeholder="mis. Sp.PD, M.Kes"
                             class="${cls}">
+                        <label class="flex items-center gap-2 text-[11px] text-gray-600 dark:text-white/60 mt-2 cursor-pointer select-none">
+                            <input type="checkbox" id="bordir-nama-underline-${itemIdx}-${q}" class="w-3.5 h-3.5 accent-purple-500">
+                            Beri garis pemisah di antara baris 1 &amp; baris 2
+                        </label>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -844,13 +848,15 @@ async function submitBordirStep() {
         if (item.bordir_nama) {
             const val   = document.getElementById(`bordir-nama-${itemIdx}-${q}`)?.value?.trim();
             const val2  = document.getElementById(`bordir-nama-text2-${itemIdx}-${q}`)?.value?.trim() || '';
+            const ul    = document.getElementById(`bordir-nama-underline-${itemIdx}-${q}`)?.checked === true;
             const color = document.getElementById(`bordir-nama-color-${itemIdx}-${q}`)?.value?.trim() || '';
             namaPos     = document.getElementById(`bordir-nama-pos-${itemIdx}-${q}`)?.value || 'kanan';
             if (!val) { errors.push(`Nama bordir untuk "${item.name}" belum diisi.`); continue; }
-            // value_line2 dikirim hanya kalau diisi (anti-noise di JSON).
-            // Renderer/invoice/WA gracefully handle absence (1-baris).
+            // value_line2 + value_underline dikirim hanya kalau ada (anti-noise di JSON).
+            // Renderer/invoice/WA gracefully handle absence (1-baris tanpa garis).
             const payload = { item_label: itemLabel, type: 'nama', value: val, color, position: namaPos };
             if (val2) payload.value_line2 = val2;
+            if (ul) payload.value_underline = true;
             embroideryData.push(payload);
         }
         if (item.bordir_logo) {
