@@ -554,6 +554,10 @@ async function initDB() {
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_label TEXT DEFAULT NULL`);
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dp_amount INTEGER DEFAULT 0`);
+    // Pelunasan DP: NULL = masih ada sisa (belum lunas). Order DP tetap jalan produksi +
+    // boleh dikemas, tapi TIDAK boleh dikirim sampai kolom ini terisi (lihat /settle-dp
+    // + gate di /ship). Ongkir final bisa disesuaikan saat pelunasan (real ongkir sering beda).
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dp_settled_at TIMESTAMPTZ DEFAULT NULL`);
 
     // ── COGS / HPP (Cost of Goods Sold) ───────────────────────────────────────
     // Granularitas: per produk + per variant (cogs_by_type cermin price_by_type).
@@ -3086,6 +3090,10 @@ app.put('/api/orders/:id/ship', requireMenu('orders','edit'), upload.single('shi
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_status !== 'packed') return res.status(400).json({ error: 'Pesanan belum siap dikirim (harus berstatus dikemas dulu)' });
+        // Gate DP: uang harus masuk penuh sebelum barang keluar. Order DP boleh
+        // diproduksi & dikemas, tapi tidak boleh dikirim sampai pelunasan dikonfirmasi.
+        if (Number(order.dp_amount || 0) > 0 && !order.dp_settled_at)
+            return res.status(400).json({ error: 'Pelunasan DP belum dikonfirmasi. Selesaikan pelunasan sebelum mengirim pesanan.' });
 
         const finalCourier = courierOverride || order.shipping_courier || 'Kurir';
         // "Kirim sendiri" (antar langsung) tidak punya nomor resi kurir → resi opsional.
@@ -3899,6 +3907,69 @@ app.put('/api/orders/:id/confirm-additional-payment', requireMenu('orders','edit
         });
 
         res.json({ message: 'Pembayaran selisih dikonfirmasi', photo_url: await signedMediaUrl(photoUrl) });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/orders/:id/settle-dp — pelunasan sisa DP. Admin boleh menyesuaikan ongkir
+// final (real ongkir sering beda dari estimasi) → total + sisa dihitung ulang, lalu
+// order ditandai lunas (dp_settled_at). Baru setelah ini order boleh dikirim.
+app.put('/api/orders/:id/settle-dp', requireMenu('orders','edit'), upload.single('payment_proof'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (!(Number(order.dp_amount || 0) > 0))
+            return res.status(400).json({ error: 'Pesanan ini bukan pesanan DP' });
+        if (order.payment_status !== 'paid')
+            return res.status(400).json({ error: 'DP belum dikonfirmasi. Konfirmasi pembayaran DP dulu.' });
+        if (order.dp_settled_at)
+            return res.status(400).json({ error: 'Pesanan ini sudah lunas' });
+        if (order.order_status === 'cancelled')
+            return res.status(400).json({ error: 'Pesanan sudah dibatalkan' });
+        if (!req.file)
+            return res.status(400).json({ error: 'Upload bukti pelunasan dulu' });
+
+        // Ongkir final opsional. Kalau diisi & beda → recompute total (bisa naik/turun).
+        const oldShipping = Number(order.shipping_cost || 0);
+        const rawFinalShip = req.body.final_shipping_cost;
+        const hasFinalShip = rawFinalShip !== undefined && String(rawFinalShip).trim() !== '' && !isNaN(parseInt(rawFinalShip));
+        const finalShipping = hasFinalShip ? Math.max(0, parseInt(rawFinalShip)) : oldShipping;
+        const shippingChanged = finalShipping !== oldShipping;
+        const oldTotal = Number(order.total_amount || 0);
+        const newTotal = oldTotal - oldShipping + finalShipping;
+        const dp = Number(order.dp_amount || 0);
+        const remaining = Math.max(0, newTotal - dp);
+        const overpay = Math.max(0, dp - newTotal);
+
+        const photoUrl = await uploadToSupabase(req.file.buffer, req.file.originalname, 'orders', { optimize: true });
+
+        await withTransaction(async (client) => {
+            if (shippingChanged) {
+                await client.query(
+                    `UPDATE orders SET shipping_cost = $1, total_amount = $2, updated_at = NOW() WHERE id = $3`,
+                    [finalShipping, newTotal, order.id]
+                );
+            }
+            let note = `Pelunasan DP. Sisa dibayar Rp ${remaining.toLocaleString('id-ID')}`;
+            if (shippingChanged) note += ` (ongkir final Rp ${finalShipping.toLocaleString('id-ID')}, estimasi awal Rp ${oldShipping.toLocaleString('id-ID')})`;
+            if (overpay > 0) note += `. Kelebihan bayar Rp ${overpay.toLocaleString('id-ID')} — perlu refund manual`;
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'payment',$2,$3,$4)`,
+                [order.id, photoUrl, note, req.user.username]
+            );
+            await client.query(
+                `UPDATE orders SET dp_settled_at = NOW(), updated_at = NOW() WHERE id = $1`,
+                [order.id]
+            );
+        });
+
+        res.json({
+            message: 'Pelunasan dikonfirmasi',
+            remaining, overpay,
+            total_amount: newTotal,
+            shipping_cost: finalShipping,
+            shipping_changed: shippingChanged,
+            photo_url: await signedMediaUrl(photoUrl)
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
