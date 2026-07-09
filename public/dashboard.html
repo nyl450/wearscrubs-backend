@@ -209,7 +209,13 @@
         .invoice-header .logo-side .invoice-label { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
         .invoice-header .logo-img { width: 200px; height: auto; }
         .invoice-header .company-info { text-align: right; font-size: 11px; line-height: 1.7; color: rgba(255,255,255,0.75); max-width: 220px; }
-        .invoice-billed { padding: 28px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-bottom: 1px solid #e5e5e5; }
+        .invoice-billed { padding: 28px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-bottom: 1px solid #e5e5e5; position: relative; }
+        /* Stempel LUNAS/PAID — muncul kalau order sudah dibayar. Rotated rubber-stamp
+           style di pojok kanan atas billed section (area kosong). Warna hijau. */
+        .invoice-paid-stamp { position: absolute; top: 14px; right: 30px; transform: rotate(-11deg); border: 3px solid #16a34a; color: #16a34a; border-radius: 8px; padding: 5px 14px 4px; font-family: 'DM Sans', sans-serif; text-align: center; opacity: 0.92; box-shadow: inset 0 0 0 1px rgba(22,163,74,0.35); }
+        .invoice-paid-stamp .stamp-main { display: block; font-size: 22px; font-weight: 800; letter-spacing: 0.14em; line-height: 1; }
+        .invoice-paid-stamp .stamp-sub { display: block; font-size: 8px; font-weight: 600; letter-spacing: 0.08em; margin-top: 3px; color: #15803d; }
+        .invoice-meta .pay-status-paid { color: #16a34a; font-weight: 700; }
         .invoice-billed .section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #888; margin-bottom: 12px; grid-column: 1 / -1; }
         .invoice-billed .customer-info p, .invoice-billed .invoice-meta p { font-size: 13px; margin: 3px 0; color: #2d2d2d; }
         .invoice-billed .customer-info strong, .invoice-billed .invoice-meta strong { color: #1a1a1a; font-weight: 600; }
@@ -6865,7 +6871,7 @@ async function viewOrder(id) {
                                    </span>
                                    <span class="text-xs text-white/50">${esc(e.value || 'Menunggu file logo')}</span>
                                </div>`
-                            : `<p class="text-sm font-semibold">${esc(e.value||'')}${e.value_line2 ? `<br><span class="text-white/70">${esc(e.value_line2)}</span>` : ''}</p>`)
+                            : `<div class="text-sm font-semibold leading-snug">${esc(e.value||'')}${e.value_line2 ? `${e.value_underline ? '<div style="border-top:1.5px solid currentColor;opacity:0.55;width:55%;margin:3px 0;"></div>' : '<br>'}<span class="text-white/70">${esc(e.value_line2)}</span>` : ''}</div>`)
                     }
                     <div class="flex flex-wrap gap-x-3 mt-1">
                         ${e.color ? `<p class="text-[11px] text-white/55">🎨 Benang: <span class="text-white/80">${esc(e.color)}</span></p>` : ''}
@@ -10239,7 +10245,8 @@ function buildOrderWaMessage(o) {
                 // Baris ke-2 opsional (mis. jabatan/gelar). Pakai " // " separator
                 // supaya jelas di WA single-line.
                 const v2 = (e.value_line2 || '').trim();
-                const nameDisplay = v2 ? `${e.value} // ${v2}` : e.value;
+                const sep = e.value_underline ? ' | garis pemisah | ' : ' // ';
+                const nameDisplay = v2 ? `${e.value}${sep}${v2}` : e.value;
                 return `Nama: *${nameDisplay}* | Benang: ${e.color || '-'} | Posisi: ${posLabel}`;
             }
             const v = typeof e.value === 'string' ? e.value : '';
@@ -10448,6 +10455,17 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     })();
     const fmtRp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
     const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+
+    // Status pembayaran — kalau LUNAS tampilkan stempel "PAID" + baris status di meta,
+    // supaya client langsung tahu invoice ini sudah dibayar (bukan tagihan aktif).
+    const isPaidInvoice = order.payment_status === 'paid';
+    const paidDateStr = order.paid_at ? fmtDate(order.paid_at) : '';
+    const paidStampHTML = isPaidInvoice
+        ? `<div class="invoice-paid-stamp"><span class="stamp-main">PAID</span><span class="stamp-sub">LUNAS${paidDateStr ? ' · ' + paidDateStr : ''}</span></div>`
+        : '';
+    const payStatusMetaHTML = isPaidInvoice
+        ? `<p><strong>Payment Status:</strong> <span class="pay-status-paid">PAID / LUNAS${paidDateStr ? ' (' + paidDateStr + ')' : ''}</span></p>`
+        : '';
 
     let itemRowsHTML = '';
     let productSubtotal = 0;
@@ -10821,6 +10839,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             </div>
         </div>
         <div class="invoice-billed">
+            ${paidStampHTML}
             <div class="section-label">Billed To</div>
             <div class="customer-info">
                 <p><strong>Customer's Name:</strong> ${esc(order.customer_name||'-')}</p>
@@ -10832,6 +10851,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 <p><strong>Invoice Date:</strong> ${fmtDate(order.invoice_date || order.created_at)}</p>
                 ${order.order_source ? `<p><strong>Order Source:</strong> ${esc(repSourceLabel(order.order_source))}</p>` : ''}
                 ${order.payment_method ? `<p><strong>Payment Method:</strong> ${esc(order.payment_method)}</p>` : ''}
+                ${payStatusMetaHTML}
                 ${order.billing_to ? `<p><strong>Billed To (Partner):</strong> ${esc(order.billing_to)}</p>` : ''}
             </div>
         </div>
@@ -12231,7 +12251,7 @@ function kasirGroupDetailHtml(g) {
         let sub = '';
         if (it.bordir_nama && ni < namas.length) {
             const e = namas[ni++];
-            const nm = e.value_line2 ? `${e.value} / ${e.value_line2}` : e.value;
+            const nm = e.value_line2 ? `${e.value}${e.value_underline ? ' | garis | ' : ' / '}${e.value_line2}` : e.value;
             sub += `<p class="text-[10px] text-white/45 pl-3">✎ Nama: "${esc(nm)}"${e.color ? ' · benang ' + esc(e.color) : ''}${e.position ? ' · ' + esc(e.position) : ''}</p>`;
         }
         if (it.bordir_logo && li < logos.length) {
@@ -12767,7 +12787,9 @@ function _generateFormatOrderText(o) {
             (b.item_label && b.item_label.includes(it.color) && b.item_label.includes(it.size) && b.item_label.startsWith(it.product_name)));
         for (const b of matched) {
             if (b.type === 'nama') {
-                const nameDisplay = b.value_line2 ? `${b.value}\n${b.value_line2}` : b.value;
+                const nameDisplay = b.value_line2
+                    ? `${b.value}\n${b.value_underline ? '----- (pakai garis pemisah)\n' : ''}${b.value_line2}`
+                    : b.value;
                 text += `\nBordir nama:\n${nameDisplay}\nwarna bordir ${b.color || '-'}\n(${rp(bNP)})\n`;
             } else if (b.type === 'logo') {
                 text += `\nBordir logo:\nwarna bordir ${b.color || '-'}\n(${rp(bLP)})\n`;

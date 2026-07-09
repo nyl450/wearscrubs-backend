@@ -2702,7 +2702,8 @@ app.post('/api/orders', async (req, res) => {
             // Pakai " // " separator supaya jelas terbaca di WA single-line context.
             const v1 = e.value || '';
             const v2 = (e.value_line2 || '').trim();
-            return v2 ? `${v1} // ${v2}` : v1;
+            const sep = e.value_underline ? ' | garis pemisah | ' : ' // ';
+            return v2 ? `${v1}${sep}${v2}` : v1;
         };
         const embroiderySection = embDetailsStored && embDetailsStored.length > 0
             ? `\n\n🧵 *Detail Bordir:*\n` + embDetailsStored.map(e =>
