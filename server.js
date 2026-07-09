@@ -3973,6 +3973,55 @@ app.put('/api/orders/:id/settle-dp', requireMenu('orders','edit'), upload.single
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PUT /api/orders/:id/finalize-shipping — set ongkir final (real) SEBELUM pelunasan.
+// Real ongkir sering beda dari estimasi. Endpoint ini update shipping_cost + total
+// supaya invoice + WA tagihan yang dikirim ke customer pakai angka real. BELUM
+// menandai lunas (dp_settled_at tetap NULL) — customer bayar dulu, baru pelunasan
+// dikonfirmasi via /settle-dp. Boleh dipanggil berkali-kali (re-adjust).
+app.put('/api/orders/:id/finalize-shipping', requireMenu('orders','edit'), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (!(Number(order.dp_amount || 0) > 0))
+            return res.status(400).json({ error: 'Pesanan ini bukan pesanan DP' });
+        if (order.payment_status !== 'paid')
+            return res.status(400).json({ error: 'DP belum dikonfirmasi. Konfirmasi pembayaran DP dulu.' });
+        if (order.dp_settled_at)
+            return res.status(400).json({ error: 'Pesanan sudah lunas' });
+        if (order.order_status === 'cancelled')
+            return res.status(400).json({ error: 'Pesanan sudah dibatalkan' });
+
+        const raw = req.body.final_shipping_cost;
+        if (raw === undefined || String(raw).trim() === '' || isNaN(parseInt(raw)))
+            return res.status(400).json({ error: 'Ongkir final wajib diisi (angka)' });
+        const finalShipping = Math.max(0, parseInt(raw));
+        const oldShipping = Number(order.shipping_cost || 0);
+        const oldTotal = Number(order.total_amount || 0);
+        const newTotal = oldTotal - oldShipping + finalShipping;
+        const dp = Number(order.dp_amount || 0);
+        const remaining = Math.max(0, newTotal - dp);
+        const overpay = Math.max(0, dp - newTotal);
+        const changed = finalShipping !== oldShipping;
+
+        if (changed) {
+            await withTransaction(async (client) => {
+                await client.query(
+                    `UPDATE orders SET shipping_cost = $1, total_amount = $2, updated_at = NOW() WHERE id = $3`,
+                    [finalShipping, newTotal, order.id]
+                );
+                let note = `Ongkir final disesuaikan: Rp ${finalShipping.toLocaleString('id-ID')} (estimasi awal Rp ${oldShipping.toLocaleString('id-ID')}). Sisa pelunasan jadi Rp ${remaining.toLocaleString('id-ID')}`;
+                if (overpay > 0) note += `. Kelebihan bayar Rp ${overpay.toLocaleString('id-ID')} — perlu refund manual`;
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'payment',NULL,$2,$3)`,
+                    [order.id, note, req.user.username]
+                );
+            });
+        }
+
+        res.json({ message: 'Ongkir final tersimpan', total_amount: newTotal, shipping_cost: finalShipping, remaining, overpay, changed });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/orders/:id/bordir-review', requireMenu('orders','edit'), upload.none(), async (req, res) => {
     try {
         const { action, reason, reject_types } = req.body;

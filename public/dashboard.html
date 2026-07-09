@@ -2141,29 +2141,53 @@
   </div>
 </div>
 
-<!-- SETTLE DP MODAL — pelunasan sisa DP + sesuaikan ongkir final -->
+<!-- FINALIZE SHIPPING MODAL — set ongkir final (real) sebelum tagih pelunasan -->
+<div id="finalize-ship-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+  <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md p-5 space-y-4">
+    <div class="flex justify-between items-start">
+      <div>
+        <h3 class="font-bold text-base">Set Ongkir Final</h3>
+        <p class="text-[11px] text-white/40 mt-0.5">Isi ongkir real (mis. Lion Parcel). Total & sisa akan update, lalu kirim tagihan ke customer.</p>
+      </div>
+      <button onclick="closeFinalizeShipModal()" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center shrink-0"><i class="fa-solid fa-times text-xl"></i></button>
+    </div>
+    <div class="bg-white/5 border border-white/10 rounded-xl p-3 text-xs space-y-1.5">
+      <div class="flex justify-between text-white/60"><span>Subtotal (tanpa ongkir)</span><span id="fs-subtotal">Rp 0</span></div>
+      <div class="flex justify-between text-white/60"><span>DP sudah dibayar</span><span id="fs-dp">Rp 0</span></div>
+    </div>
+    <div>
+      <label class="text-[11px] text-white/60 mb-1 block">Ongkir Final (Rp)</label>
+      <input type="number" id="fs-shipping" oninput="finalizeShipRecompute()" min="0" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400/40" />
+    </div>
+    <div class="bg-amber-500/10 border border-amber-400/25 rounded-xl p-3 text-xs space-y-1.5">
+      <div class="flex justify-between text-amber-100/80"><span>Total final</span><span id="fs-newtotal">Rp 0</span></div>
+      <div class="flex justify-between text-amber-100 font-bold text-sm"><span>Sisa Pelunasan</span><span id="fs-remaining">Rp 0</span></div>
+      <p id="fs-overpay" class="hidden text-[11px] text-red-300 pt-1"></p>
+    </div>
+    <div class="flex gap-2 pt-1">
+      <button onclick="closeFinalizeShipModal()" class="py-2.5 px-4 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
+      <button id="fs-save-btn" onclick="submitFinalizeShip(false)" class="flex-1 py-2.5 rounded-xl bg-white/10 border border-white/15 text-white/80 text-sm font-bold hover:bg-white/15">Simpan</button>
+      <button id="fs-save-wa-btn" onclick="submitFinalizeShip(true)" class="flex-1 py-2.5 rounded-xl bg-green-500/20 border border-green-400/30 text-green-300 text-sm font-bold hover:bg-green-500/30"><i class="fa-brands fa-whatsapp"></i> Simpan & Tagih</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTLE DP MODAL — konfirmasi pelunasan (upload bukti setelah customer bayar) -->
 <div id="settle-dp-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
   <div class="bg-darkcard border border-darkborder rounded-2xl w-full max-w-md p-5 space-y-4">
     <div class="flex justify-between items-start">
       <div>
-        <h3 class="font-bold text-base">Pelunasan DP</h3>
-        <p class="text-[11px] text-white/40 mt-0.5">Sesuaikan ongkir final (real), lalu upload bukti pelunasan.</p>
+        <h3 class="font-bold text-base">Konfirmasi Pelunasan</h3>
+        <p class="text-[11px] text-white/40 mt-0.5">Setelah customer transfer sisa, upload bukti di sini untuk menandai lunas.</p>
       </div>
       <button onclick="closeSettleDpModal()" class="w-9 h-9 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition flex items-center justify-center shrink-0"><i class="fa-solid fa-times text-xl"></i></button>
     </div>
     <div class="bg-white/5 border border-white/10 rounded-xl p-3 text-xs space-y-1.5">
-      <div class="flex justify-between text-white/60"><span>Total (ongkir estimasi)</span><span id="settle-dp-total">Rp 0</span></div>
-      <div class="flex justify-between text-white/60"><span>DP sudah dibayar</span><span id="settle-dp-paid">Rp 0</span></div>
+      <div class="flex justify-between text-white/60"><span>Total final</span><span id="settle-dp-total">Rp 0</span></div>
+      <div class="flex justify-between text-white/60"><span>DP dibayar</span><span id="settle-dp-paid">Rp 0</span></div>
+      <div class="flex justify-between text-amber-100 font-bold text-sm pt-0.5"><span>Sisa yang dibayar</span><span id="settle-dp-remaining">Rp 0</span></div>
     </div>
-    <div>
-      <label class="text-[11px] text-white/60 mb-1 block">Ongkir Final (Rp) <span class="text-white/30">- ubah kalau real ongkir beda</span></label>
-      <input type="number" id="settle-dp-shipping" oninput="settleDpRecompute()" min="0" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400/40" />
-    </div>
-    <div class="bg-amber-500/10 border border-amber-400/25 rounded-xl p-3 text-xs space-y-1.5">
-      <div class="flex justify-between text-amber-100/80"><span>Total final</span><span id="settle-dp-newtotal">Rp 0</span></div>
-      <div class="flex justify-between text-amber-100 font-bold text-sm"><span>Sisa yang dibayar</span><span id="settle-dp-remaining">Rp 0</span></div>
-      <p id="settle-dp-overpay" class="hidden text-[11px] text-red-300 pt-1"></p>
-    </div>
+    <p class="text-[11px] text-amber-200/60">Ongkir final sudah diset? Kalau real ongkir beda, tutup dulu & pakai "Set Ongkir Final".</p>
     <div>
       <label class="text-[11px] text-white/60 mb-1 block">Bukti Pelunasan <span class="text-red-400">*</span></label>
       <input type="file" id="settle-dp-proof" accept="image/*" class="block w-full text-xs text-white/70 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/10 file:text-white file:font-medium hover:file:bg-white/20" />
@@ -7122,11 +7146,12 @@ async function viewOrder(id) {
             ${Number(o.dp_amount || 0) > 0 ? (
                 o.dp_settled_at
                     ? `<div class="col-span-2 bg-green-500/10 border border-green-400/25 rounded-xl p-3"><p class="text-green-300 text-xs mb-1"><i class="fa-solid fa-circle-check"></i> Pelunasan DP · Lunas</p><p class="font-bold text-sm">Sisa sudah dilunasi ${fmtDateShort(o.dp_settled_at)}</p></div>`
-                    : `<div id="dp-settlement-anchor" class="col-span-2 bg-amber-500/15 border border-amber-400/30 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-                          <div class="min-w-0"><p class="text-amber-300 text-xs mb-1 font-bold"><i class="fa-solid fa-hourglass-half"></i> DP · Menunggu Pelunasan</p><p class="font-bold text-base text-amber-100">Sisa Rp ${fmt(Math.max(0, (o.total_amount||0) - (o.dp_amount||0)))}</p><p class="text-[11px] text-amber-200/70 mt-0.5">DP Rp ${fmt(o.dp_amount)} sudah diterima. Barang belum boleh dikirim sebelum lunas. Ongkir final bisa disesuaikan saat pelunasan.</p></div>
-                          <div class="flex gap-2 shrink-0">
-                              <button onclick="sendSettlementWA(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white font-bold flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> Kirim WA Tagihan</button>
-                              ${isAdmin ? `<button onclick="openSettleDp(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 font-bold border border-green-400/30 flex items-center gap-1.5"><i class="fa-solid fa-check"></i> Pelunasan</button>` : ''}
+                    : `<div id="dp-settlement-anchor" class="col-span-2 bg-amber-500/15 border border-amber-400/30 rounded-xl p-3">
+                          <div class="min-w-0 mb-2"><p class="text-amber-300 text-xs mb-1 font-bold"><i class="fa-solid fa-hourglass-half"></i> DP · Menunggu Pelunasan</p><p class="font-bold text-base text-amber-100">Sisa Rp ${fmt(Math.max(0, (o.total_amount||0) - (o.dp_amount||0)))}</p><p class="text-[11px] text-amber-200/70 mt-0.5">DP Rp ${fmt(o.dp_amount)} diterima. Alur: <b>1)</b> Set ongkir final (kalau real ongkir beda) → <b>2)</b> Kirim tagihan ke customer → <b>3)</b> Konfirmasi setelah customer bayar. Barang baru boleh dikirim setelah lunas.</p></div>
+                          <div class="flex gap-2 flex-wrap">
+                              ${isAdmin ? `<button onclick="openFinalizeShip(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold border border-amber-400/30 flex items-center gap-1.5"><i class="fa-solid fa-truck"></i> 1. Set Ongkir Final</button>` : ''}
+                              <button onclick="sendSettlementWA(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white font-bold flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> 2. Kirim WA Tagihan</button>
+                              ${isAdmin ? `<button onclick="openSettleDp(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 font-bold border border-green-400/30 flex items-center gap-1.5"><i class="fa-solid fa-check"></i> 3. Konfirmasi Pelunasan</button>` : ''}
                           </div>
                        </div>`
             ) : ''}
@@ -7764,9 +7789,11 @@ async function submitConfirmAdditional() {
 // ─── PELUNASAN DP ───────────────────────────────────────────────────────────
 // Order DP dianggap "belum lunas" selama sudah bayar DP (payment_status paid)
 // tapi dp_settled_at masih kosong. Barang tidak boleh dikirim di kondisi ini.
+// Alur: 1) Set Ongkir Final (real) → total+sisa update  2) Kirim tagihan ke
+// customer  3) customer bayar  4) Konfirmasi Pelunasan (upload bukti) → lunas.
 function dpPending(o){ return Number(o.dp_amount||0) > 0 && !o.dp_settled_at && o.payment_status === 'paid'; }
 
-// Kirim WA tagihan pelunasan ke customer (sisa + catatan ongkir final).
+// Kirim WA tagihan pelunasan ke customer (rincian + sisa dgn ongkir yang sekarang).
 async function sendSettlementWA(orderId){
     try{
         const o = await apiFetch('/api/orders/' + orderId);
@@ -7775,11 +7802,11 @@ async function sendSettlementWA(orderId){
         if (remaining <= 0){ toast('Tidak ada sisa pelunasan', true); return; }
         const msg = encodeURIComponent(
             `Halo ${o.customer_name},\n\n` +
-            `Terkait pesanan *#${o.order_code}*, DP sudah kami terima. Berikut rincian pelunasannya:\n\n` +
+            `Terkait pesanan *#${o.order_code}*, DP sudah kami terima. Berikut rincian pelunasan dengan ongkir final:\n\n` +
             `Total: Rp ${fmt(o.total_amount)}\n` +
+            `Ongkir: Rp ${fmt(o.shipping_cost)}\n` +
             `DP Dibayar: Rp ${fmt(o.dp_amount)}\n` +
             `*Sisa Pelunasan: Rp ${fmt(remaining)}*\n\n` +
-            `Catatan: nominal sisa dapat menyesuaikan ongkir sebenarnya. Bila ada perubahan akan kami konfirmasi ulang sebelum pengiriman.\n\n` +
             `Silakan transfer ke:\n` +
             `BCA 8780269791 a/n Priscilla Lavine\n` +
             `Mandiri 1220010735721 a/n Priscilla Lavine\n\n` +
@@ -7791,21 +7818,76 @@ async function sendSettlementWA(orderId){
     } catch(e){ toast('Gagal: ' + e.message, true); }
 }
 
-// Modal pelunasan DP
+// ── Step 1: Set ongkir final (real) ──────────────────────────────────────────
+let _finalizeShipOrderId = null;
+function openFinalizeShip(orderId){
+    const o = window._currentOrder;
+    if (!o || o.id !== orderId){ toast('Refresh dulu', true); return; }
+    _finalizeShipOrderId = orderId;
+    const base = Math.max(0, (o.total_amount||0) - (o.shipping_cost||0)); // total tanpa ongkir
+    document.getElementById('fs-subtotal').textContent = 'Rp ' + fmt(base);
+    document.getElementById('fs-dp').textContent = 'Rp ' + fmt(o.dp_amount);
+    const shipInput = document.getElementById('fs-shipping');
+    shipInput.value = o.shipping_cost || 0;
+    shipInput.dataset.base = base;
+    shipInput.dataset.dp = o.dp_amount || 0;
+    finalizeShipRecompute();
+    const m = document.getElementById('finalize-ship-modal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeFinalizeShipModal(){
+    const m = document.getElementById('finalize-ship-modal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+    _finalizeShipOrderId = null;
+}
+function finalizeShipRecompute(){
+    const shipInput = document.getElementById('fs-shipping');
+    const base = Number(shipInput.dataset.base || 0);
+    const dp   = Number(shipInput.dataset.dp || 0);
+    const finalShip = Math.max(0, parseInt(shipInput.value) || 0);
+    const newTotal  = base + finalShip;
+    const remaining = Math.max(0, newTotal - dp);
+    const overpay   = Math.max(0, dp - newTotal);
+    document.getElementById('fs-newtotal').textContent = 'Rp ' + fmt(newTotal);
+    document.getElementById('fs-remaining').textContent = 'Rp ' + fmt(remaining);
+    const note = document.getElementById('fs-overpay');
+    if (overpay > 0){ note.textContent = `Kelebihan bayar Rp ${fmt(overpay)} - perlu refund manual ke customer.`; note.classList.remove('hidden'); }
+    else { note.classList.add('hidden'); }
+}
+async function submitFinalizeShip(thenSendWA){
+    if (!_finalizeShipOrderId) return;
+    const btnId = thenSendWA ? 'fs-save-wa-btn' : 'fs-save-btn';
+    const btn = document.getElementById(btnId);
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i>';
+    try{
+        const fd = new FormData();
+        fd.append('final_shipping_cost', String(Math.max(0, parseInt(document.getElementById('fs-shipping').value) || 0)));
+        const res = await apiFetch(`/api/orders/${_finalizeShipOrderId}/finalize-shipping`, { method: 'PUT', body: fd });
+        toast('✓ Ongkir final tersimpan.' + (res && res.overpay > 0 ? ' (DP lebih besar dari total - perlu refund.)' : ''));
+        const orderId = _finalizeShipOrderId;
+        closeFinalizeShipModal();
+        await viewOrder(orderId);
+        if (typeof renderOrders === 'function') renderOrders();
+        if (thenSendWA) await sendSettlementWA(orderId);
+    } catch(e){
+        toast('Gagal: ' + e.message, true);
+    } finally {
+        btn.disabled = false; btn.innerHTML = orig;
+    }
+}
+
+// ── Step 4: Konfirmasi pelunasan (upload bukti setelah customer bayar) ────────
 let _settleDpOrderId = null;
 function openSettleDp(orderId){
     const o = window._currentOrder;
     if (!o || o.id !== orderId){ toast('Refresh dulu', true); return; }
     _settleDpOrderId = orderId;
+    const remaining = Math.max(0, (o.total_amount||0) - (o.dp_amount||0));
     document.getElementById('settle-dp-total').textContent = 'Rp ' + fmt(o.total_amount);
     document.getElementById('settle-dp-paid').textContent = 'Rp ' + fmt(o.dp_amount);
-    const shipInput = document.getElementById('settle-dp-shipping');
-    shipInput.value = o.shipping_cost || 0;
-    shipInput.dataset.orig = o.shipping_cost || 0;
-    shipInput.dataset.total = o.total_amount || 0;
-    shipInput.dataset.dp = o.dp_amount || 0;
+    document.getElementById('settle-dp-remaining').textContent = 'Rp ' + fmt(remaining);
     document.getElementById('settle-dp-proof').value = '';
-    settleDpRecompute();
     const m = document.getElementById('settle-dp-modal');
     m.classList.remove('hidden'); m.classList.add('flex');
 }
@@ -7813,22 +7895,6 @@ function closeSettleDpModal(){
     const m = document.getElementById('settle-dp-modal');
     m.classList.add('hidden'); m.classList.remove('flex');
     _settleDpOrderId = null;
-}
-// Live-recompute sisa saat admin ubah ongkir final (bisa naik/turun dari estimasi).
-function settleDpRecompute(){
-    const shipInput = document.getElementById('settle-dp-shipping');
-    const origShip  = Number(shipInput.dataset.orig || 0);
-    const baseTotal = Number(shipInput.dataset.total || 0);
-    const dp        = Number(shipInput.dataset.dp || 0);
-    const finalShip = Math.max(0, parseInt(shipInput.value) || 0);
-    const newTotal  = baseTotal - origShip + finalShip;
-    const remaining = Math.max(0, newTotal - dp);
-    const overpay   = Math.max(0, dp - newTotal);
-    document.getElementById('settle-dp-newtotal').textContent = 'Rp ' + fmt(newTotal);
-    document.getElementById('settle-dp-remaining').textContent = 'Rp ' + fmt(remaining);
-    const note = document.getElementById('settle-dp-overpay');
-    if (overpay > 0){ note.textContent = `Kelebihan bayar Rp ${fmt(overpay)} - perlu refund manual ke customer.`; note.classList.remove('hidden'); }
-    else { note.classList.add('hidden'); }
 }
 async function submitSettleDp(){
     if (!_settleDpOrderId) return;
@@ -7839,7 +7905,6 @@ async function submitSettleDp(){
     try{
         const fd = new FormData();
         fd.append('payment_proof', fileEl.files[0]);
-        fd.append('final_shipping_cost', String(Math.max(0, parseInt(document.getElementById('settle-dp-shipping').value) || 0)));
         const res = await apiFetch(`/api/orders/${_settleDpOrderId}/settle-dp`, { method: 'PUT', body: fd });
         toast('✓ Pelunasan dikonfirmasi. Pesanan siap dikirim.' + (res && res.overpay > 0 ? ' (Ada kelebihan bayar - cek catatan.)' : ''));
         const orderId = _settleDpOrderId;
