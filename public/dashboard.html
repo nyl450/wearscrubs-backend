@@ -792,6 +792,11 @@
                     <input id="order-date-to" type="date" onchange="orderPage=1;renderOrders();updateOrderTabCounts();"
                         class="!py-1.5 !px-2 !text-xs bg-white/5 border border-white/10 rounded-lg text-white">
                 </div>
+                <button id="orders-refresh-btn" onclick="refreshOrders()"
+                    class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition shrink-0 disabled:opacity-50"
+                    title="Muat ulang data pesanan dari server">
+                    <i id="orders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
+                </button>
                 <button onclick="exportOrdersCSV()"
                     class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-400/20 text-green-300 hover:bg-green-500/20 transition shrink-0"
                     title="Export ke CSV (sesuai filter aktif)">
@@ -5909,8 +5914,27 @@ async function loadOrders() {
         // dipanggil saat user klik tab manual, jadi initial load subtab kosong.
         renderOrderSubtabs();
         renderOrders();
+        return true;
     }
-    catch(e) { toast('Gagal: '+e.message, true); }
+    catch(e) { toast('Gagal: '+e.message, true); return false; }
+}
+
+// Muat ulang data pesanan dari SERVER (bukan render ulang cache). Dipakai tombol
+// Refresh — juga berguna kalau ada perubahan dari admin/device lain.
+// Catatan: renderOrders() hanya menggambar ulang `cachedOrders`; kalau data server
+// sudah berubah, wajib loadOrders() supaya tampilan tidak nyangkut.
+async function refreshOrders() {
+    const btn  = document.getElementById('orders-refresh-btn');
+    const icon = document.getElementById('orders-refresh-icon');
+    if (btn) btn.disabled = true;
+    if (icon) icon.classList.add('spin');
+    try {
+        const ok = await loadOrders();
+        if (ok) toast('✓ Data pesanan diperbarui');
+    } finally {
+        if (icon) icon.classList.remove('spin');
+        if (btn) btn.disabled = false;
+    }
 }
 
 // ─── Date filter helpers ──────────────────────────────────────────────────────
@@ -7300,7 +7324,9 @@ async function reviewBordir(orderId, action) {
         toast('✕ Pesanan dibatalkan. Template WA terbuka — kirim ke customer.');
         closeOrderModal();
         await viewOrder(orderId);
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
     } catch(e) { toast('Gagal: ' + e.message, true); }
 }
 
@@ -7471,7 +7497,9 @@ async function submitEditOrder() {
         closeEditOrderModal();
         // Refresh modal detail + list utama
         await viewOrder(o.id);
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
     } catch (e) {
         toast('Gagal: ' + e.message, true);
     } finally {
@@ -7714,7 +7742,9 @@ async function submitAddBordir() {
         toast(`✓ Tambahan bordir tercatat. Selisih Rp ${fmt(res.additional_amount_due)}.`);
         closeAddBordirModal();
         await viewOrder(o.id);
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
         // Auto-open WA tagihan ke customer
         sendAdditionalPaymentWA(o.id);
     } catch (e) {
@@ -7778,7 +7808,9 @@ async function submitConfirmAdditional() {
         const orderId = _confirmAdditionalOrderId;
         closeConfirmAdditionalModal();
         await viewOrder(orderId);
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
     } catch (e) {
         toast('Gagal: ' + e.message, true);
     } finally {
@@ -7868,7 +7900,9 @@ async function submitFinalizeShip(thenSendWA){
         const orderId = _finalizeShipOrderId;
         closeFinalizeShipModal();
         await viewOrder(orderId);
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
         if (thenSendWA) await sendSettlementWA(orderId);
     } catch(e){
         toast('Gagal: ' + e.message, true);
@@ -7910,7 +7944,9 @@ async function submitSettleDp(){
         const orderId = _settleDpOrderId;
         closeSettleDpModal();
         await viewOrder(orderId);
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
     } catch(e){
         toast('Gagal: ' + e.message, true);
     } finally {
@@ -8039,7 +8075,9 @@ async function submitSplitOrder() {
         closeSplitOrderModal();
         // Refresh: load order BARU di modal detail (admin biasanya mau lanjut atur
         // kurir/alamat utk yg dikirim). List utama juga refresh.
-        if (typeof renderOrders === 'function') renderOrders();
+        // Refetch dari server, bukan render ulang cache — kalau tidak, kartu list
+        // masih menampilkan status lama sampai user pindah menu.
+        if (typeof loadOrders === 'function') await loadOrders();
         await viewOrder(res.new_order_id);
     } catch (e) {
         toast('Gagal: ' + e.message, true);
