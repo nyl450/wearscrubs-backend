@@ -251,7 +251,10 @@
         .invoice-photos { margin: 24px 40px 0; padding: 20px 0; border-top: 1px solid #e5e5e5; }
         .invoice-photos .photos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         .invoice-photos .photos-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; border: 1px solid #e5e5e5; }
-        .invoice-bordir { margin: 24px 40px 0; padding: 20px 0; border-top: 1px solid #e5e5e5; }
+        /* border-top + padding atas dipindah ke .invoice-bordir-lead: kalau tetap di
+           parent, garisnya tertinggal sendirian di kaki halaman saat isi terdorong. */
+        .invoice-bordir { margin: 24px 40px 0; padding: 0 0 20px; }
+        .invoice-bordir-lead { padding-top: 20px; border-top: 1px solid #e5e5e5; }
         .invoice-bordir table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .invoice-bordir table thead th { background: #f5f5f5; padding: 10px 16px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #666; border: 1px solid #e5e5e5; }
         .invoice-bordir table tbody td { padding: 14px 16px; border: 1px solid #e5e5e5; vertical-align: top; }
@@ -282,8 +285,10 @@
         .invoice-table tfoot,
         .invoice-billed,
         .invoice-payment,
+        .invoice-notes,
         .invoice-photos,
         .invoice-tnc,
+        .invoice-bordir-lead,
         .invoice-bordir table { break-inside: avoid; page-break-inside: avoid; }
         /* Label section jangan tertinggal sendirian di bawah halaman. */
         .invoice-payment .section-label,
@@ -10856,7 +10861,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     // supaya line break user (Shift+Enter di textarea) tetap render.
     const invoiceNotesRaw = (order.invoice_notes || '').trim();
     const invoiceNotesHTML = invoiceNotesRaw
-        ? `<div style="margin:0 40px 20px;padding:16px 20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+        ? `<div class="invoice-notes" style="margin:0 40px 20px;padding:16px 20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
              <div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#92400e;margin-bottom:8px;">Notes</div>
              <p style="margin:0;font-size:13px;color:#78350f;line-height:1.55;white-space:pre-wrap;">${esc(invoiceNotesRaw)}</p>
            </div>`
@@ -10991,7 +10996,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             }
         }
 
-        let sections = '';
+        // Array (bukan string) supaya tabel pertama bisa dibungkus bareng section-label
+        // dalam satu blok anti-potong halaman — lihat perakitan bordirHTML di bawah.
+        const sectionTables = [];
         // Request Details: font-size 13px (dari 11px) + color near-black #1a1a1a
         // (dari #333) supaya lebih kebaca. User request setelah cleanup mockup.
         const cellStyle = 'padding:12px 14px;vertical-align:top;font-size:13px;color:#1a1a1a;line-height:1.6;';
@@ -11030,7 +11037,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     <p style="margin:3px 0;">Thread: ${esc(logo.color||'-')}</p>
                     <p style="margin:3px 0;">Position: ${logo.position==='kanan'?'Right':'Left'} Chest</p>`;
 
-                sections += `
+                sectionTables.push(`
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;">
                     <thead>
                         <tr><th colspan="2" style="${thStyle}text-align:left;background:#f0f0f0;">Product: ${esc(itemLbl)}</th></tr>
@@ -11058,7 +11065,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                             </td>
                         </tr>
                     </tbody>
-                </table>`;
+                </table>`);
 
             } else {
                 // ── Single bordir: detail | mockup side by side ──
@@ -11075,7 +11082,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                        <p style="margin:3px 0;">Product: ${esc(emb.item_label||'-')}</p>
                        <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
                        <p style="margin:3px 0;">Position: ${posLbl}</p>`;
-                sections += `
+                sectionTables.push(`
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
                     <thead><tr>
                         <th style="${thStyle}width:52%;text-align:left;">Request Details</th>
@@ -11085,7 +11092,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                         <td class="bordir-detail">${det}</td>
                         <td class="bordir-visual">${renderVisCell(emb)}</td>
                     </tr></tbody>
-                </table>`;
+                </table>`);
             }
         }
 
@@ -11100,7 +11107,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
                 <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
                 <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>`;
-            sections += `
+            sectionTables.push(`
             <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
                 <thead><tr>
                     <th style="${thStyle}width:52%;text-align:left;">Request Details</th>
@@ -11110,10 +11117,14 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     <td class="bordir-detail">${det}</td>
                     <td class="bordir-visual">${renderVisCell(emb)}</td>
                 </tr></tbody>
-            </table>`;
+            </table>`);
         }
 
-        bordirHTML = `<div class="invoice-bordir"><div class="section-label">Embroidery Details</div>${sections}</div>`;
+        // html2pdf HANYA menghormati `page-break-inside: avoid` (bukan break-after),
+        // jadi label section harus dibungkus satu blok dgn tabel pertama — kalau tidak,
+        // label "Embroidery Details" yatim di kaki halaman & tabelnya turun sendirian.
+        const bordirLead = `<div class="section-label">Embroidery Details</div>${sectionTables[0] || ''}`;
+        bordirHTML = `<div class="invoice-bordir"><div class="invoice-bordir-lead">${bordirLead}</div>${sectionTables.slice(1).join('')}</div>`;
     }
 
     return `<div class="invoice-wrap">
@@ -11295,7 +11306,8 @@ async function downloadInvoicePDF(orderCode) {
             pagebreak: {
                 mode: ['css', 'legacy'],
                 avoid: ['tr', '.invoice-table tfoot', '.invoice-billed', '.invoice-payment',
-                        '.invoice-photos', '.invoice-bordir table', '.invoice-tnc']
+                        '.invoice-notes', '.invoice-photos', '.invoice-bordir-lead',
+                        '.invoice-bordir table', '.invoice-tnc']
             },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(clone).outputPdf('blob');
