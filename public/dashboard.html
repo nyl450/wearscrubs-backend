@@ -12951,6 +12951,9 @@ async function kasirCartSubmit() {
     const orderSource     = document.getElementById('wa-order-source')?.value || 'whatsapp';
     const billingTo       = document.getElementById('wa-billing-to')?.value.trim() || '';
     const invoiceDate     = document.getElementById('wa-invoice-date')?.value || '';
+    // Catatan Invoice (customer-facing, muncul di PDF invoice). Terpisah dari `notes`
+    // internal. Sempat kelewat di jalur cart → catatan hilang saat order dibuat.
+    const invoiceNotes    = (document.getElementById('wa-invoice-notes')?.value || '').trim() || null;
     if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
         alert('Lengkapi data pelanggan (Nama, HP, Alamat, Kota) terlebih dahulu.'); return;
     }
@@ -12992,6 +12995,7 @@ async function kasirCartSubmit() {
             body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone,
                 customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost,
                 shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes,
+                invoice_notes: invoiceNotes,
                 order_source: orderSource, payment_method: paymentMethod, billing_to: billingTo,
                 invoice_date: invoiceDate || null, items: allItems,
                 embroidery_details: allEmb.length ? allEmb : null,
