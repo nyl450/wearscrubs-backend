@@ -233,10 +233,13 @@
         .invoice-table col.col-desc  { width: auto; }
         .invoice-table col.col-price { width: 110px; }
         .invoice-table col.col-qty   { width: 50px; }
-        .invoice-table col.col-amt   { width: 110px; }
+        .invoice-table col.col-amt   { width: 140px; }
         .invoice-table tbody td { padding: 11px 14px; border-bottom: 1px solid #f0f0f0; color: #2d2d2d; vertical-align: top; word-wrap: break-word; }
         .invoice-table tbody td:not(:first-child) { text-align: right; white-space: nowrap; }
         .invoice-table thead th:not(:first-child) { white-space: nowrap; }
+        /* tfoot (Total, DP Paid, Balance Due). Dulu rata-kanan + nowrap hanya diberikan
+           ke `tbody td`, jadi nominal di tfoot wrap 2 baris & label nempel ke angka. */
+        .invoice-table tfoot td:not(:first-child) { text-align: right; white-space: nowrap; }
         .invoice-table .bordir-row td { padding: 4px 14px 4px 28px; font-size: 12px; color: #888; border-bottom: none; }
         .invoice-table .totals-row td { border-bottom: none; padding: 8px 14px; font-size: 13px; color: #444; }
         .invoice-table tfoot .grand-total td { font-size: 15px; font-weight: 700; color: #1a1a1a; padding-top: 12px; border-top: 2px solid #1a1a1a; }
@@ -271,7 +274,24 @@
             .invoice-tnc { margin: 20px 20px 32px; }
             .invoice-table { font-size: 12px; }
         }
+        /* ── Pagination invoice (PDF + print) ──────────────────────────────────
+           Jangan potong section di tengah. Sebelumnya html2canvas mengiris kanvas
+           panjang di ketinggian tetap → kotak "Payment Information" kebelah 2 halaman.
+           Dipakai html2pdf (pagebreak mode 'css' + avoid) dan window.print(). */
+        .invoice-table tr,
+        .invoice-table tfoot,
+        .invoice-billed,
+        .invoice-payment,
+        .invoice-photos,
+        .invoice-tnc,
+        .invoice-bordir table { break-inside: avoid; page-break-inside: avoid; }
+        /* Label section jangan tertinggal sendirian di bawah halaman. */
+        .invoice-payment .section-label,
+        .invoice-photos .section-label,
+        .invoice-bordir .section-label,
+        .invoice-tnc .section-label { break-after: avoid; page-break-after: avoid; }
         @media print {
+            @page { size: A4; margin: 0; }
             body * { visibility: hidden; }
             #invoice-print-area, #invoice-print-area * { visibility: visible; }
             #invoice-print-area { position: fixed; top: 0; left: 0; width: 100%; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -10732,7 +10752,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             : '');
     // Baris DP di tabel invoice — tampil kalau order pakai DP (lunas maupun belum).
     const dpRowsHTML = (Number(order.dp_amount || 0) > 0)
-        ? `<tr class="totals-row" style="color:#b45309;"><td colspan="3" style="text-align:right;font-weight:500;">💳 DP Paid${order.dp_settled_at ? ' (Settled)' : ''}</td><td style="font-weight:600;">-${fmtRp(order.dp_amount)}</td></tr>
+        ? `<tr class="totals-row" style="color:#b45309;"><td colspan="3" style="text-align:right;font-weight:500;">DP Paid${order.dp_settled_at ? ' (Settled)' : ''}</td><td style="font-weight:600;">-${fmtRp(order.dp_amount)}</td></tr>
            <tr class="totals-row" style="color:${order.dp_settled_at ? '#16a34a' : '#b45309'};"><td colspan="3" style="text-align:right;font-weight:700;">Balance Due / Sisa Pelunasan</td><td style="font-weight:700;">${order.dp_settled_at ? 'PAID' : fmtRp(dpRemaining)}</td></tr>`
         : '';
 
@@ -11252,7 +11272,9 @@ async function downloadInvoicePDF(orderCode) {
         // windowWidth/width + x/scrollX:0 force a consistent 794px desktop layout and
         // a zero-offset capture origin on every device.
         const pdfBlob = await html2pdf().set({
-            margin: 0,
+            // [top, left, bottom, right] mm. Top 0 supaya header gelap tetap full-bleed;
+            // bottom 8mm sbg gutter biar konten tidak mepet tepi bawah halaman.
+            margin: [0, 0, 8, 0],
             filename,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: {
@@ -11265,6 +11287,15 @@ async function downloadInvoicePDF(orderCode) {
                 y: 0,
                 scrollX: 0,
                 scrollY: 0
+            },
+            // Tanpa ini html2pdf mengiris kanvas di ketinggian tetap → section kebelah
+            // 2 halaman (mis. label "Payment Information" terpisah dari isinya).
+            // 'css' menghormati break-inside:avoid di stylesheet; `avoid` menegaskan
+            // per-elemen (html2pdf mengukur bounding box & mendorong ke halaman berikut).
+            pagebreak: {
+                mode: ['css', 'legacy'],
+                avoid: ['tr', '.invoice-table tfoot', '.invoice-billed', '.invoice-payment',
+                        '.invoice-photos', '.invoice-bordir table', '.invoice-tnc']
             },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(clone).outputPdf('blob');
