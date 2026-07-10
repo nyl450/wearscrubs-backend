@@ -655,7 +655,9 @@
                 <h3 class="font-bold text-sm">Pesanan Terbaru</h3>
                 <button onclick="showModule('orders')" class="text-xs text-white/40 hover:text-white transition">Lihat Semua →</button>
             </div>
-            <div id="recent-orders-table"></div>
+            <!-- overflow-x-auto: di mobile tabel lebih lebar dari layar → geser kanan/kiri
+                 (sebelumnya kolom terjepit, badge Status kepotong oleh overflow-hidden card) -->
+            <div id="recent-orders-table" class="overflow-x-auto"></div>
         </div>
     </div>
 
@@ -3915,15 +3917,17 @@ async function loadRecentOrders() {
         const recent = orders.slice(0,5);
         const el = document.getElementById('recent-orders-table');
         if (!recent.length) { el.innerHTML = '<p class="text-center text-xs text-white/30 py-8">Belum ada pesanan</p>'; return; }
-        el.innerHTML = `<table class="w-full text-xs"><thead><tr class="bg-white/[0.03] border-b border-white/10 text-white/50 uppercase tracking-wider text-[10px] font-semibold">
-            <th class="px-5 py-3 text-left">Kode</th><th class="px-5 py-3 text-left">Pelanggan</th>
-            <th class="px-5 py-3 text-right">Total</th><th class="px-5 py-3 text-center">Status</th>
+        // min-w-[640px] + whitespace-nowrap: jaga kolom tetap 1 baris. Di layar sempit
+        // tabel meluber → container (#recent-orders-table) yang menggeser, bukan teks yg wrap.
+        el.innerHTML = `<table class="w-full min-w-[640px] text-xs"><thead><tr class="bg-white/[0.03] border-b border-white/10 text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+            <th class="px-5 py-3 text-left whitespace-nowrap">Kode</th><th class="px-5 py-3 text-left whitespace-nowrap">Pelanggan</th>
+            <th class="px-5 py-3 text-right whitespace-nowrap">Total</th><th class="px-5 py-3 text-center whitespace-nowrap">Status</th>
         </tr></thead><tbody class="divide-y divide-white/[0.06]">
             ${recent.map(o => `<tr class="hover:bg-white/[0.05] cursor-pointer transition-colors" onclick="viewOrder(${o.id})">
-                <td class="px-5 py-3 font-mono text-white/50">${esc(o.order_code)}</td>
-                <td class="px-5 py-3 font-medium text-white/90">${esc(o.customer_name)}</td>
-                <td class="px-5 py-3 text-right text-green-400 font-bold">Rp ${fmt(o.total_amount)}</td>
-                <td class="px-5 py-3 text-center">${statusBadge(o.order_status)}</td>
+                <td class="px-5 py-3 font-mono text-white/50 whitespace-nowrap">${esc(o.order_code)}</td>
+                <td class="px-5 py-3 font-medium text-white/90 whitespace-nowrap">${esc(o.customer_name)}</td>
+                <td class="px-5 py-3 text-right text-green-400 font-bold whitespace-nowrap">Rp ${fmt(o.total_amount)}</td>
+                <td class="px-5 py-3 text-center whitespace-nowrap">${statusBadge(o.order_status)}</td>
             </tr>`).join('')}
         </tbody></table>`;
     } catch(e) {}
