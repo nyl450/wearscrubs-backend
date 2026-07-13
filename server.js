@@ -2659,6 +2659,43 @@ app.post('/api/orders', async (req, res) => {
                     ? 'bordir'
                     : (isPickupAuto ? 'done' : 'confirmed');
                 const actor = authUser?.username || 'admin';
+                // ── POTONG STOK (BUG FIX) ─────────────────────────────────────
+                // Auto-confirm dulu TIDAK mengurangi inventory — deduksi hanya ada
+                // di confirm-payment yg di-skip untuk order gratis → stok tak berkurang.
+                // Mirror logic confirm-payment: agregasi per varian fisik, skip
+                // custom/PO (tak punya row inventory / deduct saat receive), FOR UPDATE
+                // lock + hard check anti-oversell, log order_out. Bonus IKUT dipotong
+                // (barang tetap keluar gudang meski gratis).
+                const freeVariantTotals = new Map();
+                for (const it of itemDetails) {
+                    if (it.is_custom_size || it.is_po || it.is_custom_product) continue;
+                    const vt = it.variant_type || 'null';
+                    const k = `${it.product_id}|${it.size}|${it.color}|${vt}`;
+                    if (!freeVariantTotals.has(k)) freeVariantTotals.set(k, { product_id: it.product_id, size: it.size, color: it.color, variant_type: vt, quantity: 0 });
+                    freeVariantTotals.get(k).quantity += it.quantity;
+                }
+                for (const v of freeVariantTotals.values()) {
+                    const invRes = await client.query(
+                        'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                        [v.product_id, v.size, v.color, v.variant_type]
+                    );
+                    const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+                    if (stockBefore < v.quantity) {
+                        const e = new Error(`Stok tidak cukup untuk order gratis: ${v.color}/${v.variant_type}/${v.size} tersisa ${stockBefore}, dibutuhkan ${v.quantity}. Sesuaikan stok atau tandai Pre-Order.`);
+                        e.statusCode = 409; throw e;
+                    }
+                    const stockAfter = stockBefore - v.quantity;
+                    await client.query(
+                        'UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
+                        [v.quantity, v.product_id, v.size, v.color, v.variant_type]
+                    );
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                         VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+                        [v.product_id, v.size, v.color, v.variant_type, -v.quantity, stockBefore, stockAfter, `Order gratis ${orderCode}`, newOrderId, actor]
+                    );
+                }
                 await client.query(
                     `UPDATE orders SET payment_status = 'paid', order_status = $1, paid_at = NOW(), updated_at = NOW() WHERE id = $2`,
                     [autoStatus, newOrderId]

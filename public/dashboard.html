@@ -6963,7 +6963,7 @@ async function viewOrder(id) {
                     ${e.type==='logo' ? '🎨 Logo' : '✏️ Nama'}
                 </span>
                 <div class="min-w-0 flex-1">
-                    <p class="text-[10px] text-white/55">${esc(e.item_label||'')}</p>
+                    <p class="text-[10px] text-white/55">${esc(stripItemLabelPrice(e.item_label)||'')}</p>
                     ${isLogoUploaded
                         ? `<div class="flex items-end gap-2 mt-1 mb-1">
                                <img loading="lazy" decoding="async" src="${esc(e.value)}" alt="Logo Bordir"
@@ -10478,6 +10478,18 @@ function waResetForm() {
 let waProductPhotoBase64s = [];
 let waBordirRefBase64 = null;
 
+// Buang range harga yg ter-bake ke item_label dari teks dropdown multi-variant
+// (mis. "Minna — Rp 255.000 / Rp 270.000 (beige, S)" → "Minna (beige, S)").
+// Display-only & non-destruktif: data DB tetap, matching bordir tetap pakai raw label.
+// Heal order lama; order baru sudah bersih dari sumber (pakai pName di collect).
+function stripItemLabelPrice(lbl) {
+    if (!lbl) return lbl;
+    return String(lbl)
+        .replace(/\s*[—–-]\s*Rp[\d.,\/\sRp]*(?=\([^)]*\)\s*$)/i, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
 function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const items = order.items || [];
     const embDetails = (() => {
@@ -10822,13 +10834,13 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
                 const det = emb.type === 'nama'
                     ? `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
-                       <p style="margin:3px 0;">Product: ${esc(emb.item_label||'-')}</p>
+                       <p style="margin:3px 0;">Product: ${esc(stripItemLabelPrice(emb.item_label)||'-')}</p>
                        <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(emb.value||'-')}</strong></p>
                        <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
                        <p style="margin:3px 0;">Position: ${posLbl}</p>
                        <p style="color:#555;font-size:11px;margin:5px 0 0;">Height ~1.2 cm · length follows</p>`
                     : `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
-                       <p style="margin:3px 0;">Product: ${esc(emb.item_label||'-')}</p>
+                       <p style="margin:3px 0;">Product: ${esc(stripItemLabelPrice(emb.item_label)||'-')}</p>
                        <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
                        <p style="margin:3px 0;">Position: ${posLbl}</p>`;
                 sectionTables.push(`
@@ -10853,7 +10865,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             const emb = embDetails[i];
             const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
             const det = `<p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
-                <p style="margin:2px 0;font-size:11px;">Product: ${esc(emb.item_label||'-')}</p>
+                <p style="margin:2px 0;font-size:11px;">Product: ${esc(stripItemLabelPrice(emb.item_label)||'-')}</p>
                 <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
                 <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>`;
             sectionTables.push(`
@@ -12279,8 +12291,9 @@ function _kasirCollectSingleItems() {
             bordir_nama_price: bNP, bordir_logo_price: bLP, is_bonus: isBonus,
             is_custom_size: isCustom, custom_price: customPrice, is_po: isPO });
         if (bordirNama || bordirLogo) {
-            const pText = prodEl?.options[prodEl.selectedIndex]?.text || 'Produk';
-            const il = `${pText} (${finalColor}, ${finalSize})`;
+            // pName = nama bersih (dataset.name / split em-dash) — BUKAN teks opsi dropdown
+            // yg untuk produk multi-variant ikut range harga "Minna — Rp 255.000 / Rp 270.000".
+            const il = `${pName} (${finalColor}, ${finalSize})`;
             let nP = null, lP = null;
             if (bordirNama) {
                 const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
