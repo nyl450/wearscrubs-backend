@@ -10785,44 +10785,53 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             const hasBoth = !!logo;
 
             if (hasBoth) {
-                // ── Both bordir selected: detail side-by-side, mockup full-width below ──
-                const rightEmb = [nama, logo].find(e => e.position === 'kanan') || nama;
-                const leftEmb  = [nama, logo].find(e => e.position === 'kiri')  || logo;
+                // ── Both bordir: SATU item per kolom, konsisten detail + visual ──
+                // Urut kolom by POSISI dada: item posisi 'kiri' → kolom kiri, 'kanan' →
+                // kolom kanan. Detail & visual sama-sama ikut → tiap kolom = 1 item utuh
+                // (dulu detail per-tipe tapi visual per-posisi → kolom kiri: detail Nama
+                // tapi visual Logo, bikin bingung). Fallback urutan tipe kalau posisi
+                // kebetulan sama (order lama/edge).
+                let leftColEmb, rightColEmb;
+                if (nama.position === 'kanan' && logo.position === 'kiri') { leftColEmb = logo; rightColEmb = nama; }
+                else { leftColEmb = nama; rightColEmb = logo; }
 
-                const namaDet = `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
-                    <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(nama.value||'-')}</strong></p>
-                    <p style="margin:3px 0;">Thread: ${esc(nama.color||'-')}</p>
-                    <p style="margin:3px 0;">Position: ${nama.position==='kanan'?'Right':'Left'} Chest</p>
-                    <p style="margin:5px 0 0;font-size:11px;color:#555;">Letter height ~1.2 cm</p>`;
-                const logoDet = `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
-                    <p style="margin:3px 0;">Thread: ${esc(logo.color||'-')}</p>
-                    <p style="margin:3px 0;">Position: ${logo.position==='kanan'?'Right':'Left'} Chest</p>`;
+                const detFor = (e) => e.type === 'nama'
+                    ? `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
+                       <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(e.value||'-')}</strong></p>
+                       <p style="margin:3px 0;">Thread: ${esc(e.color||'-')}</p>
+                       <p style="margin:3px 0;">Position: ${e.position==='kanan'?'Right':'Left'} Chest</p>
+                       <p style="margin:5px 0 0;font-size:11px;color:#555;">Letter height ~1.2 cm</p>`
+                    : `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
+                       <p style="margin:3px 0;">Thread: ${esc(e.color||'-')}</p>
+                       <p style="margin:3px 0;">Position: ${e.position==='kanan'?'Right':'Left'} Chest</p>`;
+                const headFor = (e) => e.type === 'nama' ? 'Request Details — Embroidery Name / Text' : 'Request Details — Embroidery Logo';
+                const posLbl  = (e) => e.position === 'kanan' ? 'RIGHT CHEST' : 'LEFT CHEST';
 
                 sectionTables.push(`
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;">
                     <thead>
                         <tr><th colspan="2" style="${thStyle}text-align:left;background:#f0f0f0;">Product: ${esc(itemLbl)}</th></tr>
                         <tr>
-                            <th style="${thStyle}width:50%;text-align:left;border-right:1px solid #e8e8e8;">Request Details — Embroidery Name / Text</th>
-                            <th style="${thStyle}text-align:left;">Request Details — Embroidery Logo</th>
+                            <th style="${thStyle}width:50%;text-align:left;border-right:1px solid #e8e8e8;">${headFor(leftColEmb)}</th>
+                            <th style="${thStyle}text-align:left;">${headFor(rightColEmb)}</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style="${cellStyle}border-right:1px solid #e8e8e8;">${namaDet}</td>
-                            <td style="${cellStyle}">${logoDet}</td>
+                            <td style="${cellStyle}border-right:1px solid #e8e8e8;">${detFor(leftColEmb)}</td>
+                            <td style="${cellStyle}">${detFor(rightColEmb)}</td>
                         </tr>
                         <tr>
                             <td colspan="2" style="background:#f5f5f5;padding:6px 12px;font-size:10px;font-weight:700;color:#666;text-align:center;letter-spacing:0.06em;border-top:1px solid #e8e8e8;">VISUAL MOCKUP</td>
                         </tr>
                         <tr>
                             <td style="padding:14px 10px;text-align:center;border-right:1px solid #e8e8e8;border-top:1px solid #f0f0f0;">
-                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">RIGHT</div>
-                                ${renderVisCell(rightEmb)}
+                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">${posLbl(leftColEmb)}</div>
+                                ${renderVisCell(leftColEmb)}
                             </td>
                             <td style="padding:14px 10px;text-align:center;border-top:1px solid #f0f0f0;">
-                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">LEFT</div>
-                                ${renderVisCell(leftEmb)}
+                                <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;">${posLbl(rightColEmb)}</div>
+                                ${renderVisCell(rightColEmb)}
                             </td>
                         </tr>
                     </tbody>
