@@ -12600,10 +12600,31 @@ async function kasirCartSubmit() {
 // FORMAT ORDER — Generate teks pesanan untuk WA Group internal tim
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Toggle antar 2 versi Format Order (staff = tanpa harga, full = dengan harga).
+function _foShow(which) {
+    const t = window._foTexts || {};
+    const pre = document.getElementById('format-order-text');
+    if (pre) pre.textContent = t[which] || '';
+    ['staff', 'full'].forEach(k => {
+        const b = document.getElementById('fo-tab-' + k);
+        if (!b) return;
+        const active = k === which;
+        b.className = 'flex-1 py-2 rounded-lg text-xs font-bold transition ' + (active
+            ? 'bg-amber-500/20 border border-amber-400/40 text-amber-300'
+            : 'bg-white/5 border border-white/8 text-white/40 hover:text-white/70');
+    });
+    window._foActive = which;
+}
+
 function openFormatOrderModal() {
     const o = window._currentOrder;
     if (!o) { if (typeof toast==='function') toast('Data order belum dimuat.', true); return; }
-    const text = _generateFormatOrderText(o);
+    // Dua versi: staff (tanpa harga, per-potong + rekap) & full (dengan harga).
+    window._foTexts = {
+        staff: _generateFormatOrderText(o, { withPrice: false }),
+        full:  _generateFormatOrderText(o, { withPrice: true }),
+    };
+    window._foActive = 'staff';
     // Buat modal on-demand (tidak perlu di HTML karena jarang dipakai)
     const existing = document.getElementById('format-order-modal');
     if (existing) existing.remove();
@@ -12617,7 +12638,11 @@ function openFormatOrderModal() {
                 <button onclick="document.getElementById('format-order-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
             </div>
             <div class="p-5 space-y-4 overflow-y-auto flex-1">
-                <pre id="format-order-text" class="text-xs text-white/80 whitespace-pre-wrap font-mono leading-relaxed bg-white/3 border border-white/8 rounded-xl p-4 select-all max-h-80 overflow-y-auto">${esc(text)}</pre>
+                <div class="flex gap-2">
+                    <button id="fo-tab-staff" onclick="_foShow('staff')" class="flex-1 py-2 rounded-lg text-xs font-bold transition bg-amber-500/20 border border-amber-400/40 text-amber-300">Tanpa Harga (Staff)</button>
+                    <button id="fo-tab-full" onclick="_foShow('full')" class="flex-1 py-2 rounded-lg text-xs font-bold transition bg-white/5 border border-white/8 text-white/40 hover:text-white/70">Dengan Harga</button>
+                </div>
+                <pre id="format-order-text" class="text-xs text-white/80 whitespace-pre-wrap font-mono leading-relaxed bg-white/3 border border-white/8 rounded-xl p-4 select-all max-h-80 overflow-y-auto">${esc(window._foTexts.staff)}</pre>
                 <div class="flex gap-2">
                     <button onclick="navigator.clipboard.writeText(document.getElementById('format-order-text').textContent).then(()=>{ if(typeof toast==='function') toast('Teks disalin!'); })" class="flex-1 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-300 font-bold text-sm transition flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Salin Teks</button>
                     <button onclick="document.getElementById('format-order-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Tutup</button>
@@ -12629,27 +12654,66 @@ function openFormatOrderModal() {
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
-function _generateFormatOrderText(o) {
+// opts.withPrice=true  → versi lengkap dengan harga + total (referensi tagihan).
+// opts.withPrice=false → versi STAFF: tanpa harga, tiap potong bordir jadi blok
+//   sendiri (garis pemisah) + Rekap pesanan di bawah — supaya produksi tidak bingung.
+function _generateFormatOrderText(o, opts) {
+    opts = opts || {};
+    const withPrice = opts.withPrice !== false; // default: dengan harga
     const rp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
     // Label satuan produk per kategori — dulu hardcoded 'baju' bikin salah utk
     // celana/cap/gown. Custom product tanpa category → fallback 'pcs'.
     const unitLabel = (cat) => ({ tops: 'baju', pants: 'celana', caps: 'cap', gown: 'gown' }[cat] || 'pcs');
+    const DIV = '-'.repeat(45);
     let bordirDetails = [];
     try { bordirDetails = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch(e) {}
 
+    // ── Matching bordir → item (BUGFIX) ──────────────────────────────────────
+    // Dulu fallback pakai `item_label.includes(size)` → size 'M' cocok dgn nama
+    // produk "Minna" (huruf M), jadi bordir size L ketarik ke size M. Sekarang:
+    // exact item_label match, atau fallback parse token (warna, size) PERSIS.
+    const parseTail = (lbl) => {
+        const m = /\(([^,]+),\s*([^)]+)\)\s*$/.exec(lbl || '');
+        return m ? { color: m[1].trim().toLowerCase(), size: m[2].trim().toLowerCase() } : null;
+    };
+    const matchesItem = (b, it, il) => {
+        if (!b.item_label) return false;
+        if (b.item_label === il) return true;
+        if (!b.item_label.startsWith(it.product_name || '')) return false;
+        const t = parseTail(b.item_label);
+        return !!t && t.color === String(it.color||'').toLowerCase() && t.size === String(it.size||'').toLowerCase();
+    };
+    // Consumed-set global: satu entry bordir tak boleh diklaim 2 item (penting
+    // saat nama produk bertabrakan). Item diproses berurutan.
+    const usedIdx = new Set();
+    const claim = (it, il, type) => {
+        const out = [];
+        for (let i = 0; i < bordirDetails.length; i++) {
+            if (usedIdx.has(i)) continue;
+            const b = bordirDetails[i];
+            if (b.type !== type) continue;
+            if (matchesItem(b, it, il)) { usedIdx.add(i); out.push(b); }
+        }
+        return out;
+    };
+    const namaLines = (b) => b.value_line2
+        ? `${b.value}\n${b.value_underline ? '----- (pakai garis pemisah)\n' : ''}${b.value_line2}`
+        : (b.value_underline ? `${b.value}\n----- (pakai garis pemisah)` : b.value);
+
+    // ── Header ───────────────────────────────────────────────────────────────
     let text = `📋 FORMAT ORDER\n\n`;
     text += `Nama: ${o.customer_name}\n`;
     text += `Alamat: ${o.customer_address || '-'}\n`;
     text += `Telepon: ${o.customer_phone}\n`;
-    text += `Ongkir: ${rp(o.shipping_cost || 0)}\n`;
+    if (withPrice) text += `Ongkir: ${rp(o.shipping_cost || 0)}\n`;
     if (o.shipping_courier) text += `Ekspedisi: ${o.shipping_courier}\n`;
     text += `\n`;
 
-    const items = o.items || [];
+    const items = (o.items || []).filter(it => !it.is_bonus);
     let productSubtotal = 0, bordirGrandTotal = 0;
+    const rekap = [];
 
     for (const it of items) {
-        if (it.is_bonus) continue;
         const bNP = it.bordir_nama ? (Number(it.bordir_nama_price) || 20000) : 0;
         const bLP = it.bordir_logo ? (Number(it.bordir_logo_price) || 30000) : 0;
         const bordirPerUnit = bNP + bLP;
@@ -12659,44 +12723,68 @@ function _generateFormatOrderText(o) {
         bordirGrandTotal += bordirPerUnit * qty;
 
         const variantStr = (it.variant_type && it.variant_type !== 'null') ? `, ${it.variant_type}` : '';
-        text += `${it.product_name || 'Produk'}\n`;
-        text += `- ${it.product_name}, Warna ${it.color}${variantStr}, Size ${it.size} (${rp(basePerUnit)})`;
-        if (it.is_po) text += ` [Pre-Order]`;
-        if (it.is_custom_size || it.is_custom_product) text += ` [Custom]`;
-        text += `\n`;
+        const tags = `${it.is_po ? ' [Pre-Order]' : ''}${(it.is_custom_size || it.is_custom_product) ? ' [Custom]' : ''}`;
+        const headLine = `${it.product_name || 'Produk'}`;
+        const detailLine = `- ${it.product_name}, Warna ${it.color}${variantStr}, Size ${it.size}`;
 
-        // Cocokkan bordir detail ke item ini
         const il = `${it.product_name} (${it.color}, ${it.size})`;
-        const matched = bordirDetails.filter(b => b.item_label === il ||
-            (b.item_label && b.item_label.includes(it.color) && b.item_label.includes(it.size) && b.item_label.startsWith(it.product_name)));
-        for (const b of matched) {
-            if (b.type === 'nama') {
-                const nameDisplay = b.value_line2
-                    ? `${b.value}\n${b.value_underline ? '----- (pakai garis pemisah)\n' : ''}${b.value_line2}`
-                    : b.value;
-                text += `\nBordir nama:\n${nameDisplay}\nwarna bordir ${b.color || '-'}\n(${rp(bNP)})\n`;
-            } else if (b.type === 'logo') {
-                text += `\nBordir logo:\nwarna bordir ${b.color || '-'}\n(${rp(bLP)})\n`;
+        const namas = claim(it, il, 'nama');
+        const logos = claim(it, il, 'logo');
+        const hasBordir = namas.length > 0 || logos.length > 0;
+
+        // Anotasi rekap: bordir nama & logo / nama / logo
+        let bordirTag = '';
+        if (namas.length && logos.length) bordirTag = 'bordir nama & logo, ';
+        else if (namas.length) bordirTag = 'bordir nama, ';
+        else if (logos.length) bordirTag = 'bordir logo, ';
+        rekap.push(`- ${it.product_name}, Warna ${it.color}${variantStr}, Size ${it.size}, ${bordirTag}${qty} pcs`);
+
+        if (withPrice) {
+            // ── Versi dengan harga: grouped per item ──
+            text += `${headLine}\n`;
+            text += `${detailLine} (${rp(basePerUnit)})${tags}\n`;
+            for (const b of namas) text += `\nBordir nama:\n${namaLines(b)}\nwarna bordir ${b.color || '-'}\n(${rp(bNP)})\n`;
+            for (const b of logos) text += `\nBordir logo:\nwarna bordir ${b.color || '-'}\n(${rp(bLP)})\n`;
+            text += `Jumlah: ${qty} ${unitLabel(it.category)}\n\n`;
+        } else if (!hasBordir) {
+            // ── Versi staff, item tanpa bordir: grouped, tanpa garis pemisah ──
+            text += `${headLine}\n`;
+            text += `${detailLine}${tags}\n`;
+            text += `Jumlah: ${qty} ${unitLabel(it.category)}\n\n`;
+        } else {
+            // ── Versi staff, item bordir: PECAH per potong (1 orang = 1 blok) ──
+            const pieces = Math.max(qty, namas.length, logos.length);
+            for (let p = 0; p < pieces; p++) {
+                text += `${DIV}\n`;
+                text += `${headLine}\n`;
+                text += `${detailLine}${tags}\n`;
+                if (namas[p]) text += `\nBordir nama:\n${namaLines(namas[p])}\nwarna bordir ${namas[p].color || '-'}\n`;
+                if (logos[p]) text += `\nBordir logo:\nwarna bordir ${logos[p].color || '-'}\n`;
+                text += `\nJumlah: 1 ${unitLabel(it.category)}\n`;
+                text += `${DIV}\n\n`;
             }
         }
-        text += `Jumlah: ${qty} ${unitLabel(it.category)}\n\n`;
     }
 
-    const shippingCost   = o.shipping_cost || 0;
-    const discountAmount = o.discount_amount || 0;
-    const total          = o.total_amount || 0;
-
-    const parts = [];
-    if (productSubtotal > 0) parts.push(rp(productSubtotal));
-    if (shippingCost > 0)    parts.push(`Ongkir ${rp(shippingCost)}`);
-    if (bordirGrandTotal > 0) parts.push(`Bordir ${rp(bordirGrandTotal)}`);
-    if (discountAmount > 0)  parts.push(`Disc -${rp(discountAmount)}`);
-    text += `Total Pesanan: ${parts.join(' + ')} = ${rp(total)}`;
-    const dp = o.dp_amount || 0;
-    if (dp > 0) {
-        text += `\nDP Dibayar: ${rp(dp)}`;
-        text += `\nSisa Pelunasan: ${rp(Math.max(0, total - dp))}`;
-        text += `\n(Ongkir masih estimasi - cek ulang sebelum kirim)`;
+    if (withPrice) {
+        const shippingCost   = o.shipping_cost || 0;
+        const discountAmount = o.discount_amount || 0;
+        const total          = o.total_amount || 0;
+        const parts = [];
+        if (productSubtotal > 0) parts.push(rp(productSubtotal));
+        if (shippingCost > 0)    parts.push(`Ongkir ${rp(shippingCost)}`);
+        if (bordirGrandTotal > 0) parts.push(`Bordir ${rp(bordirGrandTotal)}`);
+        if (discountAmount > 0)  parts.push(`Disc -${rp(discountAmount)}`);
+        text += `Total Pesanan: ${parts.join(' + ')} = ${rp(total)}`;
+        const dp = o.dp_amount || 0;
+        if (dp > 0) {
+            text += `\nDP Dibayar: ${rp(dp)}`;
+            text += `\nSisa Pelunasan: ${rp(Math.max(0, total - dp))}`;
+            text += `\n(Ongkir masih estimasi - cek ulang sebelum kirim)`;
+        }
+    } else {
+        // Rekap pesanan (versi staff) — ringkasan per baris order.
+        text += `Rekap pesanan :\n${rekap.join('\n')}`;
     }
     return text;
 }
