@@ -950,6 +950,30 @@ async function submitOrder() {
 
     let data = {};
     try { data = await res.json(); } catch (e) { /* non-JSON response */ }
+
+    // Duplicate guard: server returns 409 if the same phone already has an unpaid
+    // order with identical items (<24h). Ask the customer first — don't hard-block.
+    if (res.status === 409 && data && data.duplicate) {
+        const proceed = confirm(
+            `⚠️ You already have an order ${data.existing_order_code} with the same items that is not yet paid.\n\n` +
+            `Click OK to create a NEW order anyway.\n` +
+            `Click Cancel to complete payment for the existing order (check your WhatsApp/invoice).`
+        );
+        if (!proceed) { reenable(); return; }
+        payload.force_new = true;
+        try {
+            res = await fetch(API + '/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (netErr) {
+            alert('⚠️ Connection lost while submitting your order. The order MIGHT already be placed — DO NOT submit again.\n\nPlease refresh the page or contact admin via WhatsApp to verify.');
+            return; // buttons stay disabled
+        }
+        try { data = await res.json(); } catch (e) { data = {}; }
+    }
+
     if (!res.ok) {
         // Server rejected (e.g. out of stock / validation) → order NOT created → safe to re-enable.
         alert('❌ ' + (data.error || 'Failed to create order'));

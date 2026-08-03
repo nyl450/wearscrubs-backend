@@ -947,6 +947,30 @@ async function submitOrder() {
 
     let data = {};
     try { data = await res.json(); } catch (e) { /* non-JSON response */ }
+
+    // Guard duplikat: server balas 409 kalau HP sama sudah punya pesanan belum
+    // dibayar dgn barang identik (<24 jam). Tanya customer dulu — bukan blokir.
+    if (res.status === 409 && data && data.duplicate) {
+        const lanjut = confirm(
+            `⚠️ Kamu sudah punya pesanan ${data.existing_order_code} dengan barang yang sama dan belum dibayar.\n\n` +
+            `Klik OK untuk TETAP membuat pesanan baru.\n` +
+            `Klik Batal untuk menyelesaikan pembayaran pesanan lama (cek WhatsApp/invoice kamu).`
+        );
+        if (!lanjut) { reenable(); return; }
+        payload.force_new = true;
+        try {
+            res = await fetch(API + '/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (netErr) {
+            alert('⚠️ Koneksi terputus saat mengirim pesanan. Pesanan MUNGKIN sudah masuk — JANGAN submit ulang.\n\nSilakan refresh halaman atau hubungi admin via WhatsApp untuk memastikan.');
+            return; // tombol tetap disabled
+        }
+        try { data = await res.json(); } catch (e) { data = {}; }
+    }
+
     if (!res.ok) {
         // Server menolak (mis. stok habis / validasi) → order TIDAK dibuat → aman re-enable.
         alert('❌ ' + (data.error || 'Gagal membuat pesanan'));

@@ -2387,6 +2387,47 @@ app.post('/api/orders', async (req, res) => {
         if (custPhoneDigits.length < 9 || custPhoneDigits.length > 15 || !/^(0|62|8)/.test(custPhoneDigits))
             return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (gunakan format 08xxx / 62xxx)' });
 
+        // ── GUARD DUPLIKAT (public only) ──────────────────────────────────────
+        // Kasus nyata (Lisan gigih prakoso, 1 Agu): client bikin order, tak jadi
+        // bayar, lalu order lagi item sama → order pertama gantung. Cegah: kalau HP
+        // sama punya order BELUM DIBAYAR dgn item identik dalam 24 jam, balas 409 +
+        // kode order lama. Frontend tampilkan pilihan (bayar order lama / tetap baru).
+        // Soft guard: bisa di-override dgn force_new=true (client sadar mau order lagi).
+        // Skip utk admin (Kasir memang sengaja bikin order) & saat force_new.
+        const forceNew = req.body.force_new === true || req.body.force_new === 'true';
+        if (!isAdmin && !forceNew) {
+            // Signature order = set baris (produk|size|warna|varian|qty|bordirNama|bordirLogo),
+            // diurut supaya urutan item tak mempengaruhi. Dipakai bandingkan order lama vs baru.
+            const sigOf = (arr) => arr.map(it => [
+                (it.product_id ?? ('cp:' + (it.custom_product_name || ''))),
+                it.size, it.color, (it.variant_type || 'null'),
+                Number(it.quantity || 0), !!it.bordir_nama, !!it.bordir_logo
+            ].join('|')).sort().join(';;');
+            const incomingSig = sigOf(items);
+            const candidates = await dbAll(
+                `SELECT id, order_code FROM orders
+                 WHERE regexp_replace(customer_phone,'\\D','','g') = $1
+                   AND order_status = 'waiting_payment' AND payment_status = 'pending'
+                   AND created_at > NOW() - INTERVAL '24 hours'
+                 ORDER BY created_at DESC LIMIT 10`,
+                [custPhoneDigits]
+            );
+            for (const c of candidates) {
+                const oldItems = await dbAll(
+                    `SELECT product_id, size, color, variant_type, quantity, bordir_nama, bordir_logo, custom_product_name
+                     FROM order_items WHERE order_id = $1`, [c.id]
+                );
+                if (sigOf(oldItems) === incomingSig) {
+                    return res.status(409).json({
+                        duplicate: true,
+                        existing_order_code: c.order_code,
+                        existing_order_id: c.id,
+                        error: `Kamu sudah punya pesanan ${c.order_code} dengan barang yang sama dan belum dibayar. Selesaikan pembayaran pesanan itu, atau tekan "Tetap buat pesanan baru".`
+                    });
+                }
+            }
+        }
+
         // Aggregate qty per physical variant before stock check — bordir splits share
         // the same inventory row, so checking per-item allows over-allocation when
         // the same shirt appears as multiple lines (plain + with name + with logo).
