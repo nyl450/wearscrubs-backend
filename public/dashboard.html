@@ -6929,6 +6929,9 @@ async function viewOrder(id) {
         // tak muncul → admin terjebak.
         const hasAnyBordirFlag = !!(o.has_bordir_logo || o.has_bordir_nama);
         const showBordirPanel = hasAnyBordirFlag || bordirDetails.length > 0;
+        // Edit bordir (nama/logo) boleh sebelum dikemas (keputusan James). Sekali
+        // packed → baju sudah dibordir & dibungkus, edit tak masuk akal.
+        const canEditBordir = !['packed','shipped','done','cancelled'].includes(o.order_status);
         const detailsMissingWarning = hasAnyBordirFlag && bordirDetails.length === 0
             ? `<div class="bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2.5 text-[11px] text-amber-200 mb-3">
                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
@@ -6995,6 +6998,7 @@ async function viewOrder(id) {
                         ${e.color ? `<p class="text-[11px] text-white/55">🎨 Benang: <span class="text-white/80">${esc(e.color)}</span></p>` : ''}
                         ${posLbl  ? `<p class="text-[11px] text-white/55">📍 Posisi: <span class="text-white/80">${posLbl}</span></p>` : ''}
                     </div>
+                    ${canEditBordir ? `<button onclick="editBordirEntry(${o.id}, ${idx})" class="mt-2 text-[10px] px-2 py-1 rounded-lg bg-purple-500/15 border border-purple-400/25 text-purple-200 hover:bg-purple-500/25 transition font-bold"><i class="fa-solid fa-pen-to-square text-[9px]"></i> Edit ${e.type==='logo'?'Logo':'Nama'}</button>` : ''}
                 </div>
             </div>`;}).join('')}
             ${hasBordir ? `
@@ -8926,6 +8930,103 @@ async function editItemSize(orderId, itemId, currentSize) {
         if (typeof closeOrderModal === 'function') closeOrderModal();
         viewOrder(orderId);
     } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+// ── Edit bordir entry (nama/logo) sebelum dikemas ──────────────────────────
+function editBordirEntry(orderId, idx) {
+    // Baca dari order yg sedang ditampilkan di modal (paling segar) — fallback cachedOrders.
+    let o = (window._currentOrder && window._currentOrder.id === orderId) ? window._currentOrder : null;
+    if (!o) o = (typeof cachedOrders !== 'undefined' ? cachedOrders : []).find(x => x.id === orderId);
+    if (!o) { toast('Data order belum dimuat.', true); return; }
+    let arr = [];
+    try { arr = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch (e) {}
+    const entry = arr[idx];
+    if (!entry) { toast('Entry bordir tidak ditemukan.', true); return; }
+
+    const posOpts = (sel) => `
+        <option value="kanan"${sel==='kanan'?' selected':''}>Kanan Dada</option>
+        <option value="kiri"${sel==='kiri'?' selected':''}>Kiri Dada</option>`;
+    const isNama = entry.type === 'nama';
+    const curLogo = (!isNama && entry.value && (entry.value.startsWith('http') || entry.value.startsWith('data:image/'))) ? entry.value : '';
+
+    const fields = isNama ? `
+        <label class="block text-[11px] text-white/50 mb-1">Teks Nama</label>
+        <input id="eb-value" type="text" class="w-full mb-2 !py-2 !text-sm" placeholder="mis. drg. Andi" />
+        <label class="block text-[11px] text-white/50 mb-1">Baris ke-2 (opsional)</label>
+        <input id="eb-value2" type="text" class="w-full mb-2 !py-2 !text-sm" placeholder="mis. Sp.KG" />
+        <label class="flex items-center gap-2 text-[11px] text-white/70 mb-2">
+            <input id="eb-underline" type="checkbox" class="w-3.5 h-3.5 accent-purple-400" /> Pakai garis pemisah antara baris 1 & 2
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+            <div><label class="block text-[11px] text-white/50 mb-1">Warna Benang</label>
+                <select id="eb-color" class="w-full !py-2 !text-sm">${THREAD_COLOR_OPTS_HTML}</select></div>
+            <div><label class="block text-[11px] text-white/50 mb-1">Posisi</label>
+                <select id="eb-pos" class="w-full !py-2 !text-sm">${posOpts(entry.position)}</select></div>
+        </div>` : `
+        ${curLogo ? `<div class="mb-2"><p class="text-[11px] text-white/50 mb-1">Logo sekarang:</p><img src="${curLogo}" class="max-h-24 max-w-[140px] object-contain rounded border border-white/10" /></div>` : ''}
+        <label class="block text-[11px] text-white/50 mb-1">Ganti File Logo (kosongkan = pakai logo lama)</label>
+        <input id="eb-logo-file" type="file" accept="image/*" class="w-full mb-2 text-xs text-white/70" />
+        <div class="grid grid-cols-2 gap-2">
+            <div><label class="block text-[11px] text-white/50 mb-1">Warna Benang</label>
+                <select id="eb-color" class="w-full !py-2 !text-sm">${LOGO_COLOR_OPTS_HTML}</select></div>
+            <div><label class="block text-[11px] text-white/50 mb-1">Posisi</label>
+                <select id="eb-pos" class="w-full !py-2 !text-sm">${posOpts(entry.position)}</select></div>
+        </div>`;
+
+    const existing = document.getElementById('bordir-edit-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'bordir-edit-modal';
+    modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[1300] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-[#1c1c1c] border border-white/10 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-white/8 flex items-center justify-between shrink-0">
+                <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-purple-400"></i> Edit Bordir ${isNama ? 'Nama' : 'Logo'}</p>
+                <button onclick="document.getElementById('bordir-edit-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1">
+                <p class="text-[11px] text-white/40 mb-3">${(entry.item_label||'').replace(/</g,'&lt;')}</p>
+                ${fields}
+                <p class="text-[10px] text-amber-300/70 mt-3"><i class="fa-solid fa-circle-info"></i> Kalau bordir sudah di-approve, edit akan me-reset ke "perlu review ulang".</p>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="submitBordirEdit(${orderId}, ${idx}, '${entry.type}')" class="flex-1 py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 text-purple-200 font-bold text-sm transition">Simpan</button>
+                    <button onclick="document.getElementById('bordir-edit-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Batal</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    // Pre-fill values (set .value setelah insert supaya dropdown ke-select).
+    if (isNama) {
+        document.getElementById('eb-value').value = entry.value || '';
+        document.getElementById('eb-value2').value = entry.value_line2 || '';
+        document.getElementById('eb-underline').checked = entry.value_underline === true;
+    }
+    const colorSel = document.getElementById('eb-color');
+    if (colorSel && entry.color) colorSel.value = entry.color;
+}
+
+async function submitBordirEdit(orderId, idx, type) {
+    try {
+        const fd = new FormData();
+        if (type === 'nama') {
+            const v = (document.getElementById('eb-value').value || '').trim();
+            if (!v) { toast('Teks nama wajib diisi', true); return; }
+            fd.append('value', v);
+            fd.append('value_line2', (document.getElementById('eb-value2').value || '').trim());
+            fd.append('value_underline', document.getElementById('eb-underline').checked ? 'true' : 'false');
+        } else {
+            const f = document.getElementById('eb-logo-file');
+            if (f && f.files && f.files[0]) fd.append('logo_file', f.files[0]);
+        }
+        fd.append('color', document.getElementById('eb-color').value || '');
+        fd.append('position', document.getElementById('eb-pos').value || '');
+        const res = await apiFetch(`/api/orders/${orderId}/embroidery/${idx}`, { method: 'PUT', body: fd });
+        toast('✅ ' + (res.message || 'Bordir diperbarui'));
+        document.getElementById('bordir-edit-modal')?.remove();
+        if (typeof closeOrderModal === 'function') closeOrderModal();
+        viewOrder(orderId);
+    } catch (e) { toast('Gagal: ' + e.message, true); }
 }
 
 // Mark a CUSTOM item as ready (sewn). Releases the pack guard for this line.

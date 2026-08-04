@@ -4837,6 +4837,72 @@ app.put('/api/orders/:id/items/:itemId/size', requireMenu('orders','edit'), uplo
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// PUT /api/orders/:id/embroidery/:index — edit SATU entry bordir (nama / logo)
+// sebelum barang dikemas. Client sering ubah nama/gelar/logo. Body (nama):
+// { value, value_line2, value_underline, color, position }. Logo: { color, position }
+// + optional file 'logo_file' (ganti gambar). Karena isi bordir berubah → reset
+// bordir_status ke 'pending' (perlu review ulang, keputusan James). Tidak sentuh stok.
+app.put('/api/orders/:id/embroidery/:index', requireMenu('orders','edit'), upload.single('logo_file'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        // Gate: boleh edit selama BELUM dikemas (keputusan James). Sekali packed,
+        // baju sudah dibordir & dibungkus → edit tak masuk akal.
+        if (['packed','shipped','done','cancelled'].includes(order.order_status))
+            return res.status(400).json({ error: 'Bordir tidak bisa diedit — pesanan sudah dikemas/dikirim/selesai/dibatalkan.' });
+
+        let arr = [];
+        try { arr = order.embroidery_details ? (typeof order.embroidery_details === 'string' ? JSON.parse(order.embroidery_details) : order.embroidery_details) : []; } catch (e) {}
+        const idx = parseInt(req.params.index, 10);
+        if (!Array.isArray(arr) || !Number.isInteger(idx) || idx < 0 || idx >= arr.length)
+            return res.status(400).json({ error: 'Entry bordir tidak ditemukan' });
+
+        const entry = { ...arr[idx] };
+        const posIn = String(req.body.position || '').trim().toLowerCase();
+        const validPos = ['kanan', 'kiri'].includes(posIn) ? posIn : entry.position;
+
+        if (entry.type === 'nama') {
+            const val = String(req.body.value || '').trim();
+            if (!val) return res.status(400).json({ error: 'Teks nama wajib diisi' });
+            entry.value = val;
+            const line2 = String(req.body.value_line2 || '').trim();
+            if (line2) entry.value_line2 = line2; else delete entry.value_line2;      // anti-noise
+            const underline = req.body.value_underline === 'true' || req.body.value_underline === true;
+            if (underline) entry.value_underline = true; else delete entry.value_underline;
+            entry.color = String(req.body.color || '').trim();
+            entry.position = validPos;
+        } else if (entry.type === 'logo') {
+            entry.color = String(req.body.color || '').trim();
+            entry.position = validPos;
+            if (req.file) {
+                // Ganti gambar: set base64 lalu externalize (upload ke Storage) di bawah.
+                entry.value = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            }
+        } else {
+            return res.status(400).json({ error: 'Tipe bordir tidak dikenal' });
+        }
+
+        arr[idx] = entry;
+        const stored = await externalizeEmbroideryLogos(arr);   // upload logo base64 → URL
+
+        await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE orders SET embroidery_details = $1, updated_at = NOW() WHERE id = $2`,
+                [JSON.stringify(stored), order.id]
+            );
+            // Isi bordir berubah → approval lama basi, reset ke 'pending' utk review ulang.
+            if (order.bordir_status && order.bordir_status !== 'pending') {
+                await client.query(`UPDATE orders SET bordir_status = 'pending' WHERE id = $1`, [order.id]);
+            }
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'bordir',NULL,$2,$3)`,
+                [order.id, `Edit bordir ${entry.type} (${entry.item_label || '-'})${order.bordir_status === 'approved' ? ' — approval di-reset ke pending' : ''}`, req.user.username]
+            );
+        });
+        res.json({ message: `Bordir ${entry.type} diperbarui${order.bordir_status === 'approved' ? ' — perlu review ulang' : ''}` });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
 // PUT /api/orders/:id/items/:itemId/fulfill-po — mark a made-to-order line "ready".
 // Used for CUSTOM size only: it's off-catalog (no inventory, no "receive" event), so the
 // admin marks it ready manually once the garment is sewn. Catalog PO is NOT handled here —
