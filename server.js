@@ -105,6 +105,8 @@ function requireAuth(roles = []) {
         if (!token) return res.status(401).json({ error: 'Autentikasi diperlukan.' });
         try {
             const user = jwt.verify(token, JWT_SECRET);
+            // Token customer BUKAN staff — tolak dari semua endpoint admin (secret JWT sama).
+            if (user && user.kind === 'customer') return res.status(403).json({ error: 'Akses ditolak.' });
             if (roles.length && !roles.includes(user.role))
                 return res.status(403).json({ error: 'Akses ditolak. Peran tidak cukup.' });
             req.user = user;
@@ -162,6 +164,8 @@ function requireMenu(menu, level = 'view') {
         if (!token) return res.status(401).json({ error: 'Autentikasi diperlukan.' });
         try {
             const user = jwt.verify(token, JWT_SECRET);
+            // Token customer BUKAN staff — tolak (permMap default kasih view-all, bahaya).
+            if (user && user.kind === 'customer') return res.status(403).json({ error: 'Akses ditolak.' });
             req.user = user;
             if (!hasMenu(user, menu, level)) {
                 return res.status(403).json({ error: level === 'edit'
@@ -181,7 +185,23 @@ function getOptionalUser(req) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return null;
-    try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        // Token customer (kind='customer') BUKAN sesi staff — jangan pernah
+        // ditafsirkan sebagai admin/staff (anti privilege confusion).
+        if (payload && payload.kind === 'customer') return null;
+        return payload;
+    } catch { return null; }
+}
+// Baca token customer (opsional) — dipakai saat checkout utk tautkan customer_id.
+function getOptionalCustomer(req) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return null;
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        return payload && payload.kind === 'customer' ? payload : null;
+    } catch { return null; }
 }
 
 // ─── Static: serve website dari folder public/ ────────────────────────────────
@@ -407,6 +427,34 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
     )`);
     await dbRun(`ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_menus TEXT DEFAULT NULL`);
+
+    // ── Customers (akun website) — #3 login customer, 3 Agu 2026 ───────────────
+    // Terpisah dari `users` (staff/admin). Identitas login = phone (WA) + password.
+    // phone disimpan ternormalisasi (08xxxx) = kunci unik + penaut ke order lama.
+    await dbRun(`CREATE TABLE IF NOT EXISTS customers (
+        id SERIAL PRIMARY KEY,
+        phone TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        email TEXT DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await dbRun(`CREATE TABLE IF NOT EXISTS customer_addresses (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        label TEXT DEFAULT NULL,
+        recipient_name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        address TEXT NOT NULL,
+        city TEXT NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_cust_addr_customer ON customer_addresses(customer_id)`);
+    // Tautan order → customer. NULLABLE: order tamu/WA/Kasir lama tetap valid.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER DEFAULT NULL`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)`);
 
     // ── Products table ────────────────────────────────────────────────────────
     await dbRun(`CREATE TABLE IF NOT EXISTS products (
@@ -1068,6 +1116,199 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 // GET /api/auth/me
 app.get('/api/auth/me', requireAuth(), (req, res) => {
     res.json({ user: req.user });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CUSTOMER AUTH (#3, akun website) — TERPISAH dari admin/staff (`users`).
+// Identitas login = phone (WA) + password. Token JWT dgn kind='customer' supaya
+// tak bisa dipakai sebagai admin. Mirror pola admin (bcrypt + jwt Bearer).
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Normalisasi nomor Indonesia → kanonik '08xxxx' (kunci unik + penaut order lama).
+function normPhone(raw) {
+    let d = String(raw || '').replace(/\D/g, '');
+    if (d.startsWith('62')) d = '0' + d.slice(2);
+    else if (d.startsWith('8')) d = '0' + d;
+    return d;
+}
+function signCustomerToken(c) {
+    return jwt.sign(
+        { id: c.id, kind: 'customer', phone: c.phone, full_name: c.full_name },
+        JWT_SECRET, { expiresIn: JWT_EXPIRES_IN }
+    );
+}
+// Middleware: wajib login customer. Token admin (kind != 'customer') ditolak.
+function requireCustomer(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Silakan login dulu.' });
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        if (payload.kind !== 'customer') return res.status(403).json({ error: 'Token tidak valid untuk akun customer.' });
+        req.customer = payload;
+        next();
+    } catch { return res.status(401).json({ error: 'Sesi berakhir, silakan login ulang.' }); }
+}
+// Tautkan order lama (tamu) ke akun lewat kecocokan HP (08xxx / 62xxx / 8xxx).
+// Hanya order yang belum tertaut (customer_id IS NULL). Idempoten.
+async function linkGuestOrdersByPhone(customerId, canonPhone) {
+    const nsn = canonPhone.replace(/^0/, '');   // '8xxxxxxxxx'
+    await dbRun(
+        `UPDATE orders SET customer_id = $1
+         WHERE customer_id IS NULL
+           AND regexp_replace(customer_phone, '\\D', '', 'g') IN ($2, $3, $4)`,
+        [customerId, '0' + nsn, '62' + nsn, nsn]
+    );
+}
+
+// POST /api/customer/register — { full_name, phone, password, email? }
+app.post('/api/customer/register', loginLimiter, async (req, res) => {
+    try {
+        const full_name = (req.body.full_name || '').trim();
+        const email = (req.body.email || '').trim() || null;
+        const password = req.body.password || '';
+        const canon = normPhone(req.body.phone);
+        if (!full_name) return res.status(400).json({ error: 'Nama wajib diisi.' });
+        if (canon.length < 9 || canon.length > 15 || !/^0[0-9]+$/.test(canon))
+            return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (format 08xxx).' });
+        if (password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter.' });
+        if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+            return res.status(400).json({ error: 'Format email tidak valid.' });
+
+        const exists = await dbGet('SELECT id FROM customers WHERE phone = $1', [canon]);
+        if (exists) return res.status(409).json({ error: 'Nomor ini sudah terdaftar. Silakan login.' });
+
+        const hash = await bcrypt.hash(password, 10);
+        const result = await dbRun(
+            'INSERT INTO customers (phone, password_hash, full_name, email) VALUES ($1,$2,$3,$4) RETURNING id',
+            [canon, hash, full_name, email]
+        );
+        const id = result.rows[0].id;
+        await linkGuestOrdersByPhone(id, canon);   // tautkan order lama by HP
+        const c = { id, phone: canon, full_name, email };
+        res.json({ token: signCustomerToken(c), customer: c });
+    } catch (err) {
+        if (String(err.message).toLowerCase().includes('unique'))
+            return res.status(409).json({ error: 'Nomor ini sudah terdaftar. Silakan login.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/customer/login — { phone, password }
+app.post('/api/customer/login', loginLimiter, async (req, res) => {
+    try {
+        const canon = normPhone(req.body.phone);
+        const password = req.body.password || '';
+        if (!canon || !password) return res.status(400).json({ error: 'Nomor & password wajib diisi.' });
+        const c = await dbGet('SELECT * FROM customers WHERE phone = $1', [canon]);
+        if (!c) return res.status(401).json({ error: 'Nomor atau password salah.' });
+        const valid = await bcrypt.compare(password, c.password_hash);
+        if (!valid) return res.status(401).json({ error: 'Nomor atau password salah.' });
+        await linkGuestOrdersByPhone(c.id, canon);   // defensif: tautkan order baru yg belum ke-link
+        const pub = { id: c.id, phone: c.phone, full_name: c.full_name, email: c.email };
+        res.json({ token: signCustomerToken(pub), customer: pub });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/customer/me
+app.get('/api/customer/me', requireCustomer, async (req, res) => {
+    try {
+        const c = await dbGet('SELECT id, phone, full_name, email, created_at FROM customers WHERE id = $1', [req.customer.id]);
+        if (!c) return res.status(404).json({ error: 'Akun tidak ditemukan.' });
+        res.json({ customer: c });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/customer/profile — update nama & email (phone immutable v1).
+app.put('/api/customer/profile', requireCustomer, upload.none(), async (req, res) => {
+    try {
+        const full_name = (req.body.full_name || '').trim();
+        const email = (req.body.email || '').trim() || null;
+        if (!full_name) return res.status(400).json({ error: 'Nama wajib diisi.' });
+        if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+            return res.status(400).json({ error: 'Format email tidak valid.' });
+        await dbRun('UPDATE customers SET full_name=$1, email=$2, updated_at=NOW() WHERE id=$3',
+            [full_name, email, req.customer.id]);
+        res.json({ success: true, customer: { id: req.customer.id, phone: req.customer.phone, full_name, email } });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/customer/addresses
+app.get('/api/customer/addresses', requireCustomer, async (req, res) => {
+    try {
+        const rows = await dbAll(
+            'SELECT * FROM customer_addresses WHERE customer_id=$1 ORDER BY is_default DESC, id DESC',
+            [req.customer.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/customer/addresses
+app.post('/api/customer/addresses', requireCustomer, upload.none(), async (req, res) => {
+    try {
+        const label = (req.body.label || '').trim() || null;
+        const recipient_name = (req.body.recipient_name || '').trim();
+        const phone = (req.body.phone || '').trim();
+        const address = (req.body.address || '').trim();
+        const city = (req.body.city || '').trim();
+        const is_default = req.body.is_default === 'true' || req.body.is_default === true;
+        if (!recipient_name || !phone || !address || !city)
+            return res.status(400).json({ error: 'Nama penerima, HP, alamat, dan kota wajib diisi.' });
+        await withTransaction(async (client) => {
+            if (is_default)
+                await client.query('UPDATE customer_addresses SET is_default=FALSE WHERE customer_id=$1', [req.customer.id]);
+            await client.query(
+                `INSERT INTO customer_addresses (customer_id,label,recipient_name,phone,address,city,is_default)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [req.customer.id, label, recipient_name, phone, address, city, is_default]);
+        });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/customer/addresses/:id — hanya alamat milik sendiri.
+app.put('/api/customer/addresses/:id', requireCustomer, upload.none(), async (req, res) => {
+    try {
+        const own = await dbGet('SELECT id FROM customer_addresses WHERE id=$1 AND customer_id=$2', [req.params.id, req.customer.id]);
+        if (!own) return res.status(404).json({ error: 'Alamat tidak ditemukan.' });
+        const label = (req.body.label || '').trim() || null;
+        const recipient_name = (req.body.recipient_name || '').trim();
+        const phone = (req.body.phone || '').trim();
+        const address = (req.body.address || '').trim();
+        const city = (req.body.city || '').trim();
+        const is_default = req.body.is_default === 'true' || req.body.is_default === true;
+        if (!recipient_name || !phone || !address || !city)
+            return res.status(400).json({ error: 'Nama penerima, HP, alamat, dan kota wajib diisi.' });
+        await withTransaction(async (client) => {
+            if (is_default)
+                await client.query('UPDATE customer_addresses SET is_default=FALSE WHERE customer_id=$1', [req.customer.id]);
+            await client.query(
+                `UPDATE customer_addresses SET label=$1,recipient_name=$2,phone=$3,address=$4,city=$5,is_default=$6
+                 WHERE id=$7 AND customer_id=$8`,
+                [label, recipient_name, phone, address, city, is_default, req.params.id, req.customer.id]);
+        });
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/customer/addresses/:id
+app.delete('/api/customer/addresses/:id', requireCustomer, async (req, res) => {
+    try {
+        const r = await dbRun('DELETE FROM customer_addresses WHERE id=$1 AND customer_id=$2', [req.params.id, req.customer.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/customer/orders — riwayat + status order milik customer ini.
+app.get('/api/customer/orders', requireCustomer, async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT id, order_code, order_status, payment_status, total_amount, shipping_cost,
+                    has_bordir_nama, has_bordir_logo, bordir_status, shipping_courier, created_at, paid_at
+             FROM orders WHERE customer_id = $1 ORDER BY created_at DESC`,
+            [req.customer.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── USER MANAGEMENT ───────────────────────────────────────────────────────────
