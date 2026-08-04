@@ -1971,7 +1971,10 @@ app.get('/api/stats/overview', requireAuth(), async (req, res) => {
         const totalProducts = await dbGet("SELECT COUNT(*) as count FROM products WHERE status != 'draft' AND is_active = TRUE");
         const totalOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status != 'cancelled'");
         const cancelledOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status = 'cancelled'");
-        const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status != 'cancelled'");
+        // Notif "Pesanan Baru" = order NORMAL menunggu bayar. Kecualikan cancelled +
+// status TRIAL (test_sent/pending_pay/return) — trial punya badge Temporary Order
+// sendiri, kalau ikut kehitung di sini jadi dobel (bug notif +1, kasus #93 size_trial).
+const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status NOT IN ('cancelled','test_sent','test_pending_pay','test_pending_return')");
         const paidOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
         const doneOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status = 'done'");
         // Revenue: hanya order PAID yang TIDAK dibatalkan
@@ -2004,7 +2007,10 @@ app.get('/api/stats/overview', requireAuth(), async (req, res) => {
 
 app.get('/api/orders/stats', requireAuth(), async (req, res) => {
     try {
-        const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status != 'cancelled'");
+        // Notif "Pesanan Baru" = order NORMAL menunggu bayar. Kecualikan cancelled +
+// status TRIAL (test_sent/pending_pay/return) — trial punya badge Temporary Order
+// sendiri, kalau ikut kehitung di sini jadi dobel (bug notif +1, kasus #93 size_trial).
+const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status NOT IN ('cancelled','test_sent','test_pending_pay','test_pending_return')");
         const paidOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
         const totalRevenue = await dbGet("SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
         res.json({
