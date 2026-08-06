@@ -256,6 +256,16 @@
         .invoice-bordir { margin: 24px 40px 0; padding: 0 0 20px; }
         .invoice-bordir-lead { padding-top: 20px; border-top: 1px solid #e5e5e5; }
         .invoice-bordir table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        /* Satu kartu = satu potong baju. Garis luar dipasang di sini (bukan di
+           <table>) karena border-collapse membuat border tabel kalah oleh border
+           sel. Jarak antar kartu sengaja lega supaya tim tidak salah baca
+           "set ini punya siapa" saat satu order berisi belasan orang.
+           Warna garis luar HARUS jelas lebih gelap dari grid antar-sel (#e5e5e5);
+           kalau setara, batas kelompoknya tidak terbaca.
+           JANGAN pakai `:last-child { margin-bottom: 0 }` — kartu PERTAMA adalah
+           anak terakhir dari .invoice-bordir-lead (pembungkus anti-potong halaman),
+           jadi aturan itu justru menghapus jarak antara kartu 1 dan 2. */
+        .invoice-bordir .bordir-card { border: 1px solid #8a8a8a; border-radius: 8px; overflow: hidden; margin-bottom: 26px; }
         .invoice-bordir table thead th { background: #f5f5f5; padding: 10px 16px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #666; border: 1px solid #e5e5e5; }
         .invoice-bordir table tbody td { padding: 14px 16px; border: 1px solid #e5e5e5; vertical-align: top; }
         .invoice-bordir .bordir-detail p { margin: 3px 0; color: #2d2d2d; }
@@ -289,6 +299,7 @@
         .invoice-photos,
         .invoice-tnc,
         .invoice-bordir-lead,
+        .invoice-bordir .bordir-card,
         .invoice-bordir table { break-inside: avoid; page-break-inside: avoid; }
         /* Label section jangan tertinggal sendirian di bawah halaman. */
         .invoice-payment .section-label,
@@ -10600,6 +10611,20 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const fmtRp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
     const fmtDate = (d) => new Date(d || Date.now()).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
 
+    // Variant type → label invoice (English, konsisten dgn sisa invoice).
+    // DB menyimpan 2 bentuk: short 'pendek'/'panjang' (produk katalog) dan full
+    // 'Lengan Pendek'/'Lengan Panjang' (custom product, admin ketik manual).
+    // Nilai lain (variant produk masa depan) di-capitalize apa adanya; kosong/
+    // 'null' (produk single-variant mis. Cap) → '' supaya tidak render separator.
+    const variantLabel = (raw) => {
+        const v = (raw && raw !== 'null') ? String(raw).trim() : '';
+        if (!v) return '';
+        const lv = v.toLowerCase();
+        if (lv === 'pendek' || lv === 'lengan pendek') return 'Short Sleeve';
+        if (lv === 'panjang' || lv === 'lengan panjang') return 'Long Sleeve';
+        return v.charAt(0).toUpperCase() + v.slice(1);
+    };
+
     // Status pembayaran. Bedakan LUNAS penuh vs DP (baru bayar sebagian):
     //  - fully paid  → stempel hijau "PAID" + status Lunas
     //  - DP pending  → stempel amber "DP PAID / BELUM LUNAS" + sisa tagihan
@@ -10653,15 +10678,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         const customTag = item.is_custom_size ? `<span style="background:#e0f2fe;color:#075985;${badgeBase}">CUSTOM</span>` : '';
         const cprodTag = item.is_custom_product ? `<span style="background:#f3e8ff;color:#6b21a8;${badgeBase}">CUSTOM PRODUCT</span>` : '';
         const poTag = item.is_po ? `<span style="background:#ffedd5;color:#9a3412;${badgeBase}">PRE-ORDER${item.po_fulfilled ? ' ✓' : ''}</span>` : '';
-        // Variant type — DB simpan short form 'pendek'/'panjang', tampilkan full
-        // "Lengan Pendek"/"Lengan Panjang" di invoice biar customer paham (bukan disingkat).
-        // Fallback: capitalize value lain (mis. variant produk masa depan). Skip kalau null/empty
-        // (produk single-variant mis. Cap).
-        const vtRaw = item.variant_type && item.variant_type !== 'null' ? item.variant_type : '';
-        const vtFull = vtRaw === 'pendek' ? 'Short Sleeve'
-                     : vtRaw === 'panjang' ? 'Long Sleeve'
-                     : vtRaw ? vtRaw.charAt(0).toUpperCase() + vtRaw.slice(1)
-                     : '';
+        // Variant type — lihat helper `variantLabel` di atas (dipakai bareng
+        // section Embroidery Details supaya label variant selalu sama).
+        const vtFull = variantLabel(item.variant_type);
         const vt = vtFull ? ` <span style="color:#6b7280">·</span> ${esc(vtFull)}` : '';
         // Struktur 2 baris: (1) info produk, (2) badge collection dengan gap kecil.
         // Sebelumnya semua inline → PDF break di tengah "CUSTOM PRODUCT" dan
@@ -10839,6 +10858,65 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             }
         };
 
+        // ── Resolusi VARIANT per entry bordir ────────────────────────────────
+        // `item_label` historis cuma "Produk (warna, size)" — TANPA variant.
+        // Padahal satu order bisa punya size sama dgn variant beda (kasus nyata
+        // WS-WA-20260729-5775: 3 pcs Black XS = 1 Lengan Panjang + 2 Lengan
+        // Pendek) → tim produksi tidak bisa tahu potong mana yg dibordir apa.
+        // Sumber kebenaran = `order_items`.
+        //  1) Entry baru sudah membawa `variant_type` sendiri → dipakai langsung.
+        //  2) Entry lama → di-infer dari items:
+        //     - kalau semua item di grup label punya variant SAMA → pasti benar;
+        //     - kalau campur → ambil berurutan (FIFO). Valid karena items[] dan
+        //       embroidery_details[] dibangun di loop yang sama saat order dibuat
+        //       (Kasir single/bulk & checkout), jadi urutannya sepadan.
+        const labelKey = (name, color, size) =>
+            `${String(name||'').trim().toLowerCase()}|${String(color||'').trim().toLowerCase()}|${String(size||'').trim().toLowerCase()}`;
+        // Slot per PCS (quantity di-expand) dikelompokkan per label.
+        const variantSlots = {};
+        items.forEach(it => {
+            const nm = it.product_name || it.custom_product_name || '';
+            const k = labelKey(nm, it.color, it.size);
+            if (!variantSlots[k]) variantSlots[k] = [];
+            for (let q = 0; q < (Number(it.quantity) || 1); q++) variantSlots[k].push(variantLabel(it.variant_type));
+        });
+        const keyFromLabel = (lbl) => {
+            const m = /^(.*)\(([^,]+),\s*([^)]+)\)\s*$/.exec(stripItemLabelPrice(lbl || ''));
+            return m ? labelKey(m[1], m[2], m[3]) : null;
+        };
+        const slotCursor = {};
+        const resolveVariant = (emb) => {
+            const stored = variantLabel(emb.variant_type);
+            if (stored) return stored;
+            const k = keyFromLabel(emb.item_label);
+            const pool = k ? variantSlots[k] : null;
+            if (!pool || pool.length === 0) return '';
+            const uniq = [...new Set(pool)];
+            if (uniq.length === 1) return uniq[0];   // tak ambigu, urutan tak relevan
+            const c = slotCursor[k] || 0;
+            slotCursor[k] = c + 1;
+            return pool[Math.min(c, pool.length - 1)] || '';
+        };
+        // Baris "Product" = identitas potong yang dibordir. Sengaja DIBESARKAN &
+        // DIHITAMKAN (dulu 10px abu-abu di header) supaya tim gampang baca
+        // size + variant-nya sekilas.
+        const prodLineStyle = 'font-size:15px;font-weight:800;color:#111;letter-spacing:-0.01em;';
+        // Tiap produk = satu KARTU bergaris + jarak lega antar kartu. Dulu blok
+        // nama+logo bordernya samar dan blok single/logo-sendiri tidak ada border
+        // sama sekali → di order isi belasan orang, tim bingung batas "set ini
+        // punya siapa". Sekarang ketiga bentuk blok pakai kartu yg sama.
+        // Border dipasang di DIV pembungkus, BUKAN di <table>: dgn
+        // `border-collapse:collapse` border tabel bisa kalah oleh border sel
+        // (.invoice-bordir table tbody td sudah punya border sendiri), jadi garis
+        // luarnya tidak terjamin muncul.
+        const cardOpen  = '<div class="bordir-card">';
+        const cardClose = '</div>';
+        const cardTable = 'width:100%;border-collapse:collapse;';
+        const prodLineText = (lbl, variant) => {
+            const base = esc(stripItemLabelPrice(lbl) || '-');
+            return variant ? `${base} <span style="color:#6b7280;font-weight:600;">·</span> ${esc(variant)}` : base;
+        };
+
         // Render setiap entry embroidery (bukan collapse per item_label).
         // Sebelumnya: grouping by item_label + keep 1 nama per group → di bulk
         // mode dgn beberapa nama utk item_label sama (2 dokter pakai size XS
@@ -10884,6 +10962,9 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             const nama = emb;
             const logo = claimLogoFor(itemLbl);
             const hasBoth = !!logo;
+            // Satu resolve untuk pasangan nama+logo — keduanya potong yang SAMA,
+            // jadi jangan konsumsi 2 slot variant.
+            const pairVariant = resolveVariant(nama);
 
             if (hasBoth) {
                 // ── Both bordir: SATU item per kolom, konsisten detail + visual ──
@@ -10908,10 +10989,10 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 const headFor = (e) => e.type === 'nama' ? 'Request Details — Embroidery Name / Text' : 'Request Details — Embroidery Logo';
                 const posLbl  = (e) => e.position === 'kanan' ? 'RIGHT CHEST' : 'LEFT CHEST';
 
-                sectionTables.push(`
-                <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;">
+                sectionTables.push(`${cardOpen}
+                <table style="${cardTable}">
                     <thead>
-                        <tr><th colspan="2" style="${thStyle}text-align:left;background:#f0f0f0;">Product: ${esc(itemLbl)}</th></tr>
+                        <tr><th colspan="2" style="padding:11px 12px;text-align:left;background:#f0f0f0;border-bottom:1px solid #e8e8e8;${prodLineStyle}">Product: ${prodLineText(itemLbl, pairVariant)}</th></tr>
                         <tr>
                             <th style="${thStyle}width:50%;text-align:left;border-right:1px solid #e8e8e8;">${headFor(leftColEmb)}</th>
                             <th style="${thStyle}text-align:left;">${headFor(rightColEmb)}</th>
@@ -10936,25 +11017,26 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                             </td>
                         </tr>
                     </tbody>
-                </table>`);
+                </table>${cardClose}`);
 
             } else {
                 // ── Single bordir: detail | mockup side by side ──
                 const emb = nama || logo;
                 const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+                const prodLine = `<p style="margin:0 0 8px;${prodLineStyle}">Product: ${prodLineText(emb.item_label, pairVariant)}</p>`;
                 const det = emb.type === 'nama'
-                    ? `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
-                       <p style="margin:3px 0;">Product: ${esc(stripItemLabelPrice(emb.item_label)||'-')}</p>
+                    ? `${prodLine}
+                       <p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
                        <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(emb.value||'-')}</strong></p>
                        <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
                        <p style="margin:3px 0;">Position: ${posLbl}</p>
                        <p style="color:#555;font-size:11px;margin:5px 0 0;">Height ~1.2 cm · length follows</p>`
-                    : `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
-                       <p style="margin:3px 0;">Product: ${esc(stripItemLabelPrice(emb.item_label)||'-')}</p>
+                    : `${prodLine}
+                       <p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
                        <p style="margin:3px 0;">Thread: ${esc(emb.color||'-')}</p>
                        <p style="margin:3px 0;">Position: ${posLbl}</p>`;
-                sectionTables.push(`
-                <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+                sectionTables.push(`${cardOpen}
+                <table style="${cardTable}">
                     <thead><tr>
                         <th style="${thStyle}width:52%;text-align:left;">Request Details</th>
                         <th style="${thStyle}border-left:1px solid #e5e5e5;text-align:center;">Visual Mockup</th>
@@ -10963,7 +11045,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                         <td class="bordir-detail">${det}</td>
                         <td class="bordir-visual">${renderVisCell(emb)}</td>
                     </tr></tbody>
-                </table>`);
+                </table>${cardClose}`);
             }
         }
 
@@ -10974,12 +11056,12 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             if (embDetails[i].type !== 'logo' || usedLogoIdx.has(i)) continue;
             const emb = embDetails[i];
             const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
-            const det = `<p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
-                <p style="margin:2px 0;font-size:11px;">Product: ${esc(stripItemLabelPrice(emb.item_label)||'-')}</p>
+            const det = `<p style="margin:0 0 8px;${prodLineStyle}">Product: ${prodLineText(emb.item_label, resolveVariant(emb))}</p>
+                <p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
                 <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
                 <p style="margin:2px 0;font-size:11px;">Position: ${posLbl}</p>`;
-            sectionTables.push(`
-            <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+            sectionTables.push(`${cardOpen}
+            <table style="${cardTable}">
                 <thead><tr>
                     <th style="${thStyle}width:52%;text-align:left;">Request Details</th>
                     <th style="${thStyle}border-left:1px solid #e5e5e5;text-align:center;">Visual Mockup</th>
@@ -10988,7 +11070,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     <td class="bordir-detail">${det}</td>
                     <td class="bordir-visual">${renderVisCell(emb)}</td>
                 </tr></tbody>
-            </table>`);
+            </table>${cardClose}`);
         }
 
         // html2pdf HANYA menghormati `page-break-inside: avoid` (bukan break-after),
@@ -11178,7 +11260,7 @@ async function downloadInvoicePDF(orderCode) {
                 mode: ['css', 'legacy'],
                 avoid: ['tr', '.invoice-table tfoot', '.invoice-billed', '.invoice-payment',
                         '.invoice-notes', '.invoice-photos', '.invoice-bordir-lead',
-                        '.invoice-bordir table', '.invoice-tnc']
+                        '.bordir-card', '.invoice-bordir table', '.invoice-tnc']
             },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(clone).outputPdf('blob');
@@ -12343,12 +12425,13 @@ function _kasirCollectSingleItems() {
                     const payload = { item_label: il, type: 'nama', value: t, color: c, position: nP };
                     if (t2) payload.value_line2 = t2;
                     if (ul) payload.value_underline = true;
+                    if (cpVariant) payload.variant_type = cpVariant;
                     embroideryDetails.push(payload);
                 }
                 if (bordirLogoCP) {
                     const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
                     lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
-                    embroideryDetails.push({ item_label: il, type: 'logo', value: waBordirLogoFiles[idx] || 'kirim via WA', color: c, position: lP });
+                    embroideryDetails.push({ item_label: il, type: 'logo', value: waBordirLogoFiles[idx] || 'kirim via WA', color: c, position: lP, ...(cpVariant ? { variant_type: cpVariant } : {}) });
                 }
                 if (bordirNamaCP && bordirLogoCP && nP && lP && nP === lP) posErrors.push(`${il}: posisi bordir nama dan logo tidak boleh sama.`);
             }
@@ -12404,6 +12487,11 @@ function _kasirCollectSingleItems() {
             // pName = nama bersih (dataset.name / split em-dash) — BUKAN teks opsi dropdown
             // yg untuk produk multi-variant ikut range harga "Minna — Rp 255.000 / Rp 270.000".
             const il = `${pName} (${finalColor}, ${finalSize})`;
+            // Variant ikut disimpan di entry bordir — `item_label` tidak memuatnya,
+            // padahal size sama bisa beda variant (Lengan Pendek vs Panjang) dan tim
+            // produksi butuh tahu potong mana. Additive, tidak mengubah item_label
+            // (matching bordir↔item di Format Order/invoice tetap seperti semula).
+            const ilVariant = (variantEl?.value && variantEl.value !== 'null') ? variantEl.value : '';
             let nP = null, lP = null;
             if (bordirNama) {
                 const t = document.getElementById(`wa-bordir-nama-text-${idx}`)?.value.trim();
@@ -12415,12 +12503,13 @@ function _kasirCollectSingleItems() {
                 const payload = { type: 'nama', item_label: il, value: t, color: c, position: nP };
                 if (t2) payload.value_line2 = t2;
                 if (ul) payload.value_underline = true;
+                if (ilVariant) payload.variant_type = ilVariant;
                 embroideryDetails.push(payload);
             }
             if (bordirLogo) {
                 const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
                 lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
-                embroideryDetails.push({ type: 'logo', item_label: il, value: waBordirLogoFiles[idx] || 'Logo dikirim via WA', color: c, position: lP });
+                embroideryDetails.push({ type: 'logo', item_label: il, value: waBordirLogoFiles[idx] || 'Logo dikirim via WA', color: c, position: lP, ...(ilVariant ? { variant_type: ilVariant } : {}) });
             }
             if (bordirNama && bordirLogo && nP && lP && nP === lP) posErrors.push(`${pName}: posisi bordir nama dan logo tidak boleh sama.`);
         }
@@ -12540,9 +12629,10 @@ function kasirAddToCartBulk() {
                     const p = { type: 'nama', item_label: il, value: namaText, color: namaColor, position: namaPos };
                     if (namaLine2) p.value_line2 = namaLine2;
                     if (namaUL) p.value_underline = true;
+                    if (variant && variant !== 'null') p.variant_type = variant;
                     panelEmb.push(p);
                 }
-                if (logoActive) panelEmb.push({ type: 'logo', item_label: il, value: panel._state.logoFile, color: logoColor, position: logoPos });
+                if (logoActive) panelEmb.push({ type: 'logo', item_label: il, value: panel._state.logoFile, color: logoColor, position: logoPos, ...((variant && variant !== 'null') ? { variant_type: variant } : {}) });
             }
         }
         if (!rowErr && panelItems.length > 0) {

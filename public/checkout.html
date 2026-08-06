@@ -862,6 +862,10 @@ async function submitBordirStep() {
 
     for (const { item, itemIdx, q } of inputs) {
         const itemLabel = `${item.name} (${item.color}, ${item.size})`;
+        // Variant ikut disimpan di entry bordir — itemLabel tidak memuatnya, padahal
+        // size sama bisa beda variant (Lengan Pendek vs Panjang). Tanpa ini tim
+        // produksi tidak tahu potong mana yang dibordir. Additive: itemLabel utuh.
+        const itemVariant = (item.type && item.type !== 'null') ? item.type : '';
         let namaPos = null, logoPos = null;
 
         if (item.bordir_nama) {
@@ -876,6 +880,7 @@ async function submitBordirStep() {
             const payload = { item_label: itemLabel, type: 'nama', value: val, color, position: namaPos };
             if (val2) payload.value_line2 = val2;
             if (ul) payload.value_underline = true;
+            if (itemVariant) payload.variant_type = itemVariant;
             embroideryData.push(payload);
         }
         if (item.bordir_logo) {
@@ -883,7 +888,7 @@ async function submitBordirStep() {
             logoPos     = document.getElementById(`bordir-logo-pos-${itemIdx}-${q}`)?.value || 'kiri';
             const b64   = document.getElementById(`bordir-logo-b64-${itemIdx}-${q}`)?.value || '';
             // Store actual base64 so invoice and order modal can display the logo directly
-            embroideryData.push({ item_label: itemLabel, type: 'logo', value: b64 || 'Logo dikirim via WA', color, position: logoPos });
+            embroideryData.push({ item_label: itemLabel, type: 'logo', value: b64 || 'Logo dikirim via WA', color, position: logoPos, ...(itemVariant ? { variant_type: itemVariant } : {}) });
         }
         if (item.bordir_nama && item.bordir_logo && namaPos && logoPos && namaPos === logoPos) {
             errors.push(`${item.name}: Posisi bordir nama dan logo tidak boleh sama (satu harus kanan, satunya kiri).`);

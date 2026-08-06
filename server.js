@@ -4097,6 +4097,12 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
             }
 
             const itemLabel = `${item.product_name} (${item.color || '-'}, ${item.size || '-'})`;
+            // Variant disimpan di entry bordir — itemLabel tidak memuatnya, padahal
+            // size sama bisa beda variant (Lengan Pendek vs Panjang) dan tim produksi
+            // butuh tahu potong mana. Additive: itemLabel tidak berubah, matching
+            // bordir↔item di invoice/Format Order tetap seperti semula.
+            const itemVariant = (item.variant_type && item.variant_type !== 'null')
+                ? String(item.variant_type).trim() : '';
             if (wantNama) {
                 // Baris ke-2 opsional. Disimpan sebagai field `value_line2` di JSON kalau ada.
                 // Renderer graceful: kalau absent → render 1 baris seperti dulu.
@@ -4111,6 +4117,7 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                 if (t2) entry.value_line2 = t2;
                 // Garis pemisah opsional di antara baris 1 & baris 2 (visual mockup).
                 if (r.nama_underline === true) entry.value_underline = true;
+                if (itemVariant) entry.variant_type = itemVariant;
                 newEntries.push(entry);
                 totalAdditional += namaPrice * Number(item.quantity);
             }
@@ -4121,13 +4128,15 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                 const logoData = typeof r.logo_data === 'string' && r.logo_data.startsWith('data:image/')
                     ? r.logo_data
                     : 'Logo dikirim via WA';
-                newEntries.push({
+                const logoEntry = {
                     type: 'logo',
                     item_label: itemLabel,
                     value: logoData,
                     color: String(r.logo_color || '').trim(),
                     position: r.logo_pos || 'kiri'
-                });
+                };
+                if (itemVariant) logoEntry.variant_type = itemVariant;
+                newEntries.push(logoEntry);
                 totalAdditional += logoPrice * Number(item.quantity);
             }
             itemUpdates.push({
