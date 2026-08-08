@@ -5358,8 +5358,21 @@ app.put('/api/temp-orders/:id/finalize', requireMenu('temp-order','edit'), async
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.order_source !== 'test_size')
             return res.status(400).json({ error: 'Bukan temporary order' });
-        if (order.order_status !== 'test_sent')
-            return res.status(400).json({ error: `Status saat ini "${order.order_status}", finalize hanya saat test_sent` });
+        // Finalize BOLEH DIULANG selama belum ada konsekuensi yang tak bisa ditarik:
+        // admin sering baru sadar salah pilih Keep/Return atau lupa diskon setelah
+        // klik Lanjutkan. Aman karena finalize TIDAK menyentuh stok sama sekali —
+        // stok keluar saat create (test_out) dan baru kembali saat receive-returns.
+        // Dua pagar (keduanya titik tak-bisa-mundur):
+        //   1. sudah dibayar  → total tak boleh berubah lagi (kacau di report/refund)
+        //   2. retur sudah diterima → stok terlanjur dipulihkan mengikuti flag LAMA;
+        //      mengubah flag setelah itu bikin stok tidak sinkron
+        const REFINALIZABLE = ['test_sent', 'test_pending_pay', 'test_pending_return'];
+        if (!REFINALIZABLE.includes(order.order_status))
+            return res.status(400).json({ error: `Status saat ini "${order.order_status}", keputusan Keep/Return tidak bisa diubah lagi.` });
+        if (order.payment_status === 'paid')
+            return res.status(400).json({ error: 'Pesanan ini sudah dibayar — keputusan Keep/Return & diskon tidak bisa diubah lagi.' });
+        if (order.test_returned_at)
+            return res.status(400).json({ error: 'Barang retur sudah diterima (stok sudah dikembalikan) — keputusan tidak bisa diubah lagi.' });
 
         const items = await dbAll('SELECT * FROM order_items WHERE order_id=$1', [orderId]);
         const itemById = new Map(items.map(it => [it.id, it]));
@@ -5386,7 +5399,19 @@ app.put('/api/temp-orders/:id/finalize', requireMenu('temp-order','edit'), async
         const keptItems = items.filter(it => keptIds.has(it.id));
         const keptTotal = keptItems.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0);
         const ongkirCharge = isTrialFreeCourier(order.shipping_courier) ? 0 : Number(order.shipping_cost || 0);
-        const newTotal = keptTotal + ongkirCharge;
+
+        // Diskon opsional saat konfirmasi (admin kadang kasih potongan ke customer
+        // yang jadi beli setelah trial). Hanya kena ke item yang DI-KEEP — ongkir
+        // tidak didiskon, konsisten dgn POST /api/orders & aturan consignment.
+        // Temp order tidak pernah punya bordir (ditolak saat create), jadi tidak
+        // perlu varian inc/exc seperti di Kasir — cukup persentase.
+        const validDiscounts = [0, 5, 30];
+        const reqPct = parseInt(req.body.discount_percent);
+        const discPct = validDiscounts.includes(reqPct) ? reqPct : 0;
+        const discountAmount = Math.max(0, Math.min(Math.round(keptTotal * discPct / 100), keptTotal));
+        const discountLabel = discPct === 5 ? 'Diskon 5%' : discPct === 30 ? 'Consignment 30%' : null;
+
+        const newTotal = keptTotal - discountAmount + ongkirCharge;
 
         // Routing: ada yg ditagih → test_pending_pay; tagihan 0 → langsung test_pending_return.
         const nextStatus = newTotal > 0 ? 'test_pending_pay' : 'test_pending_return';
@@ -5406,14 +5431,20 @@ app.put('/api/temp-orders/:id/finalize', requireMenu('temp-order','edit'), async
                     total_amount = $1,
                     shipping_cost = $2,
                     order_status = $3,
+                    discount_percent = $4,
+                    discount_amount = $5,
+                    discount_label = $6,
                     test_decision_at = NOW(),
                     updated_at = NOW()
-                 WHERE id = $4`,
-                [newTotal, ongkirCharge, nextStatus, orderId]
+                 WHERE id = $7`,
+                [newTotal, ongkirCharge, nextStatus, discPct, discountAmount, discountLabel, orderId]
             );
         });
 
-        res.json({ success: true, next_status: nextStatus, total: newTotal });
+        res.json({
+            success: true, next_status: nextStatus, total: newTotal,
+            kept_total: keptTotal, discount_amount: discountAmount, discount_label: discountLabel
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

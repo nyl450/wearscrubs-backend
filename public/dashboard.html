@@ -3428,9 +3428,11 @@ function renderTempOrderList() {
             actionBtn = `<button onclick="openFinalizeTrialModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold"><i class="fa-solid fa-clipboard-check"></i> Finalize</button>`;
         } else if (o.order_status === 'test_pending_pay') {
             actionBtn = `<span class="text-xs text-amber-300 font-bold">💳 Tunggu Bayar Rp ${Number(o.total_amount).toLocaleString('id-ID')}</span>
+                         ${trialCanRefinalize(o) ? `<button onclick="openFinalizeTrialModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 border border-white/15 hover:bg-white/10 font-bold ml-2" title="Ubah Keep/Return atau diskon — hanya sebelum dibayar"><i class="fa-solid fa-pen"></i> Ubah Keputusan</button>` : ''}
                          <button onclick="viewOrder(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold ml-2">Konfirmasi Bayar</button>`;
         } else if (o.order_status === 'test_pending_return') {
-            actionBtn = `<button onclick="openReceiveReturnsModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold"><i class="fa-solid fa-rotate-left"></i> Terima Barang</button>`;
+            actionBtn = `${trialCanRefinalize(o) ? `<button onclick="openFinalizeTrialModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 border border-white/15 hover:bg-white/10 font-bold mr-2" title="Ubah Keep/Return atau diskon — hanya sebelum barang retur diterima"><i class="fa-solid fa-pen"></i> Ubah Keputusan</button>` : ''}
+                         <button onclick="openReceiveReturnsModal(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold"><i class="fa-solid fa-rotate-left"></i> Terima Barang</button>`;
         }
         return `
         <div class="bg-darkcard border border-white/10 rounded-2xl p-4 space-y-2">
@@ -3721,11 +3723,27 @@ async function submitTempOrder() {
 }
 
 // ── FINALIZE TRIAL MODAL ──
+// Keputusan Keep/Return + diskon boleh diubah ULANG selama belum ada konsekuensi
+// yang tak bisa ditarik. Cermin persis guard di backend (PUT .../finalize):
+// sudah dibayar ATAU barang retur sudah diterima → terkunci.
+function trialCanRefinalize(o) {
+    if (!o) return false;
+    if (!['test_sent', 'test_pending_pay', 'test_pending_return'].includes(o.order_status)) return false;
+    if (o.payment_status === 'paid') return false;
+    if (o.test_returned_at) return false;
+    return true;
+}
+
 function openFinalizeTrialModal(orderId) {
     const o = tempOrders.find(x => x.id === orderId);
     if (!o) { alert('Order tidak ditemukan di cache, refresh dulu'); return; }
     const body = document.getElementById('tmpord-finalize-body');
     const ongkirCharge = TRIAL_FREE_COURIERS_FE.includes((o.shipping_courier || '').trim()) ? 0 : Number(o.shipping_cost || 0);
+    // Buka-ulang (Ubah Keputusan): tampilkan pilihan yang SUDAH tersimpan, jangan
+    // reset ke "keep semua" — kalau tidak, item yang sudah ditandai Return diam-diam
+    // berubah jadi Keep begitu admin klik Lanjutkan.
+    const isRedo   = o.order_status !== 'test_sent';
+    const curDisc  = Number(o.discount_percent || 0);
     const itemsHtml = (o.items || []).map(it => {
         const variantLine = `${esc(it.product_name)} · ${esc(it.color)}${it.variant_type && it.variant_type !== 'null' ? ' · ' + esc(it.variant_type) : ''} · ${esc(it.size)} ×${it.quantity}`;
         return `
@@ -3746,9 +3764,24 @@ function openFinalizeTrialModal(orderId) {
     }).join('');
     body.innerHTML = `
         <p class="text-xs text-white/60">${esc(o.customer_name)} · <span class="font-mono">${esc(o.order_code)}</span></p>
+        ${isRedo ? `<div class="bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2 text-[11px] text-amber-200">
+            Mengubah keputusan yang sudah tersimpan. Total tagihan akan dihitung ulang.
+            Hanya bisa selama pesanan belum dibayar dan barang retur belum diterima.
+        </div>` : ''}
         <div class="space-y-2">${itemsHtml}</div>
+        <div>
+            <label class="block text-[11px] font-bold text-white/60 mb-1.5">Diskon (Opsional)</label>
+            <select id="finalize-discount" onchange="updateFinalizePreview(${o.id})"
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400/40">
+                <option value="0"${curDisc === 0 ? ' selected' : ''}>Tanpa Diskon</option>
+                <option value="5"${curDisc === 5 ? ' selected' : ''}>Diskon 5%</option>
+                <option value="30"${curDisc === 30 ? ' selected' : ''}>Consignment 30%</option>
+            </select>
+            <p class="text-[10px] text-white/35 mt-1">Hanya memotong item yang di-Keep. Ongkir tidak didiskon.</p>
+        </div>
         <div class="bg-cyan-500/5 border border-cyan-400/20 rounded-xl p-3 space-y-1 text-xs">
             <div class="flex justify-between"><span class="text-white/50">Subtotal Kept:</span><span class="font-bold" id="finalize-kept-total">Rp 0</span></div>
+            <div class="flex justify-between hidden" id="finalize-disc-row"><span class="text-white/50" id="finalize-disc-label">Diskon:</span><span class="font-bold text-green-400" id="finalize-disc-amount">Rp 0</span></div>
             <div class="flex justify-between"><span class="text-white/50">Ongkir ${ongkirCharge === 0 ? '(Free)' : ''}:</span><span class="font-bold">Rp ${ongkirCharge.toLocaleString('id-ID')}</span></div>
             <div class="flex justify-between pt-1 border-t border-white/10"><span class="text-white/70">Total Tagihan:</span><span class="font-bold text-cyan-300 text-base" id="finalize-grand-total">Rp ${ongkirCharge.toLocaleString('id-ID')}</span></div>
             <p class="text-[10px] text-white/40 mt-1" id="finalize-route-info">${ongkirCharge > 0 ? '→ Masuk Payment (ada tagihan ongkir)' : '→ Masuk Return (gratis + 0 kept)'}</p>
@@ -3758,8 +3791,13 @@ function openFinalizeTrialModal(orderId) {
             <button onclick="submitFinalizeTrial(${o.id}, ${ongkirCharge})" class="flex-1 px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold">Lanjutkan</button>
         </div>
     `;
-    // Default all to "keep" supaya preview tampil benar
-    body.querySelectorAll('input.finalize-dec[value="keep"]').forEach(r => r.checked = true);
+    // Order baru → default "keep" semua supaya preview tampil benar.
+    // Buka-ulang → ikuti flag is_test_returned yang sudah tersimpan.
+    (o.items || []).forEach(it => {
+        const want = (isRedo && it.is_test_returned) ? 'return' : 'keep';
+        const r = body.querySelector(`input.finalize-dec[name="dec-${it.id}"][value="${want}"]`);
+        if (r) r.checked = true;
+    });
     updateFinalizePreview(orderId);
     document.getElementById('tmpord-finalize-modal').classList.remove('hidden');
     document.getElementById('tmpord-finalize-modal').classList.add('flex');
@@ -3775,9 +3813,18 @@ function updateFinalizePreview(orderId) {
             keptTotal += Number(r.dataset.price) * Number(r.dataset.qty);
         }
     });
-    const grand = keptTotal + ongkirCharge;
+    // Diskon hanya memotong item yang di-keep; ongkir tidak (mirror backend finalize).
+    const discPct = parseInt(document.getElementById('finalize-discount')?.value) || 0;
+    const discAmt = Math.max(0, Math.min(Math.round(keptTotal * discPct / 100), keptTotal));
+    const grand = keptTotal - discAmt + ongkirCharge;
     const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     setTxt('finalize-kept-total', 'Rp ' + keptTotal.toLocaleString('id-ID'));
+    const discRow = document.getElementById('finalize-disc-row');
+    if (discRow) {
+        discRow.classList.toggle('hidden', discAmt <= 0);
+        setTxt('finalize-disc-label', discPct === 30 ? 'Consignment 30%:' : `Diskon ${discPct}%:`);
+        setTxt('finalize-disc-amount', '-Rp ' + discAmt.toLocaleString('id-ID'));
+    }
     setTxt('finalize-grand-total', 'Rp ' + grand.toLocaleString('id-ID'));
     const info = document.getElementById('finalize-route-info');
     if (info) info.textContent = grand > 0 ? '→ Masuk Payment (perlu konfirmasi bayar)' : '→ Masuk Return langsung (gak ada tagihan)';
@@ -3794,10 +3841,11 @@ async function submitFinalizeTrial(orderId) {
         decisions.push({ item_id: Number(r.dataset.itemId), action: r.value });
     });
     if (!decisions.length) { alert('Belum ada keputusan per item'); return; }
+    const discount_percent = parseInt(document.getElementById('finalize-discount')?.value) || 0;
     try {
         const res = await apiFetch(`/api/temp-orders/${orderId}/finalize`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ decisions })
+            body: JSON.stringify({ decisions, discount_percent })
         });
         closeFinalizeModal();
         alert(`✅ Finalize OK. Status: ${trialStatusLabel(res.next_status)}. Total tagihan: Rp ${Number(res.total).toLocaleString('id-ID')}`);
