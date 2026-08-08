@@ -6899,7 +6899,11 @@ async function viewOrder(id) {
         // ── Items with product image ──────────────────────────────────────────
         // Size editable only before shipment (not shipped/done/cancelled).
         const canEditSize = !['shipped','done','cancelled'].includes(o.order_status);
-        const itemsHTML = (o.items||[]).map(i => {
+        // Item trial yang DIKEMBALIKAN tidak ditagih → jangan ditaruh di daftar
+        // "Item Pesanan". Dulu ikut tampil lengkap dengan harganya, jadi terlihat
+        // seolah ditagih padahal Subtotal di bawah sudah tidak menghitungnya.
+        const returnedTrialItems = (o.items||[]).filter(i => i.is_test_returned);
+        const itemsHTML = (o.items||[]).filter(i => !i.is_test_returned).map(i => {
             const imgSrc = resolvePhoto(i.photo);
             return `
             <div class="flex items-start gap-3 py-3 border-b border-darkborder last:border-0">
@@ -7297,6 +7301,13 @@ async function viewOrder(id) {
         <div id="custom-fulfill-anchor">
             <p class="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">🛍️ Item Pesanan</p>
             ${itemsHTML}
+            ${returnedTrialItems.length ? `
+            <div class="mt-3 bg-amber-500/5 border border-amber-400/20 rounded-xl px-3 py-2">
+                <p class="text-[10px] font-bold text-amber-300/80 uppercase tracking-wider mb-1">
+                    <i class="fa-solid fa-rotate-left"></i> Dikembalikan · tidak ditagih (${returnedTrialItems.length})
+                </p>
+                ${returnedTrialItems.map(i => `<p class="text-[11px] text-white/40">${esc(i.product_name || '')} · ${esc(i.color || '')}${i.variant_type && i.variant_type !== 'null' ? ' · ' + esc(i.variant_type) : ''} · ${esc(i.size || '')} ×${i.quantity}</p>`).join('')}
+            </div>` : ''}
             ${(o.discount_amount||0) > 0 ? `
             <div class="flex justify-between mt-3 text-sm text-white/50">
                 <span>Subtotal Produk</span>
@@ -10702,7 +10713,14 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     let totalBordirLogoQty = 0;
     let totalBordirNamaCost = 0;
     let totalBordirLogoCost = 0;
-    items.forEach(item => {
+    // Temporary order: item yang DIKEMBALIKAN customer tidak ditagih sama sekali —
+    // jangan dirender di invoice. Kalau ikut, Subtotal jadi lebih besar dari Total
+    // dan matematikanya tidak nyambung di mata customer (kasus WS-20260801-1420:
+    // Subtotal 990.000 vs Total 698.250). `total_amount` di DB sudah benar sejak
+    // finalize; yang salah cuma daftar barisnya.
+    // CATATAN: `items` (utuh) tetap dipakai untuk resolusi variant bordir di bawah.
+    const billedItems = items.filter(i => !i.is_test_returned);
+    billedItems.forEach(item => {
         const isBonus = item.is_bonus === true;
         // Per-item bordir price (admin may have overridden; fallback to legacy fixed).
         const namaP = item.bordir_nama_price ?? 20000;
@@ -12948,7 +12966,9 @@ function _generateFormatOrderText(o, opts) {
     if (o.shipping_courier) text += `Ekspedisi: ${o.shipping_courier}\n`;
     text += `\n`;
 
-    const items = (o.items || []).filter(it => !it.is_bonus);
+    // Selain bonus, item trial yang DIKEMBALIKAN juga dikeluarkan — barangnya sudah
+    // balik ke gudang, tidak ditagih dan tidak perlu disiapkan tim produksi.
+    const items = (o.items || []).filter(it => !it.is_bonus && !it.is_test_returned);
     let productSubtotal = 0, bordirGrandTotal = 0;
     const rekap = [];
 
