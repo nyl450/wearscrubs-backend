@@ -119,7 +119,8 @@ function requireAuth(roles = []) {
 
 // ─── Per-menu permissions (admin = full; staff = map {menu: 'view'|'edit'}) ─────
 // Canonical menu keys. EDITABLE = menus that have write actions (can be 'edit').
-const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','temp-order','preorder','refund','exchange','report'];
+// `customers` (Data Client) sengaja TIDAK ada di EDITABLE_MENUS — read-only.
+const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','temp-order','preorder','refund','exchange','customers','report'];
 const EDITABLE_MENUS = ['products','inventory','popular','orders','manual-order','temp-order','refund','exchange'];
 
 // Normalize a user's stored permission into a map {menu:'view'|'edit'}.
@@ -1308,6 +1309,73 @@ app.get('/api/customer/orders', requireCustomer, async (req, res) => {
              FROM orders WHERE customer_id = $1 ORDER BY created_at DESC`,
             [req.customer.id]);
         res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── ADMIN: DATA CLIENT (customer akun website) ────────────────────────────────
+// Read-only. Menu `customers` sengaja TIDAK masuk EDITABLE_MENUS — admin cuma
+// melihat, tidak mengubah data akun customer dari dashboard (ganti nomor HP =
+// harus relink order, lihat memory customer_accounts; itu urusan fase 2).
+
+// GET /api/admin/customers?search=  → daftar + ringkasan order per customer.
+// Dibatasi 500 baris (basis customer masih kecil; kalau tumbuh, tambah paginasi).
+app.get('/api/admin/customers', requireMenu('customers'), async (req, res) => {
+    try {
+        const q = String(req.query.search || '').trim();
+        const like = `%${q}%`;
+        const rows = await dbAll(
+            `SELECT c.id, c.full_name, c.phone, c.email, c.created_at,
+                    COUNT(o.id) FILTER (WHERE o.order_status <> 'cancelled')                          AS orders_count,
+                    COUNT(o.id) FILTER (WHERE o.payment_status <> 'paid' AND o.order_status <> 'cancelled') AS unpaid_count,
+                    COALESCE(SUM(o.total_amount) FILTER (
+                        WHERE o.payment_status = 'paid' AND o.order_status <> 'cancelled'), 0)        AS total_spent,
+                    MAX(o.created_at) FILTER (WHERE o.order_status <> 'cancelled')                    AS last_order_at,
+                    (SELECT COUNT(*) FROM customer_addresses a WHERE a.customer_id = c.id)            AS addresses_count
+             FROM customers c
+             LEFT JOIN orders o ON o.customer_id = c.id
+             WHERE $1 = '' OR c.full_name ILIKE $2 OR c.phone ILIKE $2 OR COALESCE(c.email,'') ILIKE $2
+             GROUP BY c.id
+             ORDER BY c.created_at DESC
+             LIMIT 500`,
+            [q, like]
+        );
+        const total = await dbGet('SELECT COUNT(*)::int AS n FROM customers');
+        res.json({ customers: rows, total: total?.n || 0, shown: rows.length, search: q });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/customers/:id → profil + alamat + riwayat order (+ order tamu
+// ber-HP sama yang BELUM tertaut). Yang terakhir penting: auto-link hanya jalan
+// sekali saat registrasi, jadi order yang dibuat admin lewat Kasir/WA SESUDAH
+// itu tidak otomatis masuk ke akun customer.
+app.get('/api/admin/customers/:id', requireMenu('customers'), async (req, res) => {
+    try {
+        const c = await dbGet(
+            'SELECT id, full_name, phone, email, created_at, updated_at FROM customers WHERE id = $1',
+            [req.params.id]
+        );
+        if (!c) return res.status(404).json({ error: 'Customer tidak ditemukan' });
+
+        const addresses = await dbAll(
+            `SELECT id, label, recipient_name, phone, address, city, is_default, created_at
+             FROM customer_addresses WHERE customer_id = $1
+             ORDER BY is_default DESC, id ASC`, [c.id]);
+
+        const orderCols = `id, order_code, created_at, invoice_date, order_status, payment_status,
+                           total_amount, dp_amount, dp_settled_at, shipping_courier, shipping_city,
+                           tracking_number, order_source`;
+        const orders = await dbAll(
+            `SELECT ${orderCols} FROM orders WHERE customer_id = $1 ORDER BY created_at DESC`, [c.id]);
+
+        const nsn = normPhone(c.phone).replace(/^0/, '');
+        const unlinkedOrders = await dbAll(
+            `SELECT ${orderCols}, customer_name FROM orders
+             WHERE customer_id IS NULL
+               AND regexp_replace(customer_phone, '\\D', '', 'g') IN ($1, $2, $3)
+             ORDER BY created_at DESC`,
+            ['0' + nsn, '62' + nsn, nsn]);
+
+        res.json({ customer: c, addresses, orders, unlinked_orders: unlinkedOrders });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

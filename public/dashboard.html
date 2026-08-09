@@ -600,6 +600,13 @@
             </button>
         </div>
 
+        <p class="sidebar-group-label">Client</p>
+        <div class="space-y-0.5">
+            <button onclick="showModule('customers')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="customers">
+                <i class="fa-solid fa-address-book w-4 text-xs"></i> Data Client
+            </button>
+        </div>
+
         <p class="sidebar-group-label">Laporan</p>
         <div class="space-y-0.5">
             <button onclick="showModule('report')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="report">
@@ -1277,6 +1284,61 @@
         </div>
         <div id="preorder-list" class="space-y-2.5"></div>
         <div id="preorder-empty" class="hidden text-center py-12 text-white/30 text-sm">Tidak ada Pre-Order menunggu. 🎉</div>
+    </div>
+
+    <!-- ═══ DATA CLIENT (akun customer website) ════════════════════════════ -->
+    <div id="module-customers" class="hidden p-4 md:p-6 space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+                <h2 class="text-xl font-bold">Data Client</h2>
+                <p class="text-xs text-white/40 mt-0.5">Customer yang punya akun di website. Order lewat WA/Kasir tanpa akun tidak muncul di sini.</p>
+            </div>
+            <button onclick="loadCustomers()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+            <div class="bg-darkcard border border-white/10 rounded-2xl p-3">
+                <div id="cust-stat-total" class="text-xl font-bold text-white">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Total Akun</div>
+            </div>
+            <div class="bg-darkcard border border-emerald-400/20 rounded-2xl p-3">
+                <div id="cust-stat-active" class="text-xl font-bold text-emerald-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Pernah Order</div>
+            </div>
+            <div class="bg-darkcard border border-white/10 rounded-2xl p-3">
+                <div id="cust-stat-spent" class="text-xl font-bold text-white">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Total Belanja (Lunas)</div>
+            </div>
+        </div>
+        <!-- Search: icon & input SIBLING di wrapper flex (bukan icon absolute di
+             atas padding input) — pola anti-overlap yang sama dgn Pesanan/Inventori. -->
+        <div class="flex items-center gap-2 bg-darkcard border border-white/10 rounded-xl px-3 py-2">
+            <i class="fa-solid fa-magnifying-glass text-white/30 text-xs shrink-0"></i>
+            <input id="cust-search" type="text" placeholder="Cari nama, nomor WA, atau email…"
+                   oninput="custSearchDebounced()"
+                   class="flex-1 bg-transparent text-sm outline-none placeholder:text-white/25" />
+            <button onclick="custClearSearch()" id="cust-search-clear"
+                    class="hidden text-white/30 hover:text-white/70 text-xs shrink-0"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p id="cust-count-note" class="hidden text-[11px] text-white/35"></p>
+        <div id="customers-list" class="space-y-2.5"></div>
+        <div id="customers-empty" class="hidden text-center py-12 text-white/30 text-sm">Belum ada customer yang mendaftar akun.</div>
+    </div>
+
+    <!-- Detail Data Client -->
+    <div id="customer-modal" onclick="if(event.target===this)closeCustomerModal()"
+         class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1002] hidden items-center justify-center p-4">
+        <div class="bg-darkcard border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-darkcard border-b border-white/10 px-5 py-4 flex items-start justify-between gap-3 z-10">
+                <div>
+                    <h3 id="cust-modal-name" class="text-lg font-bold">—</h3>
+                    <p id="cust-modal-sub" class="text-xs text-white/40 mt-0.5"></p>
+                </div>
+                <button onclick="closeCustomerModal()" class="text-white/40 hover:text-white text-xl leading-none shrink-0">&times;</button>
+            </div>
+            <div id="cust-modal-body" class="p-5 space-y-5"></div>
+        </div>
     </div>
 
     <!-- ═══ TEMPORARY ORDER (LOAN / TRIAL) ═════════════════════════════════ -->
@@ -2921,6 +2983,7 @@ function showModule(name) {
     if (name === 'exchange')      loadExchanges();
     if (name === 'preorder')      loadPreOrders();
     if (name === 'temp-order')    loadTempOrders();
+    if (name === 'customers')     loadCustomers();
     if (name === 'report')        reportInit();
     markViewOnly(name);
 }
@@ -3255,6 +3318,203 @@ async function exportReportExcel() {
         alert('Gagal export Excel: ' + (e?.message || e));
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
+    }
+}
+
+// ─── DATA CLIENT (akun customer website) ─────────────────────────────────────
+// Read-only. Sumbernya tabel `customers` — order WA/Kasir tanpa akun TIDAK punya
+// baris di sini (orders.customer_id nullable, by design).
+let custCache = [];
+let custSearchTimer = null;
+
+function custSearchDebounced() {
+    document.getElementById('cust-search-clear')?.classList.toggle('hidden', !document.getElementById('cust-search').value);
+    clearTimeout(custSearchTimer);
+    custSearchTimer = setTimeout(loadCustomers, 300);
+}
+function custClearSearch() {
+    document.getElementById('cust-search').value = '';
+    document.getElementById('cust-search-clear')?.classList.add('hidden');
+    loadCustomers();
+}
+
+async function loadCustomers() {
+    const listEl  = document.getElementById('customers-list');
+    const emptyEl = document.getElementById('customers-empty');
+    const noteEl  = document.getElementById('cust-count-note');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="text-center py-10 text-white/25 text-sm"><i class="fa-solid fa-spinner fa-spin"></i> Memuat…</div>';
+    emptyEl.classList.add('hidden');
+    try {
+        const q = document.getElementById('cust-search')?.value.trim() || '';
+        const data = await apiFetch('/api/admin/customers' + (q ? `?search=${encodeURIComponent(q)}` : ''));
+        custCache = data.customers || [];
+
+        document.getElementById('cust-stat-total').textContent  = data.total ?? custCache.length;
+        document.getElementById('cust-stat-active').textContent = custCache.filter(c => Number(c.orders_count) > 0).length;
+        document.getElementById('cust-stat-spent').textContent  =
+            'Rp ' + fmt(custCache.reduce((s, c) => s + Number(c.total_spent || 0), 0));
+
+        // Catatan cuma muncul kalau daftar terpotong cap 500 atau lagi dicari —
+        // supaya jelas angka yang dilihat bukan seluruh basis customer.
+        if (q) {
+            noteEl.textContent = `Menampilkan ${custCache.length} hasil untuk "${q}" (dari ${data.total} akun). Statistik di atas mengikuti hasil pencarian.`;
+            noteEl.classList.remove('hidden');
+        } else if (data.total > custCache.length) {
+            noteEl.textContent = `Menampilkan ${custCache.length} dari ${data.total} akun (dibatasi 500 terbaru). Pakai pencarian untuk menemukan customer lain.`;
+            noteEl.classList.remove('hidden');
+        } else {
+            noteEl.classList.add('hidden');
+        }
+
+        if (custCache.length === 0) {
+            listEl.innerHTML = '';
+            emptyEl.textContent = q ? `Tidak ada customer cocok dengan "${q}".` : 'Belum ada customer yang mendaftar akun.';
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+        listEl.innerHTML = custCache.map(renderCustomerRow).join('');
+    } catch (err) {
+        listEl.innerHTML = `<div class="text-center py-10 text-red-400/70 text-sm">Gagal memuat: ${esc(err.message)}</div>`;
+    }
+}
+
+function renderCustomerRow(c) {
+    const orders = Number(c.orders_count) || 0;
+    const unpaid = Number(c.unpaid_count) || 0;
+    const last   = c.last_order_at ? fmtDateShort(c.last_order_at) : 'Belum pernah order';
+    return `
+    <div onclick="viewCustomer(${c.id})"
+         class="bg-darkcard border border-white/10 rounded-2xl px-4 py-3 hover:bg-white/5 hover:border-white/20 transition cursor-pointer">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+            <div class="min-w-0">
+                <p class="font-bold text-sm truncate">${esc(c.full_name)}</p>
+                <p class="text-[11px] text-white/40 mt-0.5">
+                    ${esc(c.phone)}${c.email ? ' · ' + esc(c.email) : ''}
+                </p>
+                <p class="text-[11px] text-white/30 mt-1">Order terakhir: ${esc(last)}</p>
+            </div>
+            <div class="text-right shrink-0">
+                <p class="text-sm font-bold">Rp ${fmt(c.total_spent)}</p>
+                <p class="text-[10px] text-white/35 mt-0.5">${orders} order${orders !== 1 ? 's' : ''}</p>
+                ${unpaid > 0 ? `<span class="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">${unpaid} belum bayar</span>` : ''}
+            </div>
+        </div>
+    </div>`;
+}
+
+function closeCustomerModal() {
+    const m = document.getElementById('customer-modal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+}
+
+async function viewCustomer(id) {
+    const m    = document.getElementById('customer-modal');
+    const body = document.getElementById('cust-modal-body');
+    document.getElementById('cust-modal-name').textContent = 'Memuat…';
+    document.getElementById('cust-modal-sub').textContent  = '';
+    body.innerHTML = '<div class="text-center py-10 text-white/25 text-sm"><i class="fa-solid fa-spinner fa-spin"></i></div>';
+    m.classList.remove('hidden'); m.classList.add('flex');
+    try {
+        const d = await apiFetch(`/api/admin/customers/${id}`);
+        const c = d.customer;
+        document.getElementById('cust-modal-name').textContent = c.full_name;
+        document.getElementById('cust-modal-sub').textContent  =
+            `${c.phone}${c.email ? ' · ' + c.email : ''} · Daftar ${fmtDateShort(c.created_at)}`;
+
+        const paidTotal = (d.orders || [])
+            .filter(o => o.payment_status === 'paid' && o.order_status !== 'cancelled')
+            .reduce((s, o) => s + Number(o.total_amount || 0), 0);
+
+        // Tanggal pakai created_at (waktu order dibuat), BUKAN invoice_date —
+        // invoice_date cuma override tampilan di invoice (customer minta tanggal
+        // tertentu), menyesatkan kalau dipakai sebagai riwayat.
+        // Badge "Belum Bayar" hanya untuk kasus yang TIDAK sudah jelas dari status
+        // (waiting_payment & cancelled sudah bicara sendiri) — anti badge dobel.
+        const orderRow = (o, opts = {}) => {
+            const showUnpaid = o.payment_status !== 'paid'
+                && !['waiting_payment', 'cancelled'].includes(o.order_status);
+            const dpPending = Number(o.dp_amount || 0) > 0 && !o.dp_settled_at;
+            return `
+            <div class="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 ${opts.muted ? 'opacity-80' : ''}">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <div class="min-w-0">
+                        <p class="font-mono text-[11px] text-white/70">${esc(o.order_code)}</p>
+                        <p class="text-[10px] text-white/35 mt-0.5">
+                            ${esc(fmtDateShort(o.created_at))}
+                            ${o.shipping_courier ? ' · ' + esc(o.shipping_courier) : ''}
+                            ${opts.guestName ? ' · a.n. ' + esc(opts.guestName) : ''}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="text-xs font-bold">Rp ${fmt(o.total_amount)}</span>
+                        ${statusBadge(o.order_status)}
+                        ${showUnpaid ? '<span class="status-badge border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">Belum Bayar</span>' : ''}
+                        ${dpPending ? '<span class="status-badge border bg-amber-500/10 text-amber-400 border-amber-500/20">DP · Belum Lunas</span>' : ''}
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        const addrHTML = (d.addresses || []).length
+            ? d.addresses.map(a => `
+                <div class="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <p class="text-xs font-bold">${esc(a.recipient_name)}</p>
+                        ${a.is_default ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">UTAMA</span>' : ''}
+                        ${a.label ? `<span class="text-[10px] text-white/35">${esc(a.label)}</span>` : ''}
+                    </div>
+                    <p class="text-[11px] text-white/50 mt-1">${esc(a.phone)}</p>
+                    <p class="text-[11px] text-white/40 mt-0.5">${esc(a.address)}${a.city ? ', ' + esc(a.city) : ''}</p>
+                </div>`).join('')
+            : '<p class="text-xs text-white/30">Belum ada alamat tersimpan.</p>';
+
+        // Order tamu ber-HP sama yang belum tertaut ke akun. Auto-link hanya jalan
+        // sekali saat registrasi, jadi order yang dibuat lewat Kasir/WA setelah itu
+        // tidak masuk ke riwayat akun customer. Ditampilkan supaya admin sadar.
+        const unlinked = d.unlinked_orders || [];
+        const unlinkedHTML = unlinked.length ? `
+            <div>
+                <p class="text-[10px] font-bold tracking-wider text-amber-400/80 uppercase mb-2">
+                    Order Nomor Sama, Belum Tertaut (${unlinked.length})
+                </p>
+                <p class="text-[11px] text-white/35 mb-2">
+                    Dibuat lewat WA/Kasir dengan nomor HP yang sama, tapi belum masuk ke akun ini —
+                    penautan otomatis hanya berjalan sekali saat customer mendaftar.
+                </p>
+                <div class="space-y-2">${unlinked.map(o => orderRow(o, { muted: true, guestName: o.customer_name })).join('')}</div>
+            </div>` : '';
+
+        body.innerHTML = `
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <div class="text-lg font-bold">${(d.orders || []).filter(o => o.order_status !== 'cancelled').length}</div>
+                    <div class="text-[10px] text-white/40 mt-0.5">Order</div>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <div class="text-lg font-bold">Rp ${fmt(paidTotal)}</div>
+                    <div class="text-[10px] text-white/40 mt-0.5">Belanja (Lunas)</div>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <div class="text-lg font-bold">${(d.addresses || []).length}</div>
+                    <div class="text-[10px] text-white/40 mt-0.5">Alamat</div>
+                </div>
+            </div>
+            <div>
+                <p class="text-[10px] font-bold tracking-wider text-white/40 uppercase mb-2">Alamat Tersimpan</p>
+                <div class="space-y-2">${addrHTML}</div>
+            </div>
+            <div>
+                <p class="text-[10px] font-bold tracking-wider text-white/40 uppercase mb-2">Riwayat Order (${(d.orders || []).length})</p>
+                <div class="space-y-2">${
+                    (d.orders || []).length
+                        ? d.orders.map(o => orderRow(o)).join('')
+                        : '<p class="text-xs text-white/30">Belum ada order lewat akun ini.</p>'
+                }</div>
+            </div>
+            ${unlinkedHTML}`;
+    } catch (err) {
+        body.innerHTML = `<div class="text-center py-10 text-red-400/70 text-sm">Gagal memuat: ${esc(err.message)}</div>`;
     }
 }
 
@@ -9263,6 +9523,8 @@ const MENU_DEFS = [
     { key: 'preorder',     label: 'Pre-Order',      icon: 'fa-clock',        editable: false },
     { key: 'refund',       label: 'Refund',         icon: 'fa-rotate-left',  editable: true },
     { key: 'exchange',     label: 'Tukar Size',     icon: 'fa-right-left',   editable: true },
+    // Data Client = akun customer website. Read-only (tidak ada di EDITABLE_MENUS server).
+    { key: 'customers',    label: 'Data Client',    icon: 'fa-address-book', editable: false },
     { key: 'report',       label: 'Report',         icon: 'fa-chart-pie',    editable: false },
 ];
 
