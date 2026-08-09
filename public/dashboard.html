@@ -1303,8 +1303,8 @@
                 <div class="text-[10px] text-white/40 mt-0.5">Total Akun</div>
             </div>
             <div class="bg-darkcard border border-emerald-400/20 rounded-2xl p-3">
-                <div id="cust-stat-active" class="text-xl font-bold text-emerald-400">—</div>
-                <div class="text-[10px] text-white/40 mt-0.5">Pernah Order</div>
+                <div id="cust-stat-new" class="text-xl font-bold text-emerald-400">—</div>
+                <div class="text-[10px] text-white/40 mt-0.5">Akun Baru (30 hari)</div>
             </div>
             <div class="bg-darkcard border border-white/10 rounded-2xl p-3">
                 <div id="cust-stat-spent" class="text-xl font-bold text-white">—</div>
@@ -3350,18 +3350,22 @@ async function loadCustomers() {
         const data = await apiFetch('/api/admin/customers' + (q ? `?search=${encodeURIComponent(q)}` : ''));
         custCache = data.customers || [];
 
-        document.getElementById('cust-stat-total').textContent  = data.total ?? custCache.length;
-        document.getElementById('cust-stat-active').textContent = custCache.filter(c => Number(c.orders_count) > 0).length;
-        document.getElementById('cust-stat-spent').textContent  =
-            'Rp ' + fmt(custCache.reduce((s, c) => s + Number(c.total_spent || 0), 0));
+        // Statistik SELALU dari server (seluruh customer), jangan dihitung dari
+        // `custCache` — daftar itu dibatasi 500 baris dan menyusut saat mencari,
+        // jadi angkanya akan berubah arti diam-diam. Lihat komentar di endpoint.
+        const st = data.stats || {};
+        document.getElementById('cust-stat-total').textContent = st.total ?? data.total ?? custCache.length;
+        document.getElementById('cust-stat-new').textContent   = st.new_30d ?? '—';
+        document.getElementById('cust-stat-spent').textContent = 'Rp ' + fmt(st.total_spent || 0);
 
-        // Catatan cuma muncul kalau daftar terpotong cap 500 atau lagi dicari —
-        // supaya jelas angka yang dilihat bukan seluruh basis customer.
+        // Catatan hanya soal CAKUPAN DAFTAR (bukan statistik) — muncul saat mencari
+        // atau saat daftar terpotong cap 500.
+        const totalAll = st.total ?? data.total ?? 0;
         if (q) {
-            noteEl.textContent = `Menampilkan ${custCache.length} hasil untuk "${q}" (dari ${data.total} akun). Statistik di atas mengikuti hasil pencarian.`;
+            noteEl.textContent = `Menampilkan ${custCache.length} hasil untuk "${q}" (dari ${totalAll} akun). Statistik di atas tetap menghitung semua customer.`;
             noteEl.classList.remove('hidden');
-        } else if (data.total > custCache.length) {
-            noteEl.textContent = `Menampilkan ${custCache.length} dari ${data.total} akun (dibatasi 500 terbaru). Pakai pencarian untuk menemukan customer lain.`;
+        } else if (totalAll > custCache.length) {
+            noteEl.textContent = `Menampilkan ${custCache.length} dari ${totalAll} akun (dibatasi 500 terbaru). Pakai pencarian untuk menemukan customer lain.`;
             noteEl.classList.remove('hidden');
         } else {
             noteEl.classList.add('hidden');

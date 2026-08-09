@@ -1339,8 +1339,30 @@ app.get('/api/admin/customers', requireMenu('customers'), async (req, res) => {
              LIMIT 500`,
             [q, like]
         );
-        const total = await dbGet('SELECT COUNT(*)::int AS n FROM customers');
-        res.json({ customers: rows, total: total?.n || 0, shown: rows.length, search: q });
+        // Statistik dihitung di SERVER atas SELURUH customer — jangan diturunkan
+        // dari `rows`. `rows` terbatas 500 baris dan menyusut saat admin mencari,
+        // jadi kalau statistik ikut dihitung dari situ, angkanya diam-diam berubah
+        // arti begitu kolom pencarian diisi (tiga kartu berdampingan tapi
+        // cakupannya beda). Ini pernah bikin bingung → dipindah ke sini.
+        const stats = await dbGet(
+            `SELECT
+                (SELECT COUNT(*)::int FROM customers) AS total,
+                (SELECT COUNT(*)::int FROM customers
+                  WHERE created_at >= NOW() - INTERVAL '30 days') AS new_30d,
+                (SELECT COALESCE(SUM(o.total_amount), 0)::bigint FROM orders o
+                  WHERE o.customer_id IS NOT NULL
+                    AND o.payment_status = 'paid'
+                    AND o.order_status <> 'cancelled') AS total_spent`
+        );
+        res.json({
+            customers: rows, shown: rows.length, search: q,
+            total: Number(stats?.total || 0),          // dipertahankan utk kompat
+            stats: {
+                total:       Number(stats?.total || 0),
+                new_30d:     Number(stats?.new_30d || 0),
+                total_spent: Number(stats?.total_spent || 0),
+            },
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
