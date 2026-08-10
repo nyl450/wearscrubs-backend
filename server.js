@@ -462,7 +462,7 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         sku TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
-        category TEXT NOT NULL CHECK(category IN ('tops','pants','caps','gown')),
+        category TEXT NOT NULL CHECK(category IN ('tops','pants','caps','gown','aksesoris')),
         price INTEGER NOT NULL DEFAULT 0,
         price_by_type TEXT DEFAULT NULL,
         short_description TEXT DEFAULT '',
@@ -631,9 +631,11 @@ async function initDB() {
     )`);
 
     // ── Migrate: add gown to category constraint ──────────────────────────────
-    // Drop old constraint and recreate to include gown (PostgreSQL approach)
+    // Drop + recreate (cara PostgreSQL). Riwayat: + 'gown', lalu + 'aksesoris'.
+    // CATATAN: 'set' TIDAK ada di sini — Set hanya kategori custom product di
+    // Kasir, bukan produk katalog (keputusan James).
     await dbRun(`ALTER TABLE products DROP CONSTRAINT IF EXISTS products_category_check`).catch(() => {});
-    await dbRun(`ALTER TABLE products ADD CONSTRAINT products_category_check CHECK(category IN ('tops','pants','caps','gown'))`).catch(() => {});
+    await dbRun(`ALTER TABLE products ADD CONSTRAINT products_category_check CHECK(category IN ('tops','pants','caps','gown','aksesoris'))`).catch(() => {});
 
     // ── Migrate: add 'bordir' to order_status check constraint ────────────────
     await dbRun(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_status_check`).catch(() => {});
@@ -2798,8 +2800,9 @@ app.post('/api/orders', async (req, res) => {
         const itemDetails = [];
         // COGS add-on global (bordir) — di-load sekali utk snapshot per item.
         const cogsSettings = await getCogsSettings();
-        // Allowed categories for custom_product (mirrors products.category CHECK).
-        const CUSTOM_PROD_CATS = ['tops', 'pants', 'caps', 'gown'];
+        // Kategori custom product. Superset dari products.category CHECK: 'set'
+        // (atasan+celana satu paket) sengaja HANYA ada di sini.
+        const CUSTOM_PROD_CATS = ['tops', 'pants', 'caps', 'gown', 'set', 'aksesoris'];
         for (const item of items) {
             // Custom-Product (8 Jun): fully off-catalog, no products row. name/category/
             // price all come from the admin-supplied payload. ADMIN-ONLY — public callers

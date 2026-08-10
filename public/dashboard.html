@@ -39,6 +39,19 @@
             outline: none;
             transition: border-color 0.15s, background 0.15s;
         }
+        /* Input angka: BUANG tombol panah atas-bawah (spinner). Panahnya kecil dan
+           gampang ke-klik tak sengaja, terutama di field harga. Roda mouse juga
+           dimatikan lewat JS (lihat guard 'wheel' di bawah) supaya nilai tidak
+           berubah diam-diam saat halaman di-scroll.
+           Selektor di-prefix `body` supaya spesifisitasnya ≥ 0,0,2 dan tidak kalah
+           oleh Preflight Tailwind CDN — lihat memory debug_tailwind_preflight. */
+        body input[type=number]::-webkit-outer-spin-button,
+        body input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+        body input[type=number] { -moz-appearance: textfield; appearance: textfield; }
         select {
             padding-right: 2.5rem;
             appearance: none;
@@ -316,7 +329,9 @@
         }
     /* WA Order Form — UI Enhancements */
     .wa-section-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); margin-right: 7px; vertical-align: middle; }
-    .wa-item-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.06); padding: 3px 8px; border-radius: 6px; }
+    /* Nomor item dibuat lebih tegas — saat mengisi 5-10 item sekaligus, badge
+       abu-abu tipis yang lama praktis tak terbaca. */
+    .wa-item-badge { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.75); background: rgba(99,102,241,0.18); border: 1px solid rgba(99,102,241,0.35); padding: 4px 10px; border-radius: 7px; }
     .wa-trash-btn { font-size: 11px; color: rgba(248,113,113,0.5); cursor: pointer; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(248,113,113,0.15); background: rgba(248,113,113,0.05); transition: color 0.15s ease-out, border-color 0.15s ease-out, background-color 0.15s ease-out; }
     .wa-trash-btn:hover { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.1); }
     .wa-bordir-pill { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.03); cursor: pointer; transition: border-color 0.15s, background 0.15s; user-select: none; }
@@ -1860,6 +1875,7 @@
                     <option value="pants">Celana Scrub</option>
                     <option value="caps">Cap Scrub</option>
                     <option value="gown">Gown</option>
+                    <option value="aksesoris">Aksesoris</option>
                 </select>
             </div>
             <div class="space-y-1.5">
@@ -1983,6 +1999,13 @@
                     <p class="text-[10px] text-white/30">Centang semua motif yang tersedia untuk produk ini.</p>
                     <div id="gown-motif-btns" class="flex flex-wrap gap-2"></div>
                 </div>
+            </div>
+
+            <!-- Aksesoris: jenis + harga per jenis (pola sama dgn Atasan/Gown) -->
+            <div id="aksesoris-variants-wrap" class="hidden space-y-3">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Jenis Aksesoris</label>
+                <p class="text-[10px] text-white/30">Centang jenis yang tersedia, lalu isi harga masing-masing. Ukuran otomatis "One Size".</p>
+                <div id="aksesoris-type-rows" class="space-y-2.5"></div>
             </div>
 
             <!-- Warna -->
@@ -2861,7 +2884,29 @@ function doLogout() {
     window.location.replace('login.html');
 }
 
-const ALL_SIZES = { tops: ['S','M','L','XL','XXL'], pants: ['S','M','L','XL','XXL'], caps: ['S','L'], gown: ['M','XL','XXL'] };
+// Aksesoris (keychain/clicker/figur/mainan) tidak punya ukuran badan → 'One Size'.
+// Tetap disimpan sebagai size supaya struktur inventory (warna + variant + size)
+// tidak perlu diubah — keputusan James 8 Agu.
+const ALL_SIZES = { tops: ['S','M','L','XL','XXL'], pants: ['S','M','L','XL','XXL'], caps: ['S','L'], gown: ['M','XL','XXL'], aksesoris: ['One Size'] };
+// Palet warna khusus aksesoris — beda bahan, beda pilihan dari scrub/gown.
+const ALL_ACCESSORY_COLORS = [
+    { id: 'hitam',  label: 'Hitam',  hex: '#111111' },
+    { id: 'putih',  label: 'Putih',  hex: '#f5f5f5' },
+    { id: 'pink',   label: 'Pink',   hex: '#ec4899' },
+    { id: 'merah',  label: 'Merah',  hex: '#dc2626' },
+    { id: 'biru',   label: 'Biru',   hex: '#2563eb' },
+    { id: 'hijau',  label: 'Hijau',  hex: '#16a34a' },
+    { id: 'grey',   label: 'Grey',   hex: '#6b7280' },
+    { id: 'coklat', label: 'Coklat', hex: '#78350f' },
+    { id: 'gold',   label: 'Gold',   hex: '#c9a227' },
+];
+// Variant aksesoris + label tampilnya.
+const ACCESSORY_TYPES = [
+    ['keychain', 'Keychain'],
+    ['clicker',  'Clicker'],
+    ['figur',    'Figur'],
+    ['mainan',   'Mainan'],
+];
 const ALL_COLORS = [
     // Scrub colors
     { id: 'black',        label: 'Black',        hex: '#000000' },
@@ -2965,6 +3010,17 @@ async function apiFetch(url, options = {}) {
     if (!res.ok) throw new Error(data.error || 'Server error');
     return data;
 }
+
+// Roda mouse JANGAN mengubah nilai input angka. Perilaku bawaan browser: input
+// number yang sedang fokus akan naik/turun nilainya saat halaman di-scroll —
+// di form Kasir yang panjang ini bikin harga satuan berubah tanpa disadari.
+// Blur saat wheel = scroll halaman jalan normal, nilai aman. Delegasi di document
+// supaya ikut berlaku untuk field yang dibuat dinamis (item Kasir, panel bulk).
+// Tombol panah spinner-nya sendiri sudah dihapus lewat CSS di atas.
+document.addEventListener('wheel', (e) => {
+    const el = e.target;
+    if (el instanceof HTMLInputElement && el.type === 'number' && el === document.activeElement) el.blur();
+}, { passive: true });
 
 function showModule(name) {
     document.querySelectorAll('[id^="module-"]').forEach(el => el.classList.add('hidden'));
@@ -4225,7 +4281,7 @@ function switchChart(type) {
     let labels = [], data = [], color = '';
     if (type === 'products') {
         const bycat = statsData.by_category || [];
-        labels = bycat.map(c => ({ tops:'Atasan', pants:'Celana', caps:'Cap', gown:'Gown' }[c.category] || c.category));
+        labels = bycat.map(c => ({ tops:'Atasan', pants:'Celana', caps:'Cap', gown:'Gown', aksesoris:'Aksesoris' }[c.category] || c.category));
         data = bycat.map(c => c.count);
         color = 'rgba(99,102,241,0.7)';
     } else if (type === 'orders') {
@@ -4404,6 +4460,12 @@ function handleCategoryChange() {
     document.getElementById('pants-variants-wrap').classList.toggle('hidden', cat !== 'pants');
     document.getElementById('caps-price-wrap')?.classList.toggle('hidden', cat !== 'caps');
     document.getElementById('gown-variants-wrap')?.classList.toggle('hidden', cat !== 'gown');
+    document.getElementById('aksesoris-variants-wrap')?.classList.toggle('hidden', cat !== 'aksesoris');
+    // Baris jenis aksesoris digenerate dari ACCESSORY_TYPES (satu sumber kebenaran).
+    // WAJIB dibangun di sini — openProductModal memanggil handleCategoryChange()
+    // SEBELUM me-restore types/harga produk yang diedit, dan restore itu mencari
+    // input[name="pf-types"] + #price-type-<key> yang baru ada setelah ini jalan.
+    if (cat === 'aksesoris') buildAccessoryTypeRows();
     // Reset all type checkboxes and price inputs
     document.querySelectorAll('input[name="pf-types"]').forEach(i => {
         i.checked = false;
@@ -4447,8 +4509,31 @@ function updateTypePriceFields() {
     if (typeof renderColorOverrides === 'function') renderColorOverrides();
 }
 
+// Baris jenis aksesoris: checkbox + harga per jenis. Sengaja memakai
+// name="pf-types" dan id `type-<key>` / `price-type-<key>` yang SAMA dengan
+// Atasan & Gown, supaya updateTypePriceFields(), restore saat edit, dan
+// pengumpulan price_by_type di saveProduct ikut jalan tanpa cabang baru.
+function buildAccessoryTypeRows() {
+    const wrap = document.getElementById('aksesoris-type-rows');
+    if (!wrap || wrap.dataset.built === '1') return;
+    wrap.innerHTML = ACCESSORY_TYPES.map(([key, label]) => `
+        <div class="flex items-center gap-4 bg-white/3 border border-white/8 rounded-lg px-4 py-3">
+            <input type="checkbox" name="pf-types" value="${key}" id="type-${key}" class="w-4 h-4 rounded accent-indigo-500 shrink-0" onchange="updateTypePriceFields()">
+            <label for="type-${key}" class="text-sm font-medium text-white/70 cursor-pointer w-32 shrink-0">${label}</label>
+            <div class="flex items-center gap-2 flex-1">
+                <span class="text-xs text-white/30 shrink-0">Rp</span>
+                <input type="number" id="price-type-${key}" data-type="${key}" placeholder="0" class="flex-1 !py-1.5 !text-sm" disabled>
+            </div>
+        </div>`).join('');
+    wrap.dataset.built = '1';
+}
+
 function buildSizeBtns(cat, selected) {
     const sizes = ALL_SIZES[cat] || ['S','M','L','XL','XXL'];
+    // Aksesoris cuma punya satu ukuran — pilih otomatis supaya admin tidak
+    // tersandung validasi "Pilih minimal 1 ukuran" untuk sesuatu yang tak ada
+    // pilihannya. Kalau sedang edit produk, pakai ukuran tersimpan apa adanya.
+    if (cat === 'aksesoris' && (!selected || selected.length === 0)) selected = ['One Size'];
     document.getElementById('size-btns').innerHTML = sizes.map(s =>
         `<button type="button" onclick="toggleSize(this)" data-size="${s}"
             class="size-toggle ${selected.includes(s)?'selected bg-white text-black border-white':'bg-transparent text-white/50 border-white/10'} w-12 h-12 rounded-xl border text-xs font-bold hover:border-indigo-500 hover:text-white transition-all">
@@ -4457,9 +4542,12 @@ function buildSizeBtns(cat, selected) {
 }
 
 function buildColorBtns(selected) {
+    // Palet mengikuti kategori: aksesoris punya daftar warnanya sendiri.
     // Exclude alias entries (mis. 'old-pink' yg merupakan alias backward-compat 'pink')
     // — supaya picker tidak tampilkan 2 swatch identik utk warna yg sama.
-    document.getElementById('color-btns').innerHTML = ALL_COLORS.filter(c => !c.isAlias).map(c =>
+    const cat = document.getElementById('pf-category')?.value || 'tops';
+    const palette = cat === 'aksesoris' ? ALL_ACCESSORY_COLORS : ALL_COLORS;
+    document.getElementById('color-btns').innerHTML = palette.filter(c => !c.isAlias).map(c =>
         `<button type="button" onclick="toggleColor(this)" data-color="${c.id}" title="${c.label}"
             class="color-toggle ${selected.includes(c.id)?'selected ring-2 ring-white ring-offset-2 ring-offset-darkcard scale-110':''}
             w-10 h-10 rounded-full border-2 border-transparent transition-all hover:scale-110"
@@ -4534,7 +4622,7 @@ function generatePhotoSlots(colors, types) {
     grid.innerHTML = '';
     const NUM_PHOTOS = 3;
     colors.forEach(c => {
-        const cm = ALL_COLORS.find(x => x.id === c) || { label: c, hex: '#ccc' };
+        const cm = resolveColor(c);   // ikut palet aksesoris/gown, bukan cuma scrub
         types.forEach(t => {
             const typeLabel = t === 'null' ? '' : (' – ' + (t === 'pendek' ? 'Lengan Pendek' : t === 'panjang' ? 'Lengan Panjang' : t.charAt(0).toUpperCase()+t.slice(1)));
             const label = `${cm.label}${typeLabel}`;
@@ -4739,6 +4827,10 @@ function renderCogsRows() {
         [['polos','Polos','type-gown-polos'],['ber-design','Ber Design','type-gown-design']].forEach(([t,lbl,chk]) => {
             if (document.getElementById(chk)?.checked) rows.push({ key:t, label:lbl, priceId:`price-type-${t}` });
         });
+    } else if (cat === 'aksesoris') {
+        ACCESSORY_TYPES.forEach(([t, lbl]) => {
+            if (document.getElementById(`type-${t}`)?.checked) rows.push({ key:t, label:lbl, priceId:`price-type-${t}` });
+        });
     } else if (cat === 'pants') {
         rows.push({ key:'single', label:'Harga', priceId:'pf-price-single' });
     } else if (cat === 'caps') {
@@ -4891,6 +4983,8 @@ function _cogsActiveVariants() {
         [['pendek','Lengan Pendek'],['panjang','Lengan Panjang']].forEach(([t,lbl]) => { if (document.getElementById(`type-${t}`)?.checked) out.push({ key:t, label:lbl, priceId:`price-type-${t}` }); });
     } else if (cat === 'gown') {
         [['polos','Polos','type-gown-polos'],['ber-design','Ber Design','type-gown-design']].forEach(([t,lbl,chk]) => { if (document.getElementById(chk)?.checked) out.push({ key:t, label:lbl, priceId:`price-type-${t}` }); });
+    } else if (cat === 'aksesoris') {
+        ACCESSORY_TYPES.forEach(([t, lbl]) => { if (document.getElementById(`type-${t}`)?.checked) out.push({ key:t, label:lbl, priceId:`price-type-${t}` }); });
     } else if (cat === 'pants') out.push({ key:'single', label:'Harga', priceId:'pf-price-single' });
     else if (cat === 'caps') out.push({ key:'single', label:'Harga', priceId:'pf-price-caps' });
     return out;
@@ -4999,7 +5093,7 @@ document.getElementById('product-form').addEventListener('submit', async e => {
 
         // Build price_by_type for tops; use single price for others
         let priceByType = null;
-        if ((cat === 'tops' || cat === 'gown') && types.length > 0) {
+        if ((cat === 'tops' || cat === 'gown' || cat === 'aksesoris') && types.length > 0) {
             priceByType = {};
             types.forEach(t => {
                 const el = document.getElementById(`price-type-${t}`);
@@ -5087,6 +5181,7 @@ function sortSizes(arr) {
 function resolveColor(colorId) {
     return ALL_COLORS.find(x => x.id === colorId)
         || ALL_GOWN_COLORS.find(x => x.id === colorId)
+        || ALL_ACCESSORY_COLORS.find(x => x.id === colorId)
         || ALL_MOTIFS.find(x => x.id === colorId)
         || { label: colorId, hex: '#888' };
 }
@@ -9916,6 +10011,31 @@ const THREAD_COLOR_OPTS_HTML = '<option value="">Pilih warna...</option>' +
 const LOGO_COLOR_OPTS_HTML = THREAD_COLOR_OPTS_HTML +
     '<option value="Multi warna">Multi warna (bawaan logo)</option>';
 
+// Variant custom product di Kasir. Dulu input teks bebas → penulisan tidak konsisten
+// ("lengan pendek", "Pendek", "LP") sehingga menyulitkan pencocokan & laporan.
+// Sekarang dropdown; opsi "Ketik manual…" tetap disediakan untuk kasus tak terduga.
+const CPROD_VARIANT_LIST = ['Lengan Pendek','Lengan Panjang','Jogger','Straight','Ber Design','Color Only'];
+const CPROD_VARIANT_OPTS_HTML = CPROD_VARIANT_LIST.map(v => `<option value="${v}">${v}</option>`).join('');
+
+// Tampilkan kolom ketik-manual hanya saat opsi "__manual__" dipilih.
+function waCprodVariantChange(idx) {
+    const sel = document.getElementById(`wa-cprod-variant-${idx}`);
+    const man = document.getElementById(`wa-cprod-variant-manual-${idx}`);
+    if (!sel || !man) return;
+    const manual = sel.value === '__manual__';
+    man.classList.toggle('hidden', !manual);
+    if (!manual) man.value = '';
+    else man.focus();
+}
+// Nilai variant efektif: isi manual kalau dipilih, selain itu nilai dropdown.
+function waCprodVariantValue(idx) {
+    const sel = document.getElementById(`wa-cprod-variant-${idx}`);
+    if (!sel) return '';
+    if (sel.value === '__manual__')
+        return (document.getElementById(`wa-cprod-variant-manual-${idx}`)?.value || '').trim();
+    return sel.value.trim();
+}
+
 function waAddItem() {
     waItemCount++;
     const idx = waItemCount;
@@ -9955,11 +10075,19 @@ function waAddItem() {
                             <option value="pants">Celana</option>
                             <option value="caps">Cap</option>
                             <option value="gown">Gown</option>
+                            <option value="set">Set (Atasan + Celana)</option>
+                            <option value="aksesoris">Aksesoris</option>
                         </select>
                     </div>
                     <div>
-                        <label class="wa-field-label">Variant <span class="wa-optional">(bebas)</span></label>
-                        <input type="text" id="wa-cprod-variant-${idx}" placeholder="mis. Lengan 3/4" class="input-sm" />
+                        <label class="wa-field-label">Variant <span class="wa-optional">(opsional)</span></label>
+                        <select id="wa-cprod-variant-${idx}" class="input-sm" onchange="waCprodVariantChange(${idx})">
+                            <option value="">-- Pilih --</option>
+                            ${CPROD_VARIANT_OPTS_HTML}
+                            <option value="__manual__">Ketik manual…</option>
+                        </select>
+                        <input type="text" id="wa-cprod-variant-manual-${idx}" placeholder="mis. Lengan 3/4"
+                               class="input-sm hidden" style="margin-top:6px;" />
                     </div>
                 </div>
                 <div class="grid grid-cols-3 gap-2">
@@ -10027,7 +10155,7 @@ function waAddItem() {
                     <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waOnQtyInput(${idx})" />
                 </div>
                 <div>
-                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya Atasan & Gown)</span></label>
+                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya Atasan, Gown & Set)</span></label>
                     <div class="grid grid-cols-2 gap-1.5 mt-0.5">
                         <div class="wa-bordir-pill" id="wa-bordir-nama-pill-${idx}" onclick="waToggleBordir(${idx},'nama')">
                             <span class="wa-bordir-box" id="wa-bordir-nama-box-${idx}"></span>
@@ -10043,34 +10171,6 @@ function waAddItem() {
                     <input type="hidden" id="wa-bordir-nama-${idx}" value="false" />
                     <input type="hidden" id="wa-bordir-logo-${idx}" value="false" />
                 </div>
-            </div>
-            <!-- Pre-Order: muncul otomatis saat jumlah > stok. Stok dialokasikan saat barang datang. -->
-            <div id="wa-po-notice-${idx}" class="hidden p-2.5 rounded-xl" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.32);">
-                <p class="text-[10px] font-semibold leading-snug mb-1.5" style="color:rgba(253,186,116,0.95);">⚠️ Jumlah (<span id="wa-po-need-${idx}">0</span>) melebihi stok tersedia (<span id="wa-po-avail-${idx}">0</span>). Kurangi jumlah, atau jadikan Pre-Order — stok dipenuhi saat barang datang.</p>
-                <div class="wa-bonus-pill" id="wa-po-pill-${idx}" onclick="waTogglePO(${idx})">
-                    <span class="wa-bordir-box" id="wa-po-box-${idx}"></span>
-                    <span class="wa-bordir-text">📦 Jadikan Pre-Order</span>
-                    <span class="wa-bordir-price" id="wa-po-hint-${idx}">stok menyusul</span>
-                </div>
-                <input type="hidden" id="wa-po-${idx}" value="false" />
-            </div>
-            <!-- Bonus toggle: item gratis (produk + bordir Rp 0), stok tetap dikurangi -->
-            <div class="wa-bonus-pill" id="wa-bonus-pill-${idx}" onclick="waToggleBonus(${idx})">
-                <span class="wa-bordir-box" id="wa-bonus-box-${idx}"></span>
-                <span class="wa-bordir-text">🎁 Jadikan Bonus (Gratis)</span>
-                <span class="wa-bordir-price" id="wa-bonus-hint-${idx}">tidak ditagih</span>
-            </div>
-            <input type="hidden" id="wa-bonus-${idx}" value="false" />
-            <!-- Diskon khusus baris ini (override diskon umum di bawah; tidak dobel) -->
-            <div>
-                <label class="wa-field-label">Diskon Baris Ini <span class="wa-optional">(opsional, override diskon umum)</span></label>
-                <select id="wa-item-disc-${idx}" class="input-sm" onchange="waUpdateTotal()">
-                    <option value="">— Ikut diskon umum / tanpa diskon</option>
-                    <option value="5-inc">Diskon 5% (produk + bordir)</option>
-                    <option value="5-exc">Diskon 5% (produk saja)</option>
-                    <option value="30-inc">Consignment 30% (produk + bordir)</option>
-                    <option value="30-exc">Consignment 30% (produk saja)</option>
-                </select>
             </div>
             <!-- Sub-form Bordir Nama -->
             <div id="wa-bordir-nama-fields-${idx}" class="wa-collapse">
@@ -10142,15 +10242,58 @@ function waAddItem() {
                 </div>
               </div>
             </div>
+            <!-- Pre-Order / Bonus / Diskon SENGAJA di bawah blok bordir. Dulu tiga blok
+                 ini menyelip di ANTARA pilihan bordir dan form detailnya, sehingga saat
+                 nama + logo sama-sama aktif tampilannya terpecah dan membingungkan. -->
+            <!-- Pre-Order: muncul otomatis saat jumlah > stok. Stok dialokasikan saat barang datang. -->
+            <div id="wa-po-notice-${idx}" class="hidden p-2.5 rounded-xl" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.32);">
+                <p class="text-[10px] font-semibold leading-snug mb-1.5" style="color:rgba(253,186,116,0.95);">⚠️ Jumlah (<span id="wa-po-need-${idx}">0</span>) melebihi stok tersedia (<span id="wa-po-avail-${idx}">0</span>). Kurangi jumlah, atau jadikan Pre-Order — stok dipenuhi saat barang datang.</p>
+                <div class="wa-bonus-pill" id="wa-po-pill-${idx}" onclick="waTogglePO(${idx})">
+                    <span class="wa-bordir-box" id="wa-po-box-${idx}"></span>
+                    <span class="wa-bordir-text">📦 Jadikan Pre-Order</span>
+                    <span class="wa-bordir-price" id="wa-po-hint-${idx}">stok menyusul</span>
+                </div>
+                <input type="hidden" id="wa-po-${idx}" value="false" />
+            </div>
+            <!-- Bonus toggle: item gratis (produk + bordir Rp 0), stok tetap dikurangi -->
+            <div class="wa-bonus-pill" id="wa-bonus-pill-${idx}" onclick="waToggleBonus(${idx})">
+                <span class="wa-bordir-box" id="wa-bonus-box-${idx}"></span>
+                <span class="wa-bordir-text">🎁 Jadikan Bonus (Gratis)</span>
+                <span class="wa-bordir-price" id="wa-bonus-hint-${idx}">tidak ditagih</span>
+            </div>
+            <input type="hidden" id="wa-bonus-${idx}" value="false" />
+            <!-- Diskon khusus baris ini (override diskon umum di bawah; tidak dobel) -->
+            <div>
+                <label class="wa-field-label">Diskon Baris Ini <span class="wa-optional">(opsional, override diskon umum)</span></label>
+                <select id="wa-item-disc-${idx}" class="input-sm" onchange="waUpdateTotal()">
+                    <option value="">— Ikut diskon umum / tanpa diskon</option>
+                    <option value="5-inc">Diskon 5% (produk + bordir)</option>
+                    <option value="5-exc">Diskon 5% (produk saja)</option>
+                    <option value="30-inc">Consignment 30% (produk + bordir)</option>
+                    <option value="30-exc">Consignment 30% (produk saja)</option>
+                </select>
+            </div>
         </div>`;
     container.appendChild(div);
+    waRenumberItems();
+}
+
+// Nomor item = POSISI sebenarnya di daftar, bukan `idx` (counter yang terus naik).
+// Dulu setelah menghapus item tengah nomornya jadi bolong (Item #1, #3, #4) dan
+// admin sulit tahu sedang mengisi item ke berapa dari berapa.
+function waRenumberItems() {
+    const items = [...document.querySelectorAll('#wa-items-container > [id^="wa-item-"]')];
+    items.forEach((el, i) => {
+        const badge = el.querySelector('.wa-item-badge');
+        if (badge) badge.textContent = `Item ${i + 1} / ${items.length}`;
+    });
 }
 
 function waRemoveItem(idx) {
     const el = document.getElementById(`wa-item-${idx}`);
     if (!el) { waUpdateTotal(); return; }
     el.classList.add('wa-item-leaving');
-    el.addEventListener('animationend', () => { el.remove(); waUpdateTotal(); }, { once: true });
+    el.addEventListener('animationend', () => { el.remove(); waRenumberItems(); waUpdateTotal(); }, { once: true });
 }
 
 function waToggleBonus(idx) {
@@ -10163,8 +10306,9 @@ function waToggleBonus(idx) {
     waUpdateTotal();
 }
 
-// Bordir applies to tops (atasan) and gown. Disable both pills + reset any active
-// bordir when the selected product is a different category (pants/caps).
+// Bordir berlaku untuk atasan, gown, dan SET (set berisi atasan — "Ariel Set"
+// dulu terpaksa diinput sebagai kategori 'tops' supaya bordirnya bisa aktif).
+// Kategori lain (pants/caps/aksesoris) → pill bordir dimatikan & di-reset.
 function waSetBordirEnabled(idx) {
     const prodEl = document.getElementById(`wa-prod-${idx}`);
     // Custom Product mode: category comes from the cprod-cat dropdown, not the
@@ -10172,7 +10316,7 @@ function waSetBordirEnabled(idx) {
     const cat = waIsCustomProduct(idx)
         ? (document.getElementById(`wa-cprod-cat-${idx}`)?.value || '')
         : (prodEl?.selectedOptions?.[0]?.dataset?.cat || '');
-    const enabled = cat === 'tops' || cat === 'gown';
+    const enabled = cat === 'tops' || cat === 'gown' || cat === 'set';
     const hint = document.getElementById(`wa-bordir-hint-${idx}`);
     if (hint) hint.classList.toggle('hidden', enabled || !cat); // show hint only when a non-top product is chosen
     ['nama','logo'].forEach(type => {
@@ -12711,7 +12855,7 @@ function _kasirCollectSingleItems() {
         if (productId === '__custom_product__') {
             const cpName    = document.getElementById(`wa-cprod-name-${idx}`)?.value.trim() || '';
             const cpCat     = document.getElementById(`wa-cprod-cat-${idx}`)?.value || '';
-            const cpVariant = document.getElementById(`wa-cprod-variant-${idx}`)?.value.trim() || '';
+            const cpVariant = waCprodVariantValue(idx);
             const cpColor   = document.getElementById(`wa-cprod-color-${idx}`)?.value.trim() || '';
             const cpSize    = document.getElementById(`wa-cprod-size-${idx}`)?.value.trim() || '';
             const cpPrice   = parseInt(document.getElementById(`wa-cprod-price-${idx}`)?.value);
@@ -13186,7 +13330,7 @@ function _generateFormatOrderText(o, opts) {
     const rp = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
     // Label satuan produk per kategori — dulu hardcoded 'baju' bikin salah utk
     // celana/cap/gown. Custom product tanpa category → fallback 'pcs'.
-    const unitLabel = (cat) => ({ tops: 'baju', pants: 'celana', caps: 'cap', gown: 'gown' }[cat] || 'pcs');
+    const unitLabel = (cat) => ({ tops: 'baju', pants: 'celana', caps: 'cap', gown: 'gown', set: 'set', aksesoris: 'pcs' }[cat] || 'pcs');
     const DIV = '-'.repeat(45);
     let bordirDetails = [];
     try { bordirDetails = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch(e) {}
