@@ -371,8 +371,25 @@
       /* Hide table header on mobile (cards self-label via .bulk-cell-label) */
       #kasir-bulk-mode table thead { display: none; }
     }
-    .wa-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); margin-bottom: 6px; display: block; }
-    .wa-optional { font-weight: 400; color: rgba(255,255,255,0.25); }
+    /* Label field diperbesar 11 → 13px + kontras dinaikkan. Saat mengisi 5-10 item
+       sekaligus, label kecil abu-abu bikin admin harus menyipit. */
+    .wa-field-label { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 6px; display: block; }
+    .wa-optional { font-size: 11px; font-weight: 400; color: rgba(255,255,255,0.35); }
+
+    /* ── Panel di dalam kartu item Kasir ───────────────────────────────────
+       Dulu ketiganya memakai nuansa ungu/biru-ungu yang nyaris sama, jadi batas
+       antar blok tidak terbaca. Sekarang: Custom Product = NETRAL (bagian dari
+       identitas produk, bukan tambahan), Bordir Nama = teal, Bordir Logo = rose.
+       Sengaja TANPA ungu. Jarak antar panel juga dilonggarkan. */
+    .wa-panel { padding: 16px; border-radius: 12px; margin-top: 14px; }
+    .wa-panel + .wa-panel { margin-top: 16px; }
+    .wa-panel-title { font-size: 12px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 12px; }
+    .wa-panel-cprod { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.16); }
+    .wa-panel-cprod .wa-panel-title { color: rgba(226,232,240,0.85); }
+    .wa-panel-nama  { background: rgba(45,212,191,0.07); border: 1px solid rgba(45,212,191,0.30); }
+    .wa-panel-nama .wa-panel-title  { color: #5eead4; }
+    .wa-panel-logo  { background: rgba(251,113,133,0.07); border: 1px solid rgba(251,113,133,0.30); }
+    .wa-panel-logo .wa-panel-title  { color: #fda4af; }
     .wa-bonus-pill { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px; border-radius: 8px; border: 1px solid rgba(251,191,36,0.18); background: rgba(251,191,36,0.04); cursor: pointer; transition: border-color 0.15s ease-out, background-color 0.15s ease-out; user-select: none; }
     .wa-bonus-pill:hover { border-color: rgba(251,191,36,0.35); }
     .wa-bonus-pill.active { border-color: rgba(251,191,36,0.55); background: rgba(251,191,36,0.1); }
@@ -892,7 +909,9 @@
 
     <!-- MODULE: INPUT ORDER MANUAL WA -->
     <section id="module-manual-order" class="module-section hidden p-4 sm:p-6">
-      <div class="max-w-2xl mx-auto space-y-5">
+      <!-- max-w-2xl (672px) terlalu sempit untuk form Kasir yang punya banyak field
+           berdampingan (warna/ukuran/harga, bordir nama+logo). Dilebarkan ke 4xl. -->
+      <div class="max-w-4xl mx-auto space-y-5">
 
         <!-- Page Header -->
         <div class="flex items-center gap-3">
@@ -2231,15 +2250,15 @@
       </div>
 
       <!-- Preview total selisih -->
-      <div id="add-bordir-preview" class="hidden bg-purple-500/10 border border-purple-400/25 rounded-xl px-3 py-3 text-[12px]">
-        <p class="font-bold text-purple-300 mb-1"><i class="fa-solid fa-calculator"></i> Selisih yang Harus Dibayar</p>
-        <p class="text-purple-100 text-base font-bold"><span id="add-bordir-total">Rp 0</span></p>
-        <p class="text-purple-200/70 text-[10px] mt-1">Total order naik dari Rp <span id="add-bordir-old-total">0</span> jadi Rp <span id="add-bordir-new-total">0</span>.</p>
+      <div id="add-bordir-preview" class="hidden bg-teal-500/10 border border-teal-400/25 rounded-xl px-3 py-3 text-[12px]">
+        <p class="font-bold text-teal-300 mb-1"><i class="fa-solid fa-calculator"></i> Selisih yang Harus Dibayar</p>
+        <p class="text-teal-100 text-base font-bold"><span id="add-bordir-total">Rp 0</span></p>
+        <p class="text-teal-200/70 text-[10px] mt-1">Total order naik dari Rp <span id="add-bordir-old-total">0</span> jadi Rp <span id="add-bordir-new-total">0</span>.</p>
       </div>
 
       <div class="flex gap-2 pt-1">
         <button onclick="closeAddBordirModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10">Batal</button>
-        <button id="add-bordir-submit-btn" onclick="submitAddBordir()" class="flex-1 py-2.5 rounded-xl bg-purple-500/20 border border-purple-400/30 text-purple-300 text-sm font-bold hover:bg-purple-500/30">Simpan & Generate WA</button>
+        <button id="add-bordir-submit-btn" onclick="submitAddBordir()" class="flex-1 py-2.5 rounded-xl bg-teal-500/20 border border-teal-400/30 text-teal-300 text-sm font-bold hover:bg-teal-500/30">Simpan & Generate WA</button>
       </div>
     </div>
   </div>
@@ -7384,7 +7403,7 @@ async function viewOrder(id) {
                 return `
             <div class="flex items-start gap-3 py-2.5 border-b border-purple-500/10 last:border-0">
                 <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0
-                    ${e.type==='logo' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-200'}">
+                    ${e.type==='logo' ? 'bg-rose-500/20 text-rose-200' : 'bg-teal-500/20 text-teal-200'}">
                     ${e.type==='logo' ? '🎨 Logo' : '✏️ Nama'}
                 </span>
                 <div class="min-w-0 flex-1">
@@ -7420,7 +7439,7 @@ async function viewOrder(id) {
                         ${e.color ? `<p class="text-[11px] text-white/55">🎨 Benang: <span class="text-white/80">${esc(e.color)}</span></p>` : ''}
                         ${posLbl  ? `<p class="text-[11px] text-white/55">📍 Posisi: <span class="text-white/80">${posLbl}</span></p>` : ''}
                     </div>
-                    ${canEditBordir ? `<button onclick="editBordirEntry(${o.id}, ${idx})" class="mt-2 text-[10px] px-2 py-1 rounded-lg bg-purple-500/15 border border-purple-400/25 text-purple-200 hover:bg-purple-500/25 transition font-bold"><i class="fa-solid fa-pen-to-square text-[9px]"></i> Edit ${e.type==='logo'?'Logo':'Nama'}</button>` : ''}
+                    ${canEditBordir ? `<button onclick="editBordirEntry(${o.id}, ${idx})" class="mt-2 text-[10px] px-2 py-1 rounded-lg bg-teal-500/15 border border-teal-400/25 text-teal-200 hover:bg-teal-500/25 transition font-bold"><i class="fa-solid fa-pen-to-square text-[9px]"></i> Edit ${e.type==='logo'?'Logo':'Nama'}</button>` : ''}
                 </div>
             </div>`;}).join('')}
             ${hasBordir ? `
@@ -7993,7 +8012,7 @@ function openAddBordirModal() {
     list.innerHTML = eligible.map(i => `
         <div class="bg-white/3 border border-white/10 rounded-xl p-3 space-y-2.5" data-item-id="${i.id}" data-qty="${i.quantity}">
             <label class="flex items-start gap-2.5 cursor-pointer">
-                <input type="checkbox" class="ab-pick mt-1 w-4 h-4 accent-purple-500 shrink-0" onchange="abOnPickChange(this)">
+                <input type="checkbox" class="ab-pick mt-1 w-4 h-4 accent-teal-500 shrink-0" onchange="abOnPickChange(this)">
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-semibold">${esc(i.product_name)}</p>
                     <p class="text-[11px] text-white/40">${esc(i.size)} · ${esc(i.color)}${i.variant_type && i.variant_type !== 'null' ? ' · ' + esc(i.variant_type) : ''} · x${i.quantity}</p>
@@ -8001,16 +8020,16 @@ function openAddBordirModal() {
             </label>
             <div class="ab-detail hidden pl-7 space-y-3">
                 <!-- Nama -->
-                <div class="bg-purple-500/5 border border-purple-400/15 rounded-lg p-2.5">
-                    <label class="flex items-center gap-2 text-[11px] font-bold text-purple-200 mb-2">
-                        <input type="checkbox" class="ab-want-nama w-3.5 h-3.5 accent-purple-500" onchange="abOnToggleNama(this)">
+                <div class="bg-teal-500/5 border border-teal-400/20 rounded-lg p-2.5">
+                    <label class="flex items-center gap-2 text-xs font-bold text-teal-200 mb-2">
+                        <input type="checkbox" class="ab-want-nama w-3.5 h-3.5 accent-teal-500" onchange="abOnToggleNama(this)">
                         ✏️ Bordir Nama
                     </label>
                     <div class="ab-nama-fields hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input type="text" class="ab-nama-text !py-1.5 !text-xs" placeholder="Teks nama (mis. Dr. Andi)" oninput="updateAddBordirPreview()">
                         <input type="text" class="ab-nama-text2 !py-1.5 !text-xs" placeholder="Baris ke-2 — opsional (mis. Sp.PD)">
                         <label class="flex items-center gap-1.5 text-[10px] text-white/60 sm:col-span-2 cursor-pointer select-none">
-                            <input type="checkbox" class="ab-nama-underline w-3 h-3 accent-purple-400">
+                            <input type="checkbox" class="ab-nama-underline w-3 h-3 accent-teal-400">
                             Beri garis pemisah di antara baris 1 &amp; baris 2
                         </label>
                         <select class="ab-nama-color !py-1.5 !text-xs">${THREAD_COLOR_OPTS_HTML}</select>
@@ -8022,15 +8041,15 @@ function openAddBordirModal() {
                     </div>
                 </div>
                 <!-- Logo -->
-                <div class="bg-blue-500/5 border border-blue-400/15 rounded-lg p-2.5">
-                    <label class="flex items-center gap-2 text-[11px] font-bold text-blue-200 mb-2">
-                        <input type="checkbox" class="ab-want-logo w-3.5 h-3.5 accent-blue-500" onchange="abOnToggleLogo(this)">
+                <div class="bg-rose-500/5 border border-rose-400/20 rounded-lg p-2.5">
+                    <label class="flex items-center gap-2 text-xs font-bold text-rose-200 mb-2">
+                        <input type="checkbox" class="ab-want-logo w-3.5 h-3.5 accent-rose-500" onchange="abOnToggleLogo(this)">
                         🎨 Bordir Logo
                     </label>
                     <div class="ab-logo-fields hidden space-y-2">
                         <div>
                             <label class="block text-[10px] font-semibold text-white/50 mb-1">Upload Logo <span class="text-white/40 font-normal">(PNG/JPG, opsional — kosongkan kalau file dikirim via WA)</span></label>
-                            <label class="w-full py-2 rounded-lg border border-dashed border-white/15 text-white/50 text-[11px] font-medium flex items-center justify-center gap-2 cursor-pointer hover:border-blue-400/50 transition">
+                            <label class="w-full py-2 rounded-lg border border-dashed border-white/15 text-white/50 text-[11px] font-medium flex items-center justify-center gap-2 cursor-pointer hover:border-rose-400/50 transition">
                                 <i class="fa-solid fa-upload text-[10px]"></i> Pilih File
                                 <input type="file" class="ab-logo-file hidden" accept="image/*" onchange="abHandleLogoFile(this)" />
                             </label>
@@ -9384,7 +9403,7 @@ function editBordirEntry(orderId, idx) {
         <label class="block text-[11px] text-white/50 mb-1">Baris ke-2 (opsional)</label>
         <input id="eb-value2" type="text" class="w-full mb-2 !py-2 !text-sm" placeholder="mis. Sp.KG" />
         <label class="flex items-center gap-2 text-[11px] text-white/70 mb-2">
-            <input id="eb-underline" type="checkbox" class="w-3.5 h-3.5 accent-purple-400" /> Pakai garis pemisah antara baris 1 & 2
+            <input id="eb-underline" type="checkbox" class="w-3.5 h-3.5 accent-teal-400" /> Pakai garis pemisah antara baris 1 & 2
         </label>
         <div class="grid grid-cols-2 gap-2">
             <div><label class="block text-[11px] text-white/50 mb-1">Warna Benang</label>
@@ -9418,7 +9437,7 @@ function editBordirEntry(orderId, idx) {
                 ${fields}
                 <p class="text-[10px] text-amber-300/70 mt-3"><i class="fa-solid fa-circle-info"></i> Kalau bordir sudah di-approve, edit akan me-reset ke "perlu review ulang".</p>
                 <div class="flex gap-2 mt-4">
-                    <button onclick="submitBordirEdit(${orderId}, ${idx}, '${entry.type}')" class="flex-1 py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 text-purple-200 font-bold text-sm transition">Simpan</button>
+                    <button onclick="submitBordirEdit(${orderId}, ${idx}, '${entry.type}')" class="flex-1 py-2.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 text-teal-200 font-bold text-sm transition">Simpan</button>
                     <button onclick="document.getElementById('bordir-edit-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Batal</button>
                 </div>
             </div>
@@ -10060,8 +10079,8 @@ function waAddItem() {
             </div>
             <!-- Custom Product panel: muncul saat produk = __custom_product__. Semua field manual,
                  tidak dicek stok, treat seperti Custom Size (pack-guard via tombol "Tandai Siap"). -->
-            <div id="wa-cprod-panel-${idx}" class="hidden p-3 rounded-xl space-y-2.5" style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.25);">
-                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(216,180,254,0.9);">✨ Custom Product — di luar katalog, stok tidak dicek</p>
+            <div id="wa-cprod-panel-${idx}" class="hidden wa-panel wa-panel-cprod space-y-3">
+                <p class="wa-panel-title">✨ Custom Product — di luar katalog, stok tidak dicek</p>
                 <div>
                     <label class="wa-field-label">Nama Produk <span style="color:#f87171">*</span></label>
                     <input type="text" id="wa-cprod-name-${idx}" placeholder="mis. Scrub Custom dr. Andi" class="input-sm" oninput="waCprodOnChange(${idx})" />
@@ -10175,8 +10194,8 @@ function waAddItem() {
             <!-- Sub-form Bordir Nama -->
             <div id="wa-bordir-nama-fields-${idx}" class="wa-collapse">
               <div class="wa-collapse-inner">
-                <div class="mt-2 p-3 rounded-xl space-y-2" style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);">
-                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(196,181,253,0.8);">✏️ Detail Bordir Nama</p>
+                <div class="wa-panel wa-panel-nama space-y-3">
+                <p class="wa-panel-title">✏️ Detail Bordir Nama</p>
                 <div>
                     <label class="wa-field-label">Nama yang dibordir <span style="color:#f87171">*</span></label>
                     <input type="text" id="wa-bordir-nama-text-${idx}" placeholder="dr. James, M.Ked — perhatikan ejaan & huruf kapital" class="input-sm" />
@@ -10186,7 +10205,7 @@ function waAddItem() {
                     <input type="text" id="wa-bordir-nama-text2-${idx}" placeholder="mis. Sp.PD, M.Kes" class="input-sm" />
                 </div>
                 <label class="flex items-center gap-2 text-[11px] text-white/70 cursor-pointer select-none">
-                    <input type="checkbox" id="wa-bordir-nama-underline-${idx}" class="w-3.5 h-3.5 accent-purple-400" />
+                    <input type="checkbox" id="wa-bordir-nama-underline-${idx}" class="w-3.5 h-3.5 accent-teal-400" />
                     Beri garis pemisah di antara baris 1 &amp; baris 2
                 </label>
                 <div class="grid grid-cols-2 gap-2">
@@ -10212,8 +10231,8 @@ function waAddItem() {
             <!-- Sub-form Bordir Logo -->
             <div id="wa-bordir-logo-fields-${idx}" class="wa-collapse">
               <div class="wa-collapse-inner">
-                <div class="mt-2 p-3 rounded-xl space-y-2" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);">
-                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:rgba(147,197,253,0.8);">🎨 Detail Bordir Logo</p>
+                <div class="wa-panel wa-panel-logo space-y-3">
+                <p class="wa-panel-title">🎨 Detail Bordir Logo</p>
                 <div>
                     <label class="wa-field-label">Upload Logo <span class="wa-optional">(PNG/JPG)</span></label>
                     <label class="w-full py-2.5 rounded-xl border border-dashed flex items-center justify-center gap-2 cursor-pointer text-xs font-medium transition" style="border-color:rgba(255,255,255,0.12);color:rgba(255,255,255,0.4);">
@@ -11988,7 +12007,7 @@ function bulkAddPanel() {
                     </div>
                 </div>
                 <label class="flex items-center gap-2 text-[11px] text-white/70 mt-2 cursor-pointer select-none">
-                    <input type="checkbox" class="bulk-cell-nama-underline w-3.5 h-3.5 accent-purple-400" />
+                    <input type="checkbox" class="bulk-cell-nama-underline w-3.5 h-3.5 accent-teal-400" />
                     Beri garis pemisah di antara baris 1 &amp; baris 2 (semua nama di panel)
                 </label>
                 <p class="text-[10px] text-white/30 mt-1.5">Warna benang, posisi, &amp; garis pemisah berlaku untuk semua nama di panel ini.</p>
