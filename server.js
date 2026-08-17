@@ -1792,6 +1792,7 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
         }
 
         const effectiveTypes = selTypes.length > 0 ? selTypes : ['null'];
+        let staleWithStock = [];   // varian lama yang tak bisa dihapus karena stok belum 0
 
         // Phase 2 (ATOMIK): update product + operasi foto + pastikan baris variant/inventory.
         await withTransaction(async (client) => {
@@ -1861,10 +1862,57 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
                     }
                 }
             }
+
+            // ── Bersihkan kombinasi LAMA yang sudah tidak dipilih lagi ────────────
+            // Dulu update hanya INSERT (tidak pernah hapus), jadi warna/variant/size
+            // yang dicabut dari detail produk tetap nongol di Inventory & halaman
+            // produk sebagai "hantu" (kasus Mini Clicker Tooth, 17 Agu).
+            // Aman: HANYA baris kosong (stock = 0 & stock_reject = 0) yang dihapus.
+            // Baris yang masih punya stok sengaja dibiarkan supaya angka stok tidak
+            // hilang diam-diam — dikembalikan sebagai peringatan ke admin.
+            // variant_type disimpan sebagai teks 'null' untuk produk tanpa variant
+            // (lihat INSERT di atas), tapi product_variants bisa NULL beneran →
+            // COALESCE supaya dua-duanya kena bandingannya.
+            if (selColors.length > 0 && selSizes.length > 0) {
+                const keepArgs = [req.params.id, selColors, selSizes, effectiveTypes];
+                const notSelected = `NOT (color = ANY($2) AND size = ANY($3) AND COALESCE(variant_type,'null') = ANY($4))`;
+                await client.query(
+                    `DELETE FROM inventory
+                     WHERE product_id = $1 AND ${notSelected}
+                       AND COALESCE(stock,0) <= 0 AND COALESCE(stock_reject,0) <= 0`,
+                    keepArgs
+                );
+                const leftover = await client.query(
+                    `SELECT color, variant_type, size, stock, stock_reject
+                     FROM inventory
+                     WHERE product_id = $1 AND ${notSelected}
+                     ORDER BY color, variant_type, size`,
+                    keepArgs
+                );
+                // Foto/variant untuk kombinasi yang dicabut ikut dihapus, KECUALI kalau
+                // masih ada baris inventory bersisa (artinya stoknya belum habis).
+                await client.query(
+                    `DELETE FROM product_variants pv
+                     WHERE pv.product_id = $1
+                       AND NOT (pv.color = ANY($2) AND COALESCE(pv.variant_type,'null') = ANY($4))
+                       AND NOT EXISTS (
+                           SELECT 1 FROM inventory i
+                           WHERE i.product_id = pv.product_id AND i.color = pv.color
+                             AND COALESCE(i.variant_type,'null') = COALESCE(pv.variant_type,'null')
+                       )`,
+                    keepArgs
+                );
+                staleWithStock = leftover.rows;
+            }
         });
 
         invalidateCache('products', 'inventory');
-        res.json({ message: 'Produk berhasil diperbarui' });
+        const warning = staleWithStock.length > 0
+            ? `${staleWithStock.length} varian lama masih punya stok jadi belum dihapus: ` +
+              staleWithStock.map(r => `${r.color}/${r.variant_type}/${r.size} (${r.stock}${r.stock_reject ? '+' + r.stock_reject + ' reject' : ''})`).join(', ') +
+              '. Kosongkan stoknya dulu di menu Inventory, lalu simpan produk ini lagi.'
+            : null;
+        res.json({ message: 'Produk berhasil diperbarui', warning });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

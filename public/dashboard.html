@@ -2925,6 +2925,7 @@ const ACCESSORY_TYPES = [
     ['clicker',  'Clicker'],
     ['figur',    'Figur'],
     ['mainan',   'Mainan'],
+    ['air-freshener', 'Air Freshener'],
 ];
 const ALL_COLORS = [
     // Scrub colors
@@ -5170,6 +5171,9 @@ document.getElementById('product-form').addEventListener('submit', async e => {
         else { const txt = await res.text(); throw new Error('Server: ' + txt.slice(0,200)); }
         if (!res.ok) throw new Error(data.error || 'Gagal');
         toast(id ? 'Produk diperbarui ✅' : 'Produk ditambahkan ✅');
+        // Backend membersihkan varian lama yang sudah tidak dipilih; kalau ada yang
+        // masih punya stok, baris itu dibiarkan dan admin diberi tahu di sini.
+        if (data && data.warning) alert('⚠️ ' + data.warning);
         closeProductModal();
         loadProducts();
     } catch(err) { toast('Gagal: '+err.message, true); }
@@ -10055,6 +10059,44 @@ function waCprodVariantValue(idx) {
     return sel.value.trim();
 }
 
+// Kasir: pilih KATEGORI dulu, baru produk. Katalog sudah ratusan baris — daftar
+// produk penuh bikin admin scroll jauh tiap input order (request James 17 Agu).
+const WA_CAT_LABELS = { tops: 'Atasan', pants: 'Celana', caps: 'Cap', gown: 'Gown', aksesoris: 'Aksesoris' };
+
+function waCategoryOptionsHTML() {
+    // Hanya kategori yang benar-benar punya produk (urut sesuai WA_CAT_LABELS,
+    // kategori tak dikenal tetap ikut tampil apa adanya supaya tidak ada produk hilang).
+    const cats = [...new Set(waProducts.map(p => p.category || '').filter(Boolean))];
+    const known = Object.keys(WA_CAT_LABELS).filter(c => cats.includes(c));
+    const unknown = cats.filter(c => !WA_CAT_LABELS[c]);
+    return '<option value="">-- Pilih Kategori --</option>' +
+        [...known, ...unknown].map(c => `<option value="${c}">${WA_CAT_LABELS[c] || c}</option>`).join('') +
+        '<option value="__all__">Semua Kategori</option>';
+}
+
+// Harga sengaja TIDAK ditulis di label produk — kolom harga sudah tampil sendiri
+// setelah variant dipilih, dan label panjang bikin dropdown susah dibaca.
+function waProductOptionsHTML(cat) {
+    const list = !cat ? [] : waProducts.filter(p => cat === '__all__' || (p.category || '') === cat);
+    const placeholder = cat
+        ? '<option value="">-- Pilih Produk --</option>'
+        : '<option value="">-- Pilih kategori dulu --</option>';
+    return placeholder +
+        list.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-cat="${p.category || ''}">${p.name}</option>`).join('') +
+        '<option value="__custom_product__" data-cat="">✨ Custom Product — di luar katalog</option>';
+}
+
+// Ganti kategori → daftar produk dibangun ulang & pilihan lama direset supaya
+// tidak ada sisa warna/variant/size dari produk sebelumnya.
+function waOnProdCatChange(idx) {
+    const cat = document.getElementById(`wa-prodcat-${idx}`)?.value || '';
+    const prodEl = document.getElementById(`wa-prod-${idx}`);
+    if (!prodEl) return;
+    prodEl.innerHTML = waProductOptionsHTML(cat);
+    prodEl.value = '';
+    waOnProductChange(idx);
+}
+
 function waAddItem() {
     waItemCount++;
     const idx = waItemCount;
@@ -10069,13 +10111,19 @@ function waAddItem() {
             ${idx > 1 ? `<button onclick="waRemoveItem(${idx})" class="wa-trash-btn">✕ Hapus</button>` : ''}
         </div>
         <div class="space-y-2.5">
-            <div>
-                <label class="wa-field-label">Produk</label>
-                <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})">
-                    <option value="">-- Pilih Produk --</option>
-                    ${waProducts.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-cat="${p.category||''}">${p.name} — ${waProductPriceLabel(p)}</option>`).join('')}
-                    <option value="__custom_product__" data-cat="">✨ Custom Product — di luar katalog</option>
-                </select>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="wa-field-label">Kategori</label>
+                    <select id="wa-prodcat-${idx}" onchange="waOnProdCatChange(${idx})" class="input-sm">
+                        ${waCategoryOptionsHTML()}
+                    </select>
+                </div>
+                <div>
+                    <label class="wa-field-label">Produk</label>
+                    <select id="wa-prod-${idx}" onchange="waOnProductChange(${idx})" class="input-sm">
+                        ${waProductOptionsHTML('')}
+                    </select>
+                </div>
             </div>
             <!-- Custom Product panel: muncul saat produk = __custom_product__. Semua field manual,
                  tidak dicek stok, treat seperti Custom Size (pack-guard via tombol "Tandai Siap"). -->
@@ -10694,19 +10742,6 @@ function discAmountFor(token, baseSubtotal, bordirSubtotal) {
     if (!pct) return 0;
     const dbase = baseSubtotal + (incBordir ? bordirSubtotal : 0);
     return Math.round(dbase * pct / 100);
-}
-
-// Label harga di dropdown produk:
-// - Produk variant tunggal (caps/pants/tops 1-variant): "Rp 245.000"
-// - Produk multi-variant (tops dgn lengan pendek+panjang): "Rp 245.000 / Rp 260.000"
-//   supaya admin lihat range langsung tanpa harus pilih variant dulu.
-function waProductPriceLabel(p) {
-    if (p && p.price_by_type && typeof p.price_by_type === 'object') {
-        const vals = Object.values(p.price_by_type).map(Number).filter(n => n > 0);
-        const unique = [...new Set(vals)].sort((a, b) => a - b);
-        if (unique.length > 1) return unique.map(v => 'Rp ' + v.toLocaleString('id-ID')).join(' / ');
-    }
-    return 'Rp ' + Number(p && p.price || 0).toLocaleString('id-ID');
 }
 
 // SATU sumber resolusi harga satuan katalog — dipakai single & bulk cart.
