@@ -1168,14 +1168,15 @@ async function linkGuestOrdersByPhone(customerId, canonPhone) {
 app.post('/api/customer/register', loginLimiter, async (req, res) => {
     try {
         const full_name = (req.body.full_name || '').trim();
-        const email = (req.body.email || '').trim() || null;
+        const email = (req.body.email || '').trim();
         const password = req.body.password || '';
         const canon = normPhone(req.body.phone);
         if (!full_name) return res.status(400).json({ error: 'Nama wajib diisi.' });
         if (canon.length < 9 || canon.length > 15 || !/^0[0-9]+$/.test(canon))
             return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (format 08xxx).' });
         if (password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter.' });
-        if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+        if (!email) return res.status(400).json({ error: 'Email wajib diisi.' });
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
             return res.status(400).json({ error: 'Format email tidak valid.' });
 
         const exists = await dbGet('SELECT id FROM customers WHERE phone = $1', [canon]);
@@ -1311,6 +1312,25 @@ app.get('/api/customer/orders', requireCustomer, async (req, res) => {
              FROM orders WHERE customer_id = $1 ORDER BY created_at DESC`,
             [req.customer.id]);
         res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/customer/orders/:id — detail SATU order milik customer (scoped customer_id).
+app.get('/api/customer/orders/:id', requireCustomer, async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1 AND customer_id = $2', [req.params.id, req.customer.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        const items = await dbAll(
+            `SELECT oi.size, oi.color, oi.variant_type, oi.quantity, oi.price,
+                    oi.bordir_nama, oi.bordir_logo, oi.bordir_nama_price, oi.bordir_logo_price,
+                    oi.is_bonus, oi.is_po, oi.po_fulfilled, oi.is_custom_size,
+                    oi.is_custom_product, oi.custom_product_name,
+                    COALESCE(p.name, oi.custom_product_name) AS product_name
+             FROM order_items oi
+             LEFT JOIN products p ON p.id = oi.product_id
+             WHERE oi.order_id = $1 ORDER BY oi.id`,
+            [order.id]);
+        res.json({ order, items });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
