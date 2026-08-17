@@ -119,29 +119,6 @@
         document.querySelectorAll('.cart-count').forEach(el => { el.textContent = _count; });
     } catch(e) {}
 
-    // --- TOMBOL AKUN CUSTOMER (#3) — disuntik di kanan cart di SEMUA halaman ---
-    // Additive: tidak mengubah markup halaman, cuma menambah 1 link akun setelah
-    // tiap .cart-btn. Kalau sudah login → tampil nama, else "Masuk".
-    try {
-        const isEn = (location.pathname.split('/').pop() || '').includes('-en.html');
-        const acctHref = isEn ? 'akun-en.html' : 'akun.html';
-        const t = localStorage.getItem('ws_customer_token');
-        // Sudah login → "Akun/Account"; belum → "Masuk/Sign In".
-        const label = t ? (isEn ? 'Account' : 'Akun') : (isEn ? 'Sign In' : 'Masuk');
-        document.querySelectorAll('.cart-btn').forEach(cartBtn => {
-            // Jangan dobel kalau sudah ada.
-            if (cartBtn.parentElement && cartBtn.parentElement.querySelector('.acct-btn')) return;
-            const a = document.createElement('a');
-            a.href = acctHref;
-            a.className = 'acct-btn flex items-center gap-1.5 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors' + (cartBtn.className.includes('w-full') ? ' w-full justify-between py-3 px-4 bg-gray-100 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 mt-2 text-sm font-medium' : ' ml-5');
-            const isDrawer = cartBtn.className.includes('w-full');
-            a.innerHTML = isDrawer
-                ? `<span class="flex items-center gap-3"><i class="fa-regular fa-user"></i> ${label}</span>`
-                : `<i class="fa-regular fa-user text-[15px]"></i><span class="uppercase text-[12px] tracking-widest font-medium">${label}</span>`;
-            cartBtn.insertAdjacentElement('afterend', a);
-        });
-    } catch(e) {}
-
 }); // end DOMContentLoaded
 
 
