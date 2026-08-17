@@ -2023,7 +2023,12 @@ app.get('/api/pre-orders', requireAuth(), async (req, res) => {
                   AND inv.color = oi.color AND inv.variant_type = oi.variant_type
              WHERE (oi.is_po = TRUE OR oi.is_custom_size = TRUE OR oi.is_custom_product = TRUE)
                AND oi.po_fulfilled = FALSE
-               AND o.order_status <> 'cancelled'
+               -- Order yang sudah tamat tidak boleh nyangkut di antrean "menunggu
+               -- dipenuhi": barangnya sudah keluar, dan endpoint fulfill-po memang
+               -- menolak order shipped/done/cancelled — jadi barisnya tak akan pernah
+               -- bisa dibereskan dari sini (baris hantu). Ini jaring pengaman untuk
+               -- data lama; sumber masalahnya sudah ditutup di confirm-payment.
+               AND o.order_status NOT IN ('cancelled', 'shipped', 'done')
              ORDER BY o.created_at ASC, oi.id ASC`,
             []
         );
@@ -3377,12 +3382,41 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
             // - else → 'confirmed' (siap dikemas)
             const hasBordir = order.has_bordir_logo || order.has_bordir_nama;
             const isPickup = (order.shipping_courier || '').trim() === PICKUP_COURIER;
+
+            // ── PICKUP + ITEM CUSTOM ──────────────────────────────────────────
+            // Pickup/walk-in melompati Kemas & Kirim, padahal gate custom
+            // (po_fulfilled) normalnya baru lepas di tahap Kemas. Akibatnya line
+            // custom nyangkut SELAMANYA di menu Pre-Order: tombol "Tandai Siap"
+            // ditolak karena order sudah 'done' (kasus WS-20260817-3137 Nini,
+            // 17 Agu — barang dijual & diserahkan langsung di event).
+            // Barangnya sudah pindah tangan di tempat → tandai siap di sini.
+            // Custom TIDAK punya baris inventory, jadi tidak ada implikasi stok.
+            // PO katalog sengaja TIDAK ikut: fulfill-nya wajib berpasangan dengan
+            // potong stok saat receive (FIFO), kalau diflip di sini stok jadi
+            // over-count. Lihat guard di bawah.
+            if (isPickup && !isTrialOrder) {
+                await client.query(
+                    `UPDATE order_items SET po_fulfilled = TRUE
+                      WHERE order_id = $1 AND po_fulfilled = FALSE
+                        AND (is_custom_size = TRUE OR is_custom_product = TRUE)`,
+                    [order.id]
+                );
+            }
+            // PO katalog yang belum dipenuhi = barang fisik belum ada, jadi mustahil
+            // sudah diambil customer. Jangan auto-'done'; tahan di 'confirmed' supaya
+            // alur receive → FIFO fulfill → potong stok tetap jalan.
+            const pendingCatPO = isTrialOrder ? 0 : (await client.query(
+                `SELECT COUNT(*)::int AS n FROM order_items
+                  WHERE order_id = $1 AND is_po = TRUE AND po_fulfilled = FALSE`,
+                [order.id]
+            )).rows[0].n;
+
             let ns;
             if (isTrialOrder) {
                 const hasReturns = items.some(it => it.is_test_returned === true);
                 ns = hasReturns ? 'test_pending_return' : 'done';
             } else {
-                ns = hasBordir ? 'bordir' : (isPickup ? 'done' : 'confirmed');
+                ns = hasBordir ? 'bordir' : (isPickup && pendingCatPO === 0 ? 'done' : 'confirmed');
             }
             await client.query(
                 `UPDATE orders SET payment_status = 'paid', order_status = $1, paid_at = NOW(), updated_at = NOW() WHERE id = $2`,
@@ -4134,6 +4168,19 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
                 `UPDATE order_items SET order_id = $1 WHERE order_id = $2 AND id = ANY($3::int[])`,
                 [newId, order.id, moveIds]
             );
+
+            // Child langsung 'done' (pickup) = barang diserahkan di tempat, tapi child
+            // tidak pernah lewat Kemas yang biasanya melepas gate custom. Tandai siap
+            // di sini, sama seperti di confirm-payment, supaya line custom tidak
+            // nyangkut di menu Pre-Order tanpa cara membereskannya.
+            if (childChildOrderStatus === 'done') {
+                await client.query(
+                    `UPDATE order_items SET po_fulfilled = TRUE
+                      WHERE order_id = $1 AND po_fulfilled = FALSE
+                        AND (is_custom_size = TRUE OR is_custom_product = TRUE)`,
+                    [newId]
+                );
+            }
 
             // 3. Update original: subtotal, diskon, bordir flags, embroidery filtered, notes
             await client.query(`
