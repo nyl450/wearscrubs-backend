@@ -1686,6 +1686,24 @@
     <div id="module-settings" class="hidden p-6 space-y-8 max-w-4xl">
         <h2 class="text-xl font-bold">Pengaturan</h2>
 
+        <!-- ── Partner Collaboration Event ──────────────────────────────── -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+            <div class="flex items-center gap-3 flex-wrap">
+                <div class="w-9 h-9 rounded-xl bg-pink-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-handshake text-sm text-pink-300"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="font-bold text-base">Partner Collaboration Event</h3>
+                    <p class="text-xs text-white/40">Daftar PT/instansi yang sedang kerja sama. Dipakai di Kasir: pilih sumber <b>Collaboration Event</b>, lalu ketik sebagian nama PT di kolom "Ditagihkan Ke" — pilihannya muncul sendiri.</p>
+                </div>
+                <span id="partner-count" class="text-[10px] text-white/35 font-mono"></span>
+                <button onclick="openPartnerModal(0)" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-pink-500/15 border border-pink-400/30 text-pink-200 hover:bg-pink-500/25 transition">
+                    <i class="fa-solid fa-plus"></i> Tambah Partner
+                </button>
+            </div>
+            <div id="partner-list"></div>
+        </div>
+
         <!-- ── Biaya COGS: Bordir (global) ──────────────────────────────── -->
         <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
             <div class="flex items-center gap-3 mb-1">
@@ -3065,6 +3083,7 @@ function showModule(name) {
     if (name === 'preorder')      loadPreOrders();
     if (name === 'temp-order')    loadTempOrders();
     if (name === 'customers')     loadCustomers();
+    if (name === 'settings')      loadPartners();
     if (name === 'report')        reportInit();
     markViewOnly(name);
 }
@@ -10293,6 +10312,7 @@ async function waInitModule() {
         waAddItem();
     }
     waClientAutofillInit();
+    waPartnerAutofillInit();
     document.getElementById('wa-shipping-cost').oninput = waUpdateTotal;
     // Default tanggal order = hari ini (admin bisa override kalau customer minta tgl khusus).
     // Set only kalau field masih kosong supaya tidak menimpa input admin yg lagi edit form.
@@ -10301,6 +10321,218 @@ async function waInitModule() {
         const t = new Date();
         dateEl.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
     }
+}
+
+// ── PARTNER COLLABORATION EVENT (Pengaturan) ──────────────────────────────────
+// Daftar PT/instansi yang sedang kerja sama. Isinya dipakai Kasir untuk melengkapi
+// otomatis kolom "Ditagihkan Ke" saat sumber order = Collaboration Event, supaya
+// nama panjang tidak diketik ulang dan ejaannya konsisten antar order.
+let _partnerCache = [];
+
+async function loadPartners() {
+    const wrap = document.getElementById('partner-list');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="text-xs text-white/30 py-3">Memuat…</p>';
+    try {
+        _partnerCache = await apiFetch('/api/admin/partners?all=1');
+        renderPartners();
+    } catch (e) {
+        wrap.innerHTML = `<p class="text-xs text-red-400 py-3">${esc(e.message)}</p>`;
+    }
+}
+
+function renderPartners() {
+    const wrap = document.getElementById('partner-list');
+    if (!wrap) return;
+    const aktif = _partnerCache.filter(p => p.is_active).length;
+    const cnt = document.getElementById('partner-count');
+    if (cnt) cnt.textContent = `${aktif} aktif · ${_partnerCache.length} total`;
+    if (_partnerCache.length === 0) {
+        wrap.innerHTML = '<p class="text-xs text-white/30 py-3">Belum ada partner. Tambahkan lewat tombol di atas.</p>';
+        return;
+    }
+    wrap.innerHTML = _partnerCache.map(p => `
+        <div class="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0 ${p.is_active ? '' : 'opacity-50'}">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-semibold text-white">${esc(p.name)}</span>
+                    ${p.is_active ? '' : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">NONAKTIF</span>'}
+                </div>
+                <p class="text-[11px] text-white/50 mt-0.5">
+                    ${p.pic_name ? 'PIC: ' + esc(p.pic_name) : ''}${p.pic_name && p.phone ? ' · ' : ''}${p.phone ? esc(p.phone) : ''}
+                    ${(p.city || p.address) ? `<br>${p.city ? '<span class="text-white/65">' + esc(p.city) + '</span> · ' : ''}${esc(p.address || '')}` : ''}
+                    ${p.note ? `<br><span class="text-white/35">${esc(p.note)}</span>` : ''}
+                </p>
+            </div>
+            <div class="flex gap-1.5 shrink-0">
+                <button onclick="openPartnerModal(${p.id})" class="text-[10px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition" title="Ubah"><i class="fa-solid fa-pen"></i></button>
+                ${p.is_active
+                    ? `<button onclick="deactivatePartner(${p.id})" class="text-[10px] px-2 py-1 rounded-lg bg-red-500/10 border border-red-400/25 text-red-300 hover:bg-red-500/20 transition" title="Nonaktifkan"><i class="fa-solid fa-ban"></i></button>`
+                    : `<button onclick="reactivatePartner(${p.id})" class="text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-400/25 text-green-300 hover:bg-green-500/20 transition" title="Aktifkan lagi"><i class="fa-solid fa-rotate-left"></i></button>`}
+            </div>
+        </div>`).join('');
+}
+
+function openPartnerModal(id) {
+    const p = id ? _partnerCache.find(x => x.id === id) : null;
+    document.getElementById('partner-modal')?.remove();
+    const m = document.createElement('div');
+    m.id = 'partner-modal';
+    m.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[1300] flex items-center justify-center p-4';
+    const f = (label, id2, val, ph, extra = '') => `
+        <div class="${extra}">
+            <label class="block text-[11px] text-white/50 mb-1">${label}</label>
+            <input id="${id2}" type="text" value="${esc(val || '')}" placeholder="${esc(ph)}" class="w-full !py-2 !text-sm" />
+        </div>`;
+    m.innerHTML = `
+        <div class="bg-[#1c1c1c] border border-white/10 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-white/8 flex items-center justify-between shrink-0">
+                <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-handshake text-pink-300"></i> ${p ? 'Ubah' : 'Tambah'} Partner</p>
+                <button onclick="document.getElementById('partner-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1 space-y-2.5">
+                ${f('Nama PT / Instansi *', 'pt-name', p?.name, 'PT Sehat Bersama')}
+                <div class="grid grid-cols-2 gap-2">
+                    ${f('PIC', 'pt-pic', p?.pic_name, 'Bu Rina')}
+                    ${f('Nomor Kontak', 'pt-phone', p?.phone, '08xxxxxxxxxx')}
+                </div>
+                ${f('Kota', 'pt-city', p?.city, 'Jakarta Selatan')}
+                ${f('Alamat', 'pt-address', p?.address, 'Alamat penagihan')}
+                ${f('Catatan', 'pt-note', p?.note, 'mis. consignment 30%, tempo 14 hari')}
+                <div class="flex gap-2 pt-2">
+                    <button onclick="savePartner(${p ? p.id : 0})" class="flex-1 py-2.5 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 border border-pink-400/30 text-pink-200 font-bold text-sm transition">Simpan</button>
+                    <button onclick="document.getElementById('partner-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Batal</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(m);
+    m.addEventListener('click', (e) => { if (e.target === m) m.remove(); });
+    setTimeout(() => document.getElementById('pt-name')?.focus(), 50);
+}
+
+async function savePartner(id) {
+    const val = (i) => (document.getElementById(i)?.value || '').trim();
+    if (!val('pt-name')) { toast('Nama partner wajib diisi', true); return; }
+    const fd = new FormData();
+    fd.append('name', val('pt-name'));
+    fd.append('pic_name', val('pt-pic'));
+    fd.append('phone', val('pt-phone'));
+    fd.append('city', val('pt-city'));
+    fd.append('address', val('pt-address'));
+    fd.append('note', val('pt-note'));
+    try {
+        const r = id
+            ? await apiFetch(`/api/admin/partners/${id}`, { method: 'PUT', body: fd })
+            : await apiFetch('/api/admin/partners', { method: 'POST', body: fd });
+        toast('✅ ' + (r.message || 'Tersimpan'));
+        document.getElementById('partner-modal')?.remove();
+        loadPartners();
+    } catch (e) { toast('Gagal: ' + e.message, true); }
+}
+
+async function deactivatePartner(id) {
+    const p = _partnerCache.find(x => x.id === id);
+    if (!confirm(`Nonaktifkan "${p?.name || 'partner ini'}"?\n\nDia hilang dari pilihan di Kasir, tapi order lama yang menyebut namanya TIDAK berubah.`)) return;
+    try {
+        const r = await apiFetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
+        toast('✅ ' + (r.message || 'Dinonaktifkan'));
+        loadPartners();
+    } catch (e) { toast('Gagal: ' + e.message, true); }
+}
+
+async function reactivatePartner(id) {
+    const p = _partnerCache.find(x => x.id === id);
+    if (!p) return;
+    const fd = new FormData();
+    ['name', 'pic_name', 'phone', 'city', 'address', 'note'].forEach(k => fd.append(k, p[k] || ''));
+    fd.append('is_active', 'true');
+    try {
+        await apiFetch(`/api/admin/partners/${id}`, { method: 'PUT', body: fd });
+        toast('✅ Partner diaktifkan lagi');
+        loadPartners();
+    } catch (e) { toast('Gagal: ' + e.message, true); }
+}
+
+// ── Autocomplete partner di Kasir ─────────────────────────────────────────────
+// Pola sama dengan autofill client: ketik sebagian nama PT → pilih dari daftar.
+let _partnerSuggestTimer = null;
+let _partnerSuggestSeq = 0;
+let _partnerResults = [];
+
+function waPartnerBoxEl() {
+    let box = document.getElementById('wa-partner-suggest');
+    if (!box) {
+        const anchor = document.getElementById('wa-billing-to')?.parentElement;
+        if (!anchor) return null;
+        box = document.createElement('div');
+        box.id = 'wa-partner-suggest';
+        box.className = 'hidden absolute z-50 left-0 right-0 mt-1 rounded-xl border border-white/12 bg-[#1c1c1c] shadow-2xl overflow-hidden max-h-64 overflow-y-auto';
+        anchor.style.position = 'relative';
+        anchor.appendChild(box);
+    }
+    return box;
+}
+
+function waPartnerHide() {
+    document.getElementById('wa-partner-suggest')?.classList.add('hidden');
+}
+
+function waPartnerSearch(q) {
+    clearTimeout(_partnerSuggestTimer);
+    const term = String(q || '').trim();
+    _partnerSuggestTimer = setTimeout(async () => {
+        const seq = ++_partnerSuggestSeq;
+        try {
+            // Tanpa kata kunci pun daftar tetap muncul (partner biasanya sedikit),
+            // jadi admin bisa langsung memilih tanpa ingat nama persisnya.
+            const rows = await apiFetch(`/api/admin/partners${term ? '?q=' + encodeURIComponent(term) : ''}`);
+            if (seq !== _partnerSuggestSeq) return;
+            _partnerResults = Array.isArray(rows) ? rows : [];
+            waPartnerRender();
+        } catch (e) { waPartnerHide(); }
+    }, 200);
+}
+
+function waPartnerRender() {
+    const box = waPartnerBoxEl();
+    if (!box) return;
+    if (_partnerResults.length === 0) {
+        box.innerHTML = `<p class="px-3 py-2.5 text-[11px] text-white/35">Belum ada partner cocok. Tambahkan di Pengaturan → Partner Collaboration Event, atau ketik manual.</p>`;
+        box.classList.remove('hidden');
+        return;
+    }
+    box.innerHTML = _partnerResults.map((p, i) => `
+        <button type="button" onclick="waPartnerPick(${i})"
+                class="w-full text-left px-3 py-2 hover:bg-white/8 transition border-b border-white/5 last:border-0">
+            <span class="text-[13px] font-semibold text-white">${esc(p.name)}</span>
+            ${(p.pic_name || p.city) ? `<p class="text-[12px] text-white/60 mt-0.5">${p.pic_name ? 'PIC: ' + esc(p.pic_name) : ''}${p.pic_name && p.city ? ' · ' : ''}${p.city ? esc(p.city) : ''}</p>` : ''}
+        </button>`).join('');
+    box.classList.remove('hidden');
+}
+
+function waPartnerPick(i) {
+    const p = _partnerResults[i];
+    if (!p) return;
+    const el = document.getElementById('wa-billing-to');
+    if (el) el.value = p.name;
+    waPartnerHide();
+    toast(`Ditagihkan ke ${p.name}`);
+}
+
+function waPartnerAutofillInit() {
+    if (window.__waPartnerAutofillReady) return;
+    const el = document.getElementById('wa-billing-to');
+    if (!el) return;
+    el.setAttribute('autocomplete', 'off');
+    el.addEventListener('input', () => waPartnerSearch(el.value));
+    el.addEventListener('focus', () => waPartnerSearch(el.value));
+    document.addEventListener('click', (e) => {
+        const box = document.getElementById('wa-partner-suggest');
+        if (!box || box.classList.contains('hidden')) return;
+        if (box.contains(e.target) || e.target?.id === 'wa-billing-to') return;
+        waPartnerHide();
+    });
+    window.__waPartnerAutofillReady = true;
 }
 
 // ── AUTOFILL CLIENT DI KASIR ──────────────────────────────────────────────────
@@ -10358,12 +10590,12 @@ function waClientRender() {
     box.innerHTML = _clientResults.map((r, i) => `
         <button type="button" onclick="waClientPick(${i})"
                 class="w-full text-left px-3 py-2 hover:bg-white/8 transition border-b border-white/5 last:border-0">
-            <div class="flex items-center gap-2">
-                <span class="text-[12px] font-semibold text-white/90">${esc(r.name || '-')}</span>
-                <span class="text-[10px] font-mono text-white/40">${esc(r.phone || '')}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[13px] font-semibold text-white">${esc(r.name || '-')}</span>
+                <span class="text-[12px] font-mono font-semibold text-cyan-300">${esc(r.phone || '')}</span>
                 ${r.has_account ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">AKUN</span>' : ''}
             </div>
-            ${r.address ? `<p class="text-[10px] text-white/40 mt-0.5 truncate">${esc(r.city ? r.city + ' · ' : '')}${esc(r.address)}</p>` : ''}
+            ${r.address ? `<p class="text-[12px] text-white/70 mt-1 leading-snug">${r.city ? `<span class="font-semibold text-white/85">${esc(r.city)}</span> · ` : ''}${esc(r.address)}</p>` : ''}
         </button>`).join('');
     box.classList.remove('hidden');
 }

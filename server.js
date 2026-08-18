@@ -453,6 +453,22 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
     )`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_cust_addr_customer ON customer_addresses(customer_id)`);
+    // Partner Collaboration Event: daftar PT/instansi yang sedang kerja sama.
+    // Dipakai untuk melengkapi otomatis kolom "Ditagihkan Ke" di Kasir.
+    await dbRun(`CREATE TABLE IF NOT EXISTS event_partners (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        pic_name TEXT DEFAULT NULL,
+        phone TEXT DEFAULT NULL,
+        address TEXT DEFAULT NULL,
+        city TEXT DEFAULT NULL,
+        note TEXT DEFAULT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_event_partners_name ON event_partners(lower(name))`).catch(() => {});
+
     // Direktori client: baris tanpa password = kontak hasil impor dari pesanan,
     // belum jadi akun. Begitu customer daftar dengan nomor sama, barisnya diklaim.
     await dbRun(`ALTER TABLE customers ALTER COLUMN password_hash DROP NOT NULL`).catch(() => {});
@@ -1487,6 +1503,107 @@ app.get('/api/admin/clients/search', requireMenu('manual-order'), async (req, re
             [like, digits, `%${digits}%`]
         );
         res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── PARTNER COLLABORATION EVENT ──────────────────────────────────────────────
+// Daftar PT/instansi yang sedang kerja sama. Dipakai di Kasir: saat sumber order
+// = Collaboration Event, admin cukup mengetik sebagian nama PT dan memilih dari
+// daftar — nama panjang tidak perlu diketik ulang tiap order, dan penulisannya
+// jadi konsisten (`orders.billing_to` selama ini teks bebas, gampang beda-beda
+// ejaan sehingga rekap per partner jadi berantakan).
+// Dinonaktifkan, bukan dihapus: order lama tetap menyimpan namanya sebagai teks,
+// dan riwayat kerja sama yang sudah selesai masih perlu terbaca.
+
+// GET /api/admin/partners?q=&all=1 — daftar partner. Dibaca dari Kasir, jadi izinnya
+// menu manual-order (admin otomatis punya semua menu).
+app.get('/api/admin/partners', requireMenu('manual-order'), async (req, res) => {
+    try {
+        const q = String(req.query.q || '').trim();
+        const includeInactive = req.query.all === '1';
+        const params = [];
+        const where = [];
+        if (!includeInactive) where.push('is_active = TRUE');
+        if (q) {
+            params.push(`%${q.replace(/[%_]/g, m => '\\' + m)}%`);
+            where.push(`(name ILIKE $${params.length} OR COALESCE(pic_name,'') ILIKE $${params.length})`);
+        }
+        const rows = await dbAll(
+            `SELECT id, name, pic_name, phone, address, city, note, is_active
+               FROM event_partners
+              ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+              ORDER BY is_active DESC, name ASC
+              LIMIT 100`,
+            params
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+function _partnerBody(req) {
+    const clean = (v, max) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, max);
+    return {
+        name: clean(req.body.name, 160),
+        pic_name: clean(req.body.pic_name, 120) || null,
+        phone: clean(req.body.phone, 40) || null,
+        address: clean(req.body.address, 500) || null,
+        city: clean(req.body.city, 120) || null,
+        note: clean(req.body.note, 500) || null
+    };
+}
+
+// POST /api/admin/partners — tambah partner (admin-only).
+app.post('/api/admin/partners', requireAuth(['admin']), upload.none(), async (req, res) => {
+    try {
+        const p = _partnerBody(req);
+        if (!p.name) return res.status(400).json({ error: 'Nama partner wajib diisi' });
+        // Cegah kembar karena beda huruf besar/kecil — inti masalah yang mau dibereskan.
+        const dup = await dbGet('SELECT id FROM event_partners WHERE lower(name) = lower($1)', [p.name]);
+        if (dup) return res.status(409).json({ error: `Partner "${p.name}" sudah ada di daftar.` });
+        const r = await dbRun(
+            `INSERT INTO event_partners (name, pic_name, phone, address, city, note)
+             VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+            [p.name, p.pic_name, p.phone, p.address, p.city, p.note]
+        );
+        res.json({ message: `Partner "${p.name}" ditambahkan`, id: r.rows[0].id });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/admin/partners/:id — ubah data / aktif-nonaktif (admin-only).
+app.put('/api/admin/partners/:id', requireAuth(['admin']), upload.none(), async (req, res) => {
+    try {
+        const cur = await dbGet('SELECT * FROM event_partners WHERE id = $1', [req.params.id]);
+        if (!cur) return res.status(404).json({ error: 'Partner tidak ditemukan' });
+        const p = _partnerBody(req);
+        if (!p.name) return res.status(400).json({ error: 'Nama partner wajib diisi' });
+        const dup = await dbGet('SELECT id FROM event_partners WHERE lower(name) = lower($1) AND id <> $2', [p.name, cur.id]);
+        if (dup) return res.status(409).json({ error: `Nama "${p.name}" sudah dipakai partner lain.` });
+        const isActive = req.body.is_active === undefined
+            ? cur.is_active
+            : (req.body.is_active === 'true' || req.body.is_active === true);
+        await dbRun(
+            `UPDATE event_partners SET name=$1, pic_name=$2, phone=$3, address=$4, city=$5, note=$6,
+                                       is_active=$7, updated_at=NOW() WHERE id=$8`,
+            [p.name, p.pic_name, p.phone, p.address, p.city, p.note, isActive, cur.id]
+        );
+        res.json({ message: 'Partner diperbarui' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/admin/partners/:id — nonaktifkan (bukan hapus permanen).
+// Order lama menyimpan nama partner sebagai teks di billing_to, jadi riwayatnya
+// tetap utuh; yang hilang cuma dari daftar pilihan Kasir.
+app.delete('/api/admin/partners/:id', requireAuth(['admin']), async (req, res) => {
+    try {
+        const cur = await dbGet('SELECT * FROM event_partners WHERE id = $1', [req.params.id]);
+        if (!cur) return res.status(404).json({ error: 'Partner tidak ditemukan' });
+        await dbRun('UPDATE event_partners SET is_active = FALSE, updated_at = NOW() WHERE id = $1', [cur.id]);
+        const dipakai = await dbGet(
+            `SELECT COUNT(*)::int AS n FROM orders WHERE lower(COALESCE(billing_to,'')) = lower($1)`, [cur.name]);
+        res.json({
+            message: `Partner "${cur.name}" dinonaktifkan`,
+            orders_terkait: dipakai.n
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
