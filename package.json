@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/edit-order-item.test.js"
   },
   "keywords": [],
   "author": "",
@@ -24,5 +24,8 @@
     "node-fetch": "^2.7.0",
     "pg": "^8.20.0",
     "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
   }
 }
