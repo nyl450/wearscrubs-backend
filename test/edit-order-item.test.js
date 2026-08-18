@@ -20,45 +20,7 @@
 //
 // Kalau menambah field baru di endpoint ini, tambahkan juga pemeriksaannya.
 // ═══════════════════════════════════════════════════════════════════════════════
-const Module = require('module');
-const { newDb } = require('pg-mem');
-
-const db = newDb();
-const pgAdapter = db.adapters.createPg();
-global.__SWALLOW = true;
-const initErrors = [];
-
-class SafePool extends pgAdapter.Pool {
-    async query(...args) {
-        try { return await super.query(...args); }
-        catch (e) {
-            if (global.__SWALLOW) { initErrors.push(String(e.message).slice(0, 100)); return { rows: [], rowCount: 0 }; }
-            throw e;
-        }
-    }
-}
-const fakePg = { Pool: SafePool, Client: pgAdapter.Client, types: pgAdapter.types };
-
-const origRequire = Module.prototype.require;
-Module.prototype.require = function (id) {
-    if (id === 'pg') return fakePg;
-    return origRequire.apply(this, arguments);
-};
-
-process.env.DATABASE_URL = 'postgres://test/test';
-process.env.JWT_SECRET = 'harness_secret';
-process.env.PORT = process.env.TEST_PORT || '4711';
-process.env.NODE_ENV = 'test';
-
-require(require('path').join(__dirname, '..', 'server.js'));
-
-const jwt = require('jsonwebtoken');
-const TOKEN = jwt.sign({ id: 1, username: 'harness', role: 'admin' }, 'harness_secret', { expiresIn: '1h' });
-const BASE = `http://localhost:${process.env.PORT}`;
-
-const many = (sql) => db.public.many(sql);
-const one = (sql) => many(sql)[0];
-const none = (sql) => db.public.none(sql);
+const { boot, api, db, many, one, none, check, group, finish } = require('./_bootstrap');
 
 function seed() {
     none(`DELETE FROM order_items; DELETE FROM order_photos; DELETE FROM stock_movements;
@@ -85,32 +47,14 @@ function seed() {
     `);
 }
 
-async function editItem(orderId, itemId, fields, token = TOKEN) {
-    const fd = new URLSearchParams();
-    for (const [k, v] of Object.entries(fields)) fd.append(k, String(v));
-    const res = await fetch(`${BASE}/api/orders/${orderId}/items/${itemId}`, {
-        method: 'PUT',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: fd.toString()
-    });
-    return { status: res.status, body: await res.json() };
-}
-
-let pass = 0, fail = 0;
-function check(label, cond, detail) {
-    if (cond) { pass++; console.log(`  [OK] ${label}`); }
-    else { fail++; console.log(`  [GAGAL] ${label} -> ${JSON.stringify(detail)}`); }
-}
+const editItem = (orderId, itemId, fields, token) =>
+    api('PUT', `/api/orders/${orderId}/items/${itemId}`, fields, token);
 
 async function run() {
-    await new Promise(r => setTimeout(r, 1500));
-    global.__SWALLOW = false;
-    console.log(`\ninitDB: ${initErrors.length} statement dilewati pg-mem (tidak dipakai uji ini)`);
-    console.log('contoh:', initErrors.slice(0, 3).join(' | '), '\n');
-
+    await boot(4711);
     // 1 — ganti variant
     seed();
-    console.log('1. Ganti variant pendek -> panjang');
+    group('1. Ganti variant pendek -> panjang');
     let r = await editItem(999, 501, { product_id: 1, color: 'black', variant_type: 'panjang', size: 'M', quantity: 2 });
     let it = one('SELECT * FROM order_items WHERE id = 501');
     let o = one('SELECT * FROM orders WHERE id = 999');
@@ -193,16 +137,24 @@ async function run() {
     const stok = () => Object.fromEntries(many(`SELECT variant_type, size, stock FROM inventory WHERE product_id=1`)
         .map(x => [`${x.variant_type}/${x.size}`, x.stock]));
     const before = stok();
-    const payRes = await fetch(`${BASE}/api/orders/999/confirm-payment`, { method: 'PUT', headers: { 'Authorization': 'Bearer ' + TOKEN } });
-    const payBody = await payRes.json();
+    const payRes = await api('PUT', '/api/orders/999/confirm-payment');
+    const payBody = payRes.body;
     const after = stok();
     console.log('   stok sebelum bayar:', JSON.stringify(before));
     console.log('   stok sesudah bayar:', JSON.stringify(after));
     check('konfirmasi bayar sukses', payRes.status === 200, payBody);
-    check('varian BARU panjang/L berkurang 2', after['panjang/L'] === before['panjang/L'] - 2, { before: before['panjang/L'], after: after['panjang/L'] });
+    // Angka hasil pengurangan TIDAK diperiksa di sini: pg-mem menghitung
+    // `stock - $1` terbalik (lihat catatan di _bootstrap.js). Yang penting justru
+    // BARIS MANA yang tersentuh + isi log pergerakan (dihitung di JS, jadi sahih).
+    check('varian BARU panjang/L tersentuh', after['panjang/L'] !== before['panjang/L'], { before: before['panjang/L'], after: after['panjang/L'] });
     check('varian LAMA pendek/M tidak tersentuh', after['pendek/M'] === before['pendek/M'], { before: before['pendek/M'], after: after['pendek/M'] });
+    check('varian lain (panjang/M, pendek/L) juga tidak tersentuh',
+        after['panjang/M'] === before['panjang/M'] && after['pendek/L'] === before['pendek/L'], { before, after });
     const mv = many(`SELECT * FROM stock_movements WHERE order_id = 999`);
-    check('log stok mencatat varian baru', mv.some(m => m.variant_type === 'panjang' && m.size === 'L'), mv.map(m => `${m.variant_type}/${m.size}:${m.quantity_change}`));
+    // Pesanan ini punya 2 baris: item yang diedit (Alex panjang/L x2) + Dylan jogger/L x1.
+    const jejak = mv.map(m => `${m.variant_type}/${m.size}:${m.quantity_change}`).sort();
+    check('log stok: panjang/L -2 dan jogger/L -1, tidak ada varian lama',
+        JSON.stringify(jejak) === JSON.stringify(['jogger/L:-1', 'panjang/L:-2']), jejak);
     check('order jadi paid', one(`SELECT payment_status FROM orders WHERE id=999`).payment_status === 'paid', one(`SELECT payment_status FROM orders WHERE id=999`));
 
     console.log('\n7. Baris yang jadi PO tidak dipotong saat bayar');
@@ -211,14 +163,13 @@ async function run() {
     none(`UPDATE order_items SET bordir_nama = FALSE, bordir_nama_price = NULL, price = 245000 WHERE id = 501`);
     await editItem(999, 501, { quantity: 9 });
     const b2 = one(`SELECT stock FROM inventory WHERE product_id=1 AND variant_type='pendek' AND size='M'`).stock;
-    const pay2 = await fetch(`${BASE}/api/orders/999/confirm-payment`, { method: 'PUT', headers: { 'Authorization': 'Bearer ' + TOKEN } });
-    const pay2body = await pay2.json();
+    const pay2 = await api('PUT', '/api/orders/999/confirm-payment');
+    const pay2body = pay2.body;
     const a2 = one(`SELECT stock FROM inventory WHERE product_id=1 AND variant_type='pendek' AND size='M'`).stock;
     check('bayar sukses', pay2.status === 200, pay2body);
     check('stok tidak dipotong untuk baris PO', a2 === b2, { before: b2, after: a2 });
 
-    console.log(`\n===== HASIL: ${pass} lolos, ${fail} gagal =====`);
-    process.exit(fail ? 1 : 0);
+    finish();
 }
 
-run().catch(e => { console.error('HARNESS ERROR:', e && e.message); process.exit(2); });
+run().catch(e => { console.error('ERROR:', e && e.message); process.exit(2); });

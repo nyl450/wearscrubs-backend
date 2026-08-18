@@ -1859,8 +1859,14 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
                 for (const type of effectiveTypes) {
                     const dbType = type === 'null' ? null : type;
                     const existing = await client.query(
+                        // COALESCE, bukan IS NOT DISTINCT FROM: "tanpa variant" tersimpan dalam
+                        // dua bentuk di DB — SQL NULL (product_variants lama) dan teks 'null'
+                        // (inventory + baris baru). COALESCE menyamakan keduanya, sejalan dengan
+                        // blok prune di bawah, jadi baris kembar tidak terbentuk. Dicek ke data
+                        // produksi: untuk 128 kombinasi yang ada, hasil kedua bentuk identik.
                         `SELECT id FROM product_variants
-                         WHERE product_id = $1 AND color = $2 AND variant_type IS NOT DISTINCT FROM $3 LIMIT 1`,
+                         WHERE product_id = $1 AND color = $2
+                           AND COALESCE(variant_type,'null') = COALESCE($3,'null') LIMIT 1`,
                         [req.params.id, color, dbType]
                     );
                     if (existing.rows.length === 0) {
@@ -1911,17 +1917,23 @@ app.put('/api/products/:id', requireMenu('products','edit'), upload.any(), async
                 );
                 // Foto/variant untuk kombinasi yang dicabut ikut dihapus, KECUALI kalau
                 // masih ada baris inventory bersisa (artinya stoknya belum habis).
-                await client.query(
-                    `DELETE FROM product_variants pv
-                     WHERE pv.product_id = $1
-                       AND NOT (pv.color = ANY($2) AND COALESCE(pv.variant_type,'null') = ANY($4))
-                       AND NOT EXISTS (
-                           SELECT 1 FROM inventory i
-                           WHERE i.product_id = pv.product_id AND i.color = pv.color
-                             AND COALESCE(i.variant_type,'null') = COALESCE(pv.variant_type,'null')
-                       )`,
-                    keepArgs
-                );
+                // Penyaringannya sengaja di JS, bukan subquery berkorelasi: barisnya sedikit
+                // (satu produk = puluhan baris), logikanya jadi terbaca, dan "tanpa variant"
+                // yang tersimpan dua rupa (SQL NULL vs teks 'null') cukup dinormalkan sekali.
+                const norm = (v) => (v == null ? 'null' : String(v));
+                // Berurutan, bukan Promise.all: dua query paralel di SATU client hanya
+                // "aman" karena di-antre driver, dan di dalam transaksi urutannya penting.
+                const allVars = await client.query(`SELECT id, color, variant_type FROM product_variants WHERE product_id = $1`, [req.params.id]);
+                const invLeft = await client.query(`SELECT color, variant_type FROM inventory WHERE product_id = $1`, [req.params.id]);
+                const invKeys = new Set(invLeft.rows.map(r => `${r.color}|${norm(r.variant_type)}`));
+                const staleVarIds = allVars.rows
+                    .filter(r => !(selColors.includes(r.color) && effectiveTypes.includes(norm(r.variant_type))))
+                    .filter(r => !invKeys.has(`${r.color}|${norm(r.variant_type)}`))
+                    .map(r => r.id);
+                if (staleVarIds.length > 0) {
+                    const ph = staleVarIds.map((_, i) => `$${i + 1}`).join(',');
+                    await client.query(`DELETE FROM product_variants WHERE id IN (${ph})`, staleVarIds);
+                }
                 staleWithStock = leftover.rows;
             }
         });

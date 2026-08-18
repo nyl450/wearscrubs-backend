@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node test/edit-order-item.test.js"
+    "test": "node test/run-all.js"
   },
   "keywords": [],
   "author": "",
