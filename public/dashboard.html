@@ -7281,6 +7281,11 @@ async function viewOrder(id) {
         // ── Items with product image ──────────────────────────────────────────
         // Size editable only before shipment (not shipped/done/cancelled).
         const canEditSize = !['shipped','done','cancelled'].includes(o.order_status);
+        // Selama BELUM dibayar, item katalog boleh diganti seutuhnya (produk / warna /
+        // variant / size) — harga & total ikut dihitung ulang di server. Sesudah dibayar
+        // stok sudah terpotong, jadi yang tersisa cuma ubah size (yang memindahkan stok).
+        const canEditItem = !['packed','shipped','done','cancelled'].includes(o.order_status)
+            && o.payment_status !== 'paid' && o.order_source !== 'test_size';
         // Item trial yang DIKEMBALIKAN tidak ditagih → jangan ditaruh di daftar
         // "Item Pesanan". Dulu ikut tampil lengkap dengan harganya, jadi terlihat
         // seolah ditagih padahal Subtotal di bawah sudah tidak menghitungnya.
@@ -7306,7 +7311,14 @@ async function viewOrder(id) {
                             : '<span class="ml-1 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-300 border border-orange-400/25">📦 PRE-ORDER · menunggu stok</span>') : ''}
                     </p>
                     <p class="text-xs text-white/40 mt-0.5">${esc(i.size)} · ${esc(i.color)}${i.variant_type&&i.variant_type!=='null'?' · '+esc(i.variant_type):''} · x${i.quantity}
-                        ${canEditSize && !i.is_custom_size && !i.is_custom_product && !(i.is_po && !i.po_fulfilled) ? `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>` : ''}
+                        ${(() => {
+                            if (i.is_custom_size || i.is_custom_product) return '';
+                            // Belum dibayar → edit penuh (produk/warna/variant/size).
+                            if (canEditItem) return `<button onclick="openEditItemModal(${o.id}, ${i.id})" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah produk / warna / variant / ukuran"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>`;
+                            // Sudah dibayar → size saja, dan hanya kalau stoknya memang sudah ada.
+                            if (canEditSize && !(i.is_po && !i.po_fulfilled)) return `<button onclick="editItemSize(${o.id}, ${i.id}, '${String(i.size).replace(/'/g,"\\'")}')" class="ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Ubah size (stok disesuaikan)"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>`;
+                            return '';
+                        })()}
                     </p>
                     ${(i.is_custom_size || i.is_custom_product) && !i.po_fulfilled && !['shipped','done','cancelled'].includes(o.order_status) ? `<button onclick="fulfillCustomItem(${o.id}, ${i.id})" class="mt-1.5 text-[10px] px-2.5 py-1 rounded-lg bg-green-500/15 border border-green-400/30 text-green-300 hover:bg-green-500/25 transition font-bold"><i class="fa-solid fa-check text-[9px]"></i> Tandai Siap (${i.is_custom_product ? 'custom product' : 'custom'} selesai dijahit)</button>` : ''}
                     <div class="text-xs text-white/30 mt-1 space-y-0.5">
@@ -9382,6 +9394,221 @@ async function editItemSize(orderId, itemId, currentSize) {
         if (typeof closeOrderModal === 'function') closeOrderModal();
         viewOrder(orderId);
     } catch(e) { toast('Gagal: ' + e.message, true); }
+}
+
+// ── Edit item pesanan (produk / warna / variant / size) sebelum dibayar ────
+// Dulu cuma size yang bisa diubah, jadi salah input produk/warna/variant memaksa
+// admin membatalkan lalu membuat order baru dari nol (request James 18 Agu).
+// Harga satuan, subtotal, diskon, dan total ikut dihitung ulang di server saat
+// disimpan — preview di modal ini memakai rumus yang sama supaya angkanya cocok.
+let _editItemProducts = null;      // cache katalog (dipakai lintas modal)
+const _editItemInvCache = {};      // { productId: rows[] } cache inventory
+
+async function openEditItemModal(orderId, itemId) {
+    let o = (window._currentOrder && window._currentOrder.id === orderId) ? window._currentOrder : null;
+    if (!o) o = (typeof cachedOrders !== 'undefined' ? cachedOrders : []).find(x => x.id === orderId);
+    if (!o) { toast('Data order belum dimuat.', true); return; }
+    const item = (o.items || []).find(i => i.id === itemId);
+    if (!item) { toast('Item tidak ditemukan.', true); return; }
+
+    const existing = document.getElementById('edit-item-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'edit-item-modal';
+    modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[1300] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-[#1c1c1c] border border-white/10 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-white/8 flex items-center justify-between shrink-0">
+                <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-cyan-400"></i> Ubah Item Pesanan</p>
+                <button onclick="document.getElementById('edit-item-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1">
+                <p class="text-[11px] text-white/40 mb-3">Sekarang: <span class="text-white/70">${esc(item.product_name)} · ${esc(item.color)}${item.variant_type && item.variant_type !== 'null' ? ' · ' + esc(item.variant_type) : ''} · ${esc(item.size)}</span> × ${item.quantity}</p>
+                <div class="space-y-2.5">
+                    <div>
+                        <label class="block text-[11px] text-white/50 mb-1">Produk</label>
+                        <select id="ei-product" class="w-full !py-2 !text-sm"><option value="">Memuat katalog…</option></select>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div><label class="block text-[11px] text-white/50 mb-1">Warna</label>
+                            <select id="ei-color" class="w-full !py-2 !text-sm" disabled><option value="">--</option></select></div>
+                        <div><label class="block text-[11px] text-white/50 mb-1">Variant</label>
+                            <select id="ei-variant" class="w-full !py-2 !text-sm" disabled><option value="">--</option></select></div>
+                        <div><label class="block text-[11px] text-white/50 mb-1">Ukuran</label>
+                            <select id="ei-size" class="w-full !py-2 !text-sm" disabled><option value="">--</option></select></div>
+                    </div>
+                </div>
+                <div id="ei-preview" class="mt-3 p-3 rounded-xl bg-white/4 border border-white/8 text-[11px] text-white/60 space-y-1">
+                    <p class="text-white/40">Pilih varian untuk melihat harga barunya.</p>
+                </div>
+                <p class="text-[10px] text-white/30 mt-2 leading-relaxed">Hanya bisa selama pesanan <b>belum dibayar</b>. Jumlah (qty) dan bordir tidak diubah di sini — bordir punya tombol editnya sendiri.</p>
+                <div class="flex gap-2 mt-4">
+                    <button id="ei-save" onclick="submitEditItem(${orderId}, ${itemId})" disabled class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/30 text-cyan-200 font-bold text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">Simpan Perubahan</button>
+                    <button onclick="document.getElementById('edit-item-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Batal</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+    // State dipakai bersama oleh cascade + preview + submit.
+    modal._ctx = { order: o, item, inv: [] };
+
+    try {
+        if (!_editItemProducts) {
+            const res = await fetch(API + '/api/products');
+            _editItemProducts = await res.json();
+        }
+    } catch (e) { toast('Gagal memuat katalog: ' + e.message, true); return; }
+
+    const prodSel = document.getElementById('ei-product');
+    if (!prodSel) return;   // modal keburu ditutup
+    prodSel.innerHTML = _editItemProducts
+        .map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    prodSel.value = String(item.product_id);
+    prodSel.onchange = () => eiOnProductChange(false);
+    ['ei-color','ei-variant','ei-size'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.onchange = () => eiCascade(id);
+    });
+    await eiOnProductChange(true);
+}
+
+// Produk berubah → tarik inventory-nya, isi ulang warna. `keepCurrent` dipakai saat
+// modal pertama dibuka supaya pilihan sekarang tetap terpilih.
+async function eiOnProductChange(keepCurrent) {
+    const modal = document.getElementById('edit-item-modal');
+    if (!modal) return;
+    const pid = parseInt(document.getElementById('ei-product').value, 10);
+    if (!pid) return;
+    try {
+        if (!_editItemInvCache[pid]) {
+            const res = await fetch(API + `/api/inventory/${pid}`);
+            const inv = await res.json();
+            _editItemInvCache[pid] = Array.isArray(inv) ? inv : [];
+        }
+        modal._ctx.inv = _editItemInvCache[pid];
+    } catch (e) {
+        toast('Gagal memuat varian produk: ' + e.message, true);
+        modal._ctx.inv = [];
+    }
+    const it = modal._ctx.item;
+    eiFill('ei-color', [...new Set(modal._ctx.inv.map(r => r.color))], keepCurrent ? it.color : null);
+    eiCascade('ei-color', keepCurrent);
+}
+
+// Isi satu dropdown; pertahankan `preferred` kalau masih ada di daftar.
+function eiFill(id, values, preferred) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = values.map(v => `<option value="${esc(String(v))}">${esc(v === 'null' ? '—' : String(v))}</option>`).join('');
+    el.disabled = values.length === 0;
+    if (preferred != null && values.map(String).includes(String(preferred))) el.value = String(preferred);
+}
+
+// Cascade warna → variant → size. Setiap level difilter dari baris inventory,
+// jadi kombinasi yang tidak ada di katalog tidak mungkin terpilih.
+function eiCascade(changed, keepCurrent) {
+    const modal = document.getElementById('edit-item-modal');
+    if (!modal) return;
+    const inv = modal._ctx.inv, it = modal._ctx.item;
+    const color = document.getElementById('ei-color').value;
+    if (changed === 'ei-color') {
+        const variants = [...new Set(inv.filter(r => r.color === color).map(r => r.variant_type))];
+        eiFill('ei-variant', variants, keepCurrent ? it.variant_type : null);
+        changed = 'ei-variant';
+    }
+    if (changed === 'ei-variant') {
+        const variant = document.getElementById('ei-variant').value;
+        const sizes = [...new Set(inv.filter(r => r.color === color && r.variant_type === variant).map(r => r.size))];
+        eiFill('ei-size', sortSizes(sizes), keepCurrent ? it.size : null);
+    }
+    eiPreview();
+}
+
+// Preview harga & total — rumusnya sengaja mirror server (lihat PUT
+// /api/orders/:id/items/:itemId) supaya angka di modal = angka setelah simpan.
+function eiPreview() {
+    const modal = document.getElementById('edit-item-modal');
+    if (!modal) return;
+    const { order: o, item: it, inv } = modal._ctx;
+    const box = document.getElementById('ei-preview');
+    const saveBtn = document.getElementById('ei-save');
+    const pid = parseInt(document.getElementById('ei-product').value, 10);
+    const color = document.getElementById('ei-color').value;
+    const variant = document.getElementById('ei-variant').value;
+    const size = document.getElementById('ei-size').value;
+    const prod = (_editItemProducts || []).find(p => p.id === pid);
+    const row = inv.find(r => r.color === color && r.variant_type === variant && r.size === size);
+    if (!prod || !row) {
+        box.innerHTML = '<p class="text-amber-300/80">Kombinasi ini tidak ada di katalog.</p>';
+        if (saveBtn) saveBtn.disabled = true;
+        return;
+    }
+    const unchanged = pid === it.product_id && color === it.color
+        && String(variant) === String(it.variant_type || 'null') && size === it.size;
+
+    // Bordir hanya untuk Atasan & Gown — cegah pindah ke celana/cap/aksesoris selagi
+    // barisnya masih punya bordir (server juga menolak, ini biar ketahuan lebih awal).
+    if ((it.bordir_nama || it.bordir_logo) && !['tops','gown'].includes(prod.category)) {
+        box.innerHTML = `<p class="text-amber-300/80">Item ini punya bordir, sedangkan <b>${esc(prod.name)}</b> kategorinya ${esc(prod.category)}. Bordir cuma bisa di Atasan & Gown — hapus bordirnya dulu atau pilih produk lain.</p>`;
+        if (saveBtn) saveBtn.disabled = true;
+        return;
+    }
+
+    const namaP = it.bordir_nama ? Number(it.bordir_nama_price ?? 20000) : 0;
+    const logoP = it.bordir_logo ? Number(it.bordir_logo_price ?? 30000) : 0;
+    const base = (prod.price_by_type && variant && variant !== 'null' && prod.price_by_type[variant] != null)
+        ? Number(prod.price_by_type[variant]) : Number(prod.price || 0);
+    const newUnit = it.is_bonus ? 0 : base + namaP + logoP;
+    const qty = Number(it.quantity || 1);
+
+    const items = (o.items || []);
+    const oldProductTotal = items.reduce((s, r) => s + Number(r.price || 0) * Number(r.quantity || 0), 0);
+    const newProductTotal = items.reduce((s, r) => s + (r.id === it.id ? newUnit : Number(r.price || 0)) * Number(r.quantity || 0), 0);
+    const pct = Number(o.discount_percent || 0);
+    const oldDisc = Number(o.discount_amount || 0);
+    const wasPlainPct = pct > 0 && oldDisc === Math.round(oldProductTotal * pct / 100);
+    const newDisc = Math.max(0, Math.min(wasPlainPct ? Math.round(newProductTotal * pct / 100) : oldDisc, newProductTotal));
+    const ship = Number(o.shipping_cost || 0);
+    const oldTotal = oldProductTotal - Math.max(0, Math.min(oldDisc, oldProductTotal)) + ship;
+    const newTotal = newProductTotal - newDisc + ship;
+
+    const stock = Number(row.stock || 0);
+    const willBePO = stock < qty;
+    const arrow = (a, b) => a === b
+        ? `Rp ${fmt(a)}`
+        : `<span class="text-white/40 line-through">Rp ${fmt(a)}</span> → <span class="text-green-400 font-bold">Rp ${fmt(b)}</span>`;
+
+    box.innerHTML = `
+        <p>Harga satuan: ${arrow(Number(it.price || 0), newUnit)}${it.is_bonus ? ' <span class="text-amber-300">(bonus — tetap gratis)</span>' : ''}</p>
+        <p>Subtotal baris (×${qty}): ${arrow(Number(it.price || 0) * qty, newUnit * qty)}</p>
+        ${newDisc !== oldDisc ? `<p>Diskon: ${arrow(oldDisc, newDisc)}</p>` : ''}
+        <p class="pt-1 border-t border-white/8">Total pesanan: ${arrow(oldTotal, newTotal)}</p>
+        <p class="text-white/35">Stok varian ini: ${stock}${willBePO ? ` — kurang dari ${qty}, baris otomatis jadi <span class="text-orange-300">Pre-Order</span>` : ''}</p>`;
+    if (saveBtn) saveBtn.disabled = unchanged;
+}
+
+async function submitEditItem(orderId, itemId) {
+    const btn = document.getElementById('ei-save');
+    try {
+        const fd = new FormData();
+        fd.append('product_id', document.getElementById('ei-product').value);
+        fd.append('color', document.getElementById('ei-color').value);
+        fd.append('variant_type', document.getElementById('ei-variant').value);
+        fd.append('size', document.getElementById('ei-size').value);
+        if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
+        const res = await apiFetch(`/api/orders/${orderId}/items/${itemId}`, { method: 'PUT', body: fd });
+        toast('✅ ' + (res.message || 'Item diperbarui'));
+        if (res.po_note) alert('⚠️ ' + res.po_note);
+        document.getElementById('edit-item-modal')?.remove();
+        if (typeof closeOrderModal === 'function') closeOrderModal();
+        viewOrder(orderId);
+        if (typeof loadOrders === 'function') loadOrders();
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+        if (btn) { btn.disabled = false; btn.textContent = 'Simpan Perubahan'; }
+    }
 }
 
 // ── Edit bordir entry (nama/logo) sebelum dikemas ──────────────────────────
