@@ -5332,13 +5332,18 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         const toColor   = bodyStr('color')        || String(item.color || '').trim();
         const toVariant = bodyStr('variant_type') || String(item.variant_type || 'null').trim();
         const toSize    = bodyStr('size')         || String(item.size || '').trim();
+        const oldQty    = Number(item.quantity || 1);
+        const toQty     = bodyStr('quantity') !== null ? parseInt(bodyStr('quantity'), 10) : oldQty;
         if (!Number.isInteger(toProductId) || !toColor || !toSize)
             return res.status(400).json({ error: 'Produk, warna, dan ukuran wajib diisi' });
+        if (!Number.isInteger(toQty) || toQty < 1 || toQty > 999)
+            return res.status(400).json({ error: 'Jumlah (qty) harus angka 1 sampai 999' });
 
         const same = toProductId === item.product_id
             && toColor === String(item.color || '').trim()
             && toVariant === String(item.variant_type || 'null').trim()
-            && toSize === String(item.size || '').trim();
+            && toSize === String(item.size || '').trim()
+            && toQty === oldQty;
         if (same) return res.status(400).json({ error: 'Tidak ada yang berubah' });
 
         const product = toProductId === item.product_id
@@ -5381,14 +5386,14 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         const unitCogs = (colorOv && toVariant && colorOv[toVariant] != null) ? Number(colorOv[toVariant])
             : (cogsByType && toVariant && cogsByType[toVariant] != null) ? Number(cogsByType[toVariant])
             : Number(product.cogs_default || 0);
-        const totalCogs = (unitCogs + Number(item.bordir_nama_cogs || 0) + Number(item.bordir_logo_cogs || 0)) * Number(item.quantity || 1);
+        const totalCogs = (unitCogs + Number(item.bordir_nama_cogs || 0) + Number(item.bordir_logo_cogs || 0)) * toQty;
 
         // ── Status Pre-Order dihitung ulang ───────────────────────────────────────
         // Stok belum dipotong (order belum bayar), jadi stok sekarang = stok tersedia.
         // Varian baru stoknya kurang → baris jadi PO; kalau cukup, PO dilepas. Tanpa ini,
         // confirm-payment nanti bisa gagal 409 "stok tidak cukup".
         const stockNow = parseInt(invRow.stock) || 0;
-        const newIsPO = stockNow < Number(item.quantity || 1);
+        const newIsPO = stockNow < toQty;
 
         // ── Label bordir ikut ganti ───────────────────────────────────────────────
         // `item_label` (format "Produk (warna, size)") adalah satu-satunya jembatan antara
@@ -5401,6 +5406,14 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         if (!Array.isArray(embArr)) embArr = [];
         const myEntries = embArr.filter(e => String(e.item_label || '') === oldLabel);
         let embChanged = false;
+        // Tiap pcs bisa punya nama bordir sendiri, jadi jumlah entry terikat ke qty.
+        // Menurunkan qty di bawah jumlah entry akan menyisakan entry yatim di invoice
+        // (bordir untuk potong yang sudah tidak ada).
+        const namaCount = myEntries.filter(e => e.type === 'nama').length;
+        const logoCount = myEntries.filter(e => e.type === 'logo').length;
+        const embSlots  = Math.max(namaCount, logoCount);
+        if (embSlots > 0 && toQty < embSlots)
+            return res.status(400).json({ error: `Item ini punya ${embSlots} entry bordir (${namaCount} nama, ${logoCount} logo) — qty tidak boleh kurang dari itu. Rapikan bordirnya dulu lewat tombol edit bordir.` });
         if (myEntries.length > 0 && oldLabel !== newLabel) {
             // Label BUKAN identitas unik: dua baris beda variant bisa punya nama+warna+size
             // yang sama. Kalau kembar, mustahil tahu entry bordir mana milik baris ini —
@@ -5425,10 +5438,11 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
 
         // ── Total pesanan dihitung ulang ──────────────────────────────────────────
         const allItems = await dbAll('SELECT id, price, quantity FROM order_items WHERE order_id = $1', [order.id]);
-        const sumWith = (overrideId, overridePrice) => allItems.reduce((s, r) =>
-            s + (r.id === overrideId ? overridePrice : Number(r.price || 0)) * Number(r.quantity || 0), 0);
-        const oldProductTotal = sumWith(null, 0);
-        const newProductTotal = sumWith(item.id, newPrice);
+        const sumWith = (overrideId, overridePrice, overrideQty) => allItems.reduce((s, r) =>
+            s + (r.id === overrideId ? overridePrice : Number(r.price || 0))
+              * (r.id === overrideId ? overrideQty  : Number(r.quantity || 0)), 0);
+        const oldProductTotal = sumWith(null, 0, 0);
+        const newProductTotal = sumWith(item.id, newPrice, toQty);
 
         // Diskon: kalau nominalnya memang hasil persen murni, ikut dihitung ulang. Diskon
         // nominal khusus (mis. varian "produk saja / tanpa bordir" yang dihitung di Kasir)
@@ -5449,15 +5463,16 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         if (toColor !== String(item.color || '').trim()) changes.push(`warna ${item.color} → ${toColor}`);
         if (toVariant !== String(item.variant_type || 'null').trim()) changes.push(`variant ${item.variant_type} → ${toVariant}`);
         if (toSize !== String(item.size || '').trim()) changes.push(`size ${item.size} → ${toSize}`);
+        if (toQty !== oldQty) changes.push(`qty ${oldQty} → ${toQty}`);
 
         await withTransaction(async (client) => {
             await client.query(
                 `UPDATE order_items
                     SET product_id = $1, color = $2, variant_type = $3, size = $4,
-                        price = $5, unit_cogs = $6, total_cogs = $7,
-                        is_po = $8, po_fulfilled = CASE WHEN $8 THEN po_fulfilled ELSE FALSE END
-                  WHERE id = $9`,
-                [product.id, toColor, toVariant, toSize, newPrice, unitCogs, totalCogs, newIsPO, item.id]
+                        quantity = $5, price = $6, unit_cogs = $7, total_cogs = $8,
+                        is_po = $9, po_fulfilled = CASE WHEN $9 THEN po_fulfilled ELSE FALSE END
+                  WHERE id = $10`,
+                [product.id, toColor, toVariant, toSize, toQty, newPrice, unitCogs, totalCogs, newIsPO, item.id]
             );
             if (embChanged) {
                 await client.query(
@@ -5483,7 +5498,18 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
             discount_amount: newDisc,
             is_po: newIsPO,
             po_note: newIsPO
-                ? `Stok ${product.name} ${toColor} ${toSize} tinggal ${stockNow} (butuh ${item.quantity}) — baris ini otomatis ditandai Pre-Order.`
+                ? `Stok ${product.name} ${toColor} ${toSize} tinggal ${stockNow} (butuh ${toQty}) — baris ini otomatis ditandai Pre-Order.`
+                : null,
+            // Ongkir SENGAJA tidak dihitung ulang: nominalnya sudah dikutip ke customer
+            // (dan untuk order website dihitung dari berat saat checkout). Kalau qty
+            // berubah banyak, admin yang memutuskan lewat Edit Pesanan.
+            shipping_note: toQty !== oldQty
+                ? `Qty berubah ${oldQty} → ${toQty}. Ongkir Rp ${Number(order.shipping_cost || 0).toLocaleString('id-ID')} TIDAK ikut dihitung ulang — cek lewat Edit Pesanan kalau beratnya jadi beda.`
+                : null,
+            // Bordir tidak digandakan/dipotong otomatis: isinya (nama siapa) hanya admin
+            // yang tahu. Kalau jumlahnya tidak lagi sepadan dengan qty, ingatkan.
+            bordir_note: (embSlots > 0 && toQty !== embSlots)
+                ? `Item ini punya ${embSlots} entry bordir untuk ${toQty} pcs — cek lagi di bagian bordir kalau tidak sesuai.`
                 : null
         });
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }

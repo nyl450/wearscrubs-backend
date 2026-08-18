@@ -9437,11 +9437,15 @@ async function openEditItemModal(orderId, itemId) {
                         <div><label class="block text-[11px] text-white/50 mb-1">Ukuran</label>
                             <select id="ei-size" class="w-full !py-2 !text-sm" disabled><option value="">--</option></select></div>
                     </div>
+                    <div class="w-28">
+                        <label class="block text-[11px] text-white/50 mb-1">Jumlah (pcs)</label>
+                        <input id="ei-qty" type="number" min="1" max="999" step="1" value="${Number(item.quantity || 1)}" class="w-full !py-2 !text-sm" />
+                    </div>
                 </div>
                 <div id="ei-preview" class="mt-3 p-3 rounded-xl bg-white/4 border border-white/8 text-[11px] text-white/60 space-y-1">
                     <p class="text-white/40">Pilih varian untuk melihat harga barunya.</p>
                 </div>
-                <p class="text-[10px] text-white/30 mt-2 leading-relaxed">Hanya bisa selama pesanan <b>belum dibayar</b>. Jumlah (qty) dan bordir tidak diubah di sini — bordir punya tombol editnya sendiri.</p>
+                <p class="text-[10px] text-white/30 mt-2 leading-relaxed">Hanya bisa selama pesanan <b>belum dibayar</b>. Stok dipotong saat pembayaran dikonfirmasi, jadi selalu mengikuti isi pesanan yang terakhir disimpan. Isi bordir & ongkir tidak ikut berubah otomatis — keduanya punya tombol editnya sendiri.</p>
                 <div class="flex gap-2 mt-4">
                     <button id="ei-save" onclick="submitEditItem(${orderId}, ${itemId})" disabled class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/30 text-cyan-200 font-bold text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">Simpan Perubahan</button>
                     <button onclick="document.getElementById('edit-item-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Batal</button>
@@ -9471,6 +9475,16 @@ async function openEditItemModal(orderId, itemId) {
         const el = document.getElementById(id);
         if (el) el.onchange = () => eiCascade(id);
     });
+    const qtyEl = document.getElementById('ei-qty');
+    if (qtyEl) {
+        qtyEl.oninput = () => eiPreview();
+        // Rapikan angkanya saat selesai mengetik (bukan saat mengetik, supaya "12"
+        // tidak keburu dipotong jadi "1"), jadi qty tidak valid tak sempat terkirim.
+        qtyEl.onchange = () => {
+            qtyEl.value = String(Math.max(1, Math.min(999, parseInt(qtyEl.value, 10) || 1)));
+            eiPreview();
+        };
+    }
     await eiOnProductChange(true);
 }
 
@@ -9545,8 +9559,12 @@ function eiPreview() {
         if (saveBtn) saveBtn.disabled = true;
         return;
     }
+    const qtyEl = document.getElementById('ei-qty');
+    const qty = Math.max(1, Math.min(999, parseInt(qtyEl && qtyEl.value, 10) || 1));
+    const oldQty = Number(it.quantity || 1);
     const unchanged = pid === it.product_id && color === it.color
-        && String(variant) === String(it.variant_type || 'null') && size === it.size;
+        && String(variant) === String(it.variant_type || 'null') && size === it.size
+        && qty === oldQty;
 
     // Bordir hanya untuk Atasan & Gown — cegah pindah ke celana/cap/aksesoris selagi
     // barisnya masih punya bordir (server juga menolak, ini biar ketahuan lebih awal).
@@ -9561,11 +9579,12 @@ function eiPreview() {
     const base = (prod.price_by_type && variant && variant !== 'null' && prod.price_by_type[variant] != null)
         ? Number(prod.price_by_type[variant]) : Number(prod.price || 0);
     const newUnit = it.is_bonus ? 0 : base + namaP + logoP;
-    const qty = Number(it.quantity || 1);
 
     const items = (o.items || []);
     const oldProductTotal = items.reduce((s, r) => s + Number(r.price || 0) * Number(r.quantity || 0), 0);
-    const newProductTotal = items.reduce((s, r) => s + (r.id === it.id ? newUnit : Number(r.price || 0)) * Number(r.quantity || 0), 0);
+    const newProductTotal = items.reduce((s, r) => r.id === it.id
+        ? s + newUnit * qty
+        : s + Number(r.price || 0) * Number(r.quantity || 0), 0);
     const pct = Number(o.discount_percent || 0);
     const oldDisc = Number(o.discount_amount || 0);
     const wasPlainPct = pct > 0 && oldDisc === Math.round(oldProductTotal * pct / 100);
@@ -9582,10 +9601,11 @@ function eiPreview() {
 
     box.innerHTML = `
         <p>Harga satuan: ${arrow(Number(it.price || 0), newUnit)}${it.is_bonus ? ' <span class="text-amber-300">(bonus — tetap gratis)</span>' : ''}</p>
-        <p>Subtotal baris (×${qty}): ${arrow(Number(it.price || 0) * qty, newUnit * qty)}</p>
+        <p>Subtotal baris${qty !== oldQty ? ` (×${oldQty} → ×${qty})` : ` (×${qty})`}: ${arrow(Number(it.price || 0) * oldQty, newUnit * qty)}</p>
         ${newDisc !== oldDisc ? `<p>Diskon: ${arrow(oldDisc, newDisc)}</p>` : ''}
         <p class="pt-1 border-t border-white/8">Total pesanan: ${arrow(oldTotal, newTotal)}</p>
-        <p class="text-white/35">Stok varian ini: ${stock}${willBePO ? ` — kurang dari ${qty}, baris otomatis jadi <span class="text-orange-300">Pre-Order</span>` : ''}</p>`;
+        <p class="text-white/35">Stok varian ini: ${stock}${willBePO ? ` — kurang dari ${qty}, baris otomatis jadi <span class="text-orange-300">Pre-Order</span>` : ''}</p>
+        ${qty !== oldQty ? '<p class="text-white/35">Ongkir tidak ikut dihitung ulang — cek lewat Edit Pesanan kalau beratnya jadi beda.</p>' : ''}`;
     if (saveBtn) saveBtn.disabled = unchanged;
 }
 
@@ -9597,10 +9617,12 @@ async function submitEditItem(orderId, itemId) {
         fd.append('color', document.getElementById('ei-color').value);
         fd.append('variant_type', document.getElementById('ei-variant').value);
         fd.append('size', document.getElementById('ei-size').value);
+        fd.append('quantity', document.getElementById('ei-qty').value);
         if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
         const res = await apiFetch(`/api/orders/${orderId}/items/${itemId}`, { method: 'PUT', body: fd });
         toast('✅ ' + (res.message || 'Item diperbarui'));
-        if (res.po_note) alert('⚠️ ' + res.po_note);
+        const notes = [res.po_note, res.shipping_note, res.bordir_note].filter(Boolean);
+        if (notes.length) alert('⚠️ ' + notes.join('\n\n'));
         document.getElementById('edit-item-modal')?.remove();
         if (typeof closeOrderModal === 'function') closeOrderModal();
         viewOrder(orderId);
