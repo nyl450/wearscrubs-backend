@@ -3607,8 +3607,8 @@ async function viewCustomer(id) {
                     Order Nomor Sama, Belum Tertaut (${unlinked.length})
                 </p>
                 <p class="text-[11px] text-white/35 mb-2">
-                    Dibuat lewat WA/Kasir dengan nomor HP yang sama, tapi belum masuk ke akun ini —
-                    penautan otomatis hanya berjalan sekali saat customer mendaftar.
+                    Nomor HP-nya sama tapi penulisannya berbeda sehingga tidak ikut tertaut otomatis.
+                    Klik <b>Impor dari Pesanan</b> di daftar Data Client untuk mencoba menautkan ulang.
                 </p>
                 <div class="space-y-2">${unlinked.map(o => orderRow(o, { muted: true, guestName: o.customer_name })).join('')}</div>
             </div>` : '';

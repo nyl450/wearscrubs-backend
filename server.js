@@ -1414,6 +1414,13 @@ async function upsertClientDirectory({ phone, name, address, city }) {
             await dbRun('UPDATE customers SET full_name = $1, updated_at = NOW() WHERE id = $2', [nm, c.id]);
         }
 
+        // Tautkan pesanan bernomor sama ke baris ini. Tanpa langkah ini, Data Client
+        // menampilkan "belum pernah order" dan total belanja Rp 0 padahal riwayatnya
+        // ada — statistik di sana semuanya bertumpu pada orders.customer_id, dan
+        // penautan dulu cuma berjalan saat customer mendaftar. Idempoten: hanya
+        // menyentuh pesanan yang customer_id-nya masih kosong.
+        await linkGuestOrdersByPhone(c.id, canon);
+
         const addr = _cleanStr(address, 500);
         const kota = _cleanStr(city, 120);
         if (addr) {
@@ -1465,8 +1472,10 @@ app.post('/api/admin/clients/backfill', requireAuth(['admin']), async (req, res)
             if (r.addressCreated) addressesCreated++;
         }
         const total = await dbGet('SELECT COUNT(*)::int AS n FROM customers');
+        const tertaut = await dbGet('SELECT COUNT(*)::int AS n FROM orders WHERE customer_id IS NOT NULL');
         res.json({
-            message: `Selesai. ${customersCreated} client baru, ${addressesCreated} alamat baru, ${skipped} baris dilewati.`,
+            message: `Selesai. ${customersCreated} client baru, ${addressesCreated} alamat baru, ${tertaut.n} pesanan tertaut, ${skipped} baris dilewati.`,
+            orders_linked: tertaut.n,
             orders_scanned: rows.length,
             customers_created: customersCreated,
             addresses_created: addressesCreated,

@@ -45,7 +45,32 @@ async function run() {
     check('semua client belum punya password (baru kontak, bukan akun)',
         clients().every(c => c.password_hash === null), clients().map(c => c.password_hash));
 
-    group('2. Nama & alamat berbeda di satu nomor tetap tersimpan semua');
+    group('2. Pesanan lama LANGSUNG tertaut ke barisnya (statistik Data Client)');
+    // Data Client menghitung total belanja & jumlah order dari orders.customer_id.
+    // Kalau impor tidak menautkan, daftarnya bilang "belum pernah order" padahal
+    // riwayatnya ada — persis yang terlihat di layar sebelum ini diperbaiki.
+    check('semua pesanan ber-nomor valid sudah punya customer_id',
+        many(`SELECT id FROM orders WHERE customer_id IS NULL AND order_code <> 'WS-C1'`).length === 0,
+        many(`SELECT id, order_code, customer_id FROM orders`));
+    const cIra = clients().find(c => c.phone === '08159431994');
+    check('2 pesanan Ira tertaut ke barisnya',
+        many(`SELECT id FROM orders WHERE customer_id = ${cIra.id}`).length === 2,
+        many(`SELECT order_code, customer_id FROM orders`));
+    check('nomor tulisan +62 ikut tertaut, bukan dianggap orang lain',
+        many(`SELECT id FROM orders WHERE customer_id = ${cIra.id} AND customer_phone LIKE '+62%'`).length === 1,
+        'penautan +62');
+    check('pesanan bernomor tidak wajar tetap tidak tertaut',
+        one(`SELECT customer_id FROM orders WHERE order_code = 'WS-C1'`).customer_id === null, 'WS-C1');
+    // Catatan: kueri agregat GET /api/admin/customers (COUNT ... FILTER + GROUP BY)
+    // tidak bisa dijalankan pg-mem, jadi angkanya tidak diperiksa lewat endpoint.
+    // Yang diperiksa akar masalahnya — orders.customer_id — karena seluruh statistik
+    // di layar itu dihitung dari kolom tersebut.
+    check('hitungan ala Data Client: 2 order untuk Ira',
+        many(`SELECT o.id FROM orders o JOIN customers c ON c.id = o.customer_id
+               WHERE c.phone = '08159431994' AND o.order_status <> 'cancelled'`).length === 2,
+        'join ala endpoint');
+
+    group('2b. Nama & alamat berbeda di satu nomor tetap tersimpan semua');
     const cA = clients().find(c => c.phone === '087781936679');
     const alamatA = many(`SELECT * FROM customer_addresses WHERE customer_id = ${cA.id} ORDER BY id`);
     check('2 penerima tersimpan', alamatA.length === 2, alamatA.map(a => a.recipient_name));
@@ -57,6 +82,15 @@ async function run() {
     const cB = clients().find(c => c.phone === '08159431994');
     check('2 pesanan alamat sama -> 1 baris alamat',
         many(`SELECT * FROM customer_addresses WHERE customer_id = ${cB.id}`).length === 1, 'alamat');
+
+    group('3b. Total belanja terhitung dari pesanan yang LUNAS');
+    none(`UPDATE orders SET payment_status = 'paid' WHERE order_code IN ('WS-B1','WS-B2')`);
+    const belanja = many(`SELECT o.total_amount FROM orders o JOIN customers c ON c.id = o.customer_id
+                           WHERE c.phone = '08159431994' AND o.payment_status = 'paid'
+                             AND o.order_status <> 'cancelled'`)
+        .reduce((t, x) => t + Number(x.total_amount), 0);
+    check('total belanja tidak lagi Rp 0', belanja === 200000, belanja);
+    none(`UPDATE orders SET payment_status = 'pending' WHERE order_code IN ('WS-B1','WS-B2')`);
 
     group('4. Impor diulang: idempoten, tidak menggandakan apa pun');
     const sebelum = { c: clients().length, a: many(`SELECT * FROM customer_addresses`).length };
