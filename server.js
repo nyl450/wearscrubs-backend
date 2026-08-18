@@ -5406,6 +5406,12 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         if (!Array.isArray(embArr)) embArr = [];
         const myEntries = embArr.filter(e => String(e.item_label || '') === oldLabel);
         let embChanged = false;
+        // Entry bordir perlu diperbarui bukan cuma saat labelnya berubah: `item_label`
+        // tidak memuat variant, padahal entry menyimpan `variant_type` sendiri dan
+        // invoice memakainya untuk memberitahu produksi potong mana yang dibordir.
+        // Ganti variant saja (pendek -> panjang) karena itu tetap wajib menulis ulang.
+        const labelChanged   = oldLabel !== newLabel;
+        const variantChanged = toVariant !== String(item.variant_type || 'null').trim();
         // Tiap pcs bisa punya nama bordir sendiri, jadi jumlah entry terikat ke qty.
         // Menurunkan qty di bawah jumlah entry akan menyisakan entry yatim di invoice
         // (bordir untuk potong yang sudah tidak ada).
@@ -5414,7 +5420,7 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         const embSlots  = Math.max(namaCount, logoCount);
         if (embSlots > 0 && toQty < embSlots)
             return res.status(400).json({ error: `Item ini punya ${embSlots} entry bordir (${namaCount} nama, ${logoCount} logo) — qty tidak boleh kurang dari itu. Rapikan bordirnya dulu lewat tombol edit bordir.` });
-        if (myEntries.length > 0 && oldLabel !== newLabel) {
+        if (myEntries.length > 0 && (labelChanged || variantChanged)) {
             // Label BUKAN identitas unik: dua baris beda variant bisa punya nama+warna+size
             // yang sama. Kalau kembar, mustahil tahu entry bordir mana milik baris ini —
             // lebih baik menolak daripada merusak bordir baris lain.
