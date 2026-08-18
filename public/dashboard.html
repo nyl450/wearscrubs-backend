@@ -1325,11 +1325,16 @@
         <div class="flex items-center justify-between gap-3 flex-wrap">
             <div>
                 <h2 class="text-xl font-bold">Data Client</h2>
-                <p class="text-xs text-white/40 mt-0.5">Customer yang punya akun di website. Order lewat WA/Kasir tanpa akun tidak muncul di sini.</p>
+                <p class="text-xs text-white/40 mt-0.5">Semua pelanggan yang pernah memesan, dikunci per nomor WhatsApp. Yang belum punya akun website tetap tercatat di sini dan dipakai untuk autofill di Kasir.</p>
             </div>
-            <button onclick="loadCustomers()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
-                <i class="fa-solid fa-rotate"></i> Refresh
-            </button>
+            <div class="flex items-center gap-2">
+                <button onclick="importClientsFromOrders()" id="cust-import-btn" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-200 hover:bg-cyan-500/25 transition">
+                    <i class="fa-solid fa-file-import"></i> Impor dari Pesanan
+                </button>
+                <button onclick="loadCustomers()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+            </div>
         </div>
         <div class="grid grid-cols-3 gap-3">
             <div class="bg-darkcard border border-white/10 rounded-2xl p-3">
@@ -3412,6 +3417,30 @@ function custClearSearch() {
     document.getElementById('cust-search').value = '';
     document.getElementById('cust-search-clear')?.classList.add('hidden');
     loadCustomers();
+}
+
+// Tarik seluruh pelanggan dari data pesanan ke Data Client. Idempoten — dijalankan
+// berulang kali hasilnya sama, jadi aman diklik lagi setelah ada pesanan baru
+// (pesanan baru sebenarnya sudah otomatis masuk sendiri saat dibuat).
+async function importClientsFromOrders() {
+    if (!confirm('Tarik semua pelanggan dari data pesanan ke Data Client?\n\nAman diulang: yang sudah ada tidak digandakan, dan akun yang sudah punya password tidak diubah.')) return;
+    const btn = document.getElementById('cust-import-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengimpor…'; }
+    try {
+        const r = await apiFetch('/api/admin/clients/backfill', { method: 'POST' });
+        toast('✅ ' + (r.message || 'Impor selesai'));
+        alert('Impor selesai.' + '\n\n' +
+            'Pesanan dipindai: ' + r.orders_scanned + '\n' +
+            'Client baru: ' + r.customers_created + '\n' +
+            'Alamat baru: ' + r.addresses_created + '\n' +
+            'Dilewati: ' + r.skipped + '\n\n' +
+            'Total client sekarang: ' + r.total_clients);
+        loadCustomers();
+    } catch (e) {
+        toast('Gagal impor: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-file-import"></i> Impor dari Pesanan'; }
+    }
 }
 
 async function loadCustomers() {
@@ -10263,6 +10292,7 @@ async function waInitModule() {
     if (document.getElementById('wa-items-container').children.length === 0) {
         waAddItem();
     }
+    waClientAutofillInit();
     document.getElementById('wa-shipping-cost').oninput = waUpdateTotal;
     // Default tanggal order = hari ini (admin bisa override kalau customer minta tgl khusus).
     // Set only kalau field masih kosong supaya tidak menimpa input admin yg lagi edit form.
@@ -10271,6 +10301,120 @@ async function waInitModule() {
         const t = new Date();
         dateEl.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
     }
+}
+
+// ── AUTOFILL CLIENT DI KASIR ──────────────────────────────────────────────────
+// Ketik nama ATAU nomor WA di Data Pelanggan → saran muncul dari direktori client
+// (dibangun dari seluruh pesanan yang pernah masuk). Pilih satu → nama, nomor,
+// kota, dan alamat terisi sekaligus, jadi tidak perlu mengetik ulang pelanggan
+// lama. Admin tetap bebas mengetik manual — ini bantuan, bukan paksaan.
+let _clientSearchTimer = null;
+let _clientSearchSeq = 0;          // buang balasan yang datang telat (out-of-order)
+let _clientResults = [];
+
+function waClientBoxEl() {
+    let box = document.getElementById('wa-client-suggest');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'wa-client-suggest';
+        box.className = 'hidden absolute z-50 left-0 right-0 mt-1 rounded-xl border border-white/12 bg-[#1c1c1c] shadow-2xl overflow-hidden max-h-72 overflow-y-auto';
+        const anchor = document.getElementById('wa-customer-name')?.parentElement;
+        if (!anchor) return null;
+        anchor.style.position = 'relative';
+        anchor.appendChild(box);
+    }
+    return box;
+}
+
+function waClientHide() {
+    const box = document.getElementById('wa-client-suggest');
+    if (box) box.classList.add('hidden');
+}
+
+// Debounce 250ms: admin mengetik cepat, jangan kirim request per huruf.
+function waClientSearch(q) {
+    clearTimeout(_clientSearchTimer);
+    const term = String(q || '').trim();
+    if (term.length < 2) { waClientHide(); return; }
+    _clientSearchTimer = setTimeout(async () => {
+        const seq = ++_clientSearchSeq;
+        try {
+            const rows = await apiFetch(`/api/admin/clients/search?q=${encodeURIComponent(term)}`);
+            if (seq !== _clientSearchSeq) return;      // sudah ada ketikan lebih baru
+            _clientResults = Array.isArray(rows) ? rows : [];
+            waClientRender();
+        } catch (e) { waClientHide(); }
+    }, 250);
+}
+
+function waClientRender() {
+    const box = waClientBoxEl();
+    if (!box) return;
+    if (_clientResults.length === 0) {
+        box.innerHTML = `<p class="px-3 py-2.5 text-[11px] text-white/35">Tidak ada client cocok — ketik manual saja.</p>`;
+        box.classList.remove('hidden');
+        return;
+    }
+    box.innerHTML = _clientResults.map((r, i) => `
+        <button type="button" onclick="waClientPick(${i})"
+                class="w-full text-left px-3 py-2 hover:bg-white/8 transition border-b border-white/5 last:border-0">
+            <div class="flex items-center gap-2">
+                <span class="text-[12px] font-semibold text-white/90">${esc(r.name || '-')}</span>
+                <span class="text-[10px] font-mono text-white/40">${esc(r.phone || '')}</span>
+                ${r.has_account ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-green-400/15 text-green-300 border border-green-400/25">AKUN</span>' : ''}
+            </div>
+            ${r.address ? `<p class="text-[10px] text-white/40 mt-0.5 truncate">${esc(r.city ? r.city + ' · ' : '')}${esc(r.address)}</p>` : ''}
+        </button>`).join('');
+    box.classList.remove('hidden');
+}
+
+// Isi form dari baris terpilih. Kota hanya di-set kalau ada di dropdown —
+// nama kota lama bisa saja sudah tidak dipakai di daftar ongkir sekarang.
+function waClientPick(i) {
+    const r = _clientResults[i];
+    if (!r) return;
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set('wa-customer-name', r.name);
+    set('wa-customer-phone', r.phone);
+    set('wa-customer-address', r.address);
+    const citySel = document.getElementById('wa-shipping-city');
+    let kotaCocok = true;
+    if (citySel) {
+        const opt = r.city
+            ? [...citySel.options].find(o => o.value.toLowerCase() === String(r.city).toLowerCase())
+            : null;
+        // Kota WAJIB dikosongkan kalau tidak ketemu (atau client-nya tanpa kota):
+        // kalau tidak, kota pelanggan SEBELUMNYA tertinggal di form dan ongkirnya
+        // ikut salah tanpa ada yang sadar.
+        citySel.value = opt ? opt.value : '';
+        citySel.dispatchEvent(new Event('change'));
+        if (r.city && !opt) kotaCocok = false;
+    }
+    waClientHide();
+    toast(kotaCocok
+        ? `Data ${r.name} terisi`
+        : `Data ${r.name} terisi — kota "${r.city}" tidak ada di daftar ongkir, pilih manual`, !kotaCocok);
+}
+
+// Pasang listener sekali saja, saat modul Kasir pertama dibuka.
+function waClientAutofillInit() {
+    if (window.__waClientAutofillReady) return;
+    ['wa-customer-name', 'wa-customer-phone'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('autocomplete', 'off');
+        el.addEventListener('input', () => waClientSearch(el.value));
+        el.addEventListener('focus', () => { if (el.value.trim().length >= 2) waClientSearch(el.value); });
+    });
+    // Klik di luar → tutup saran.
+    document.addEventListener('click', (e) => {
+        const box = document.getElementById('wa-client-suggest');
+        if (!box || box.classList.contains('hidden')) return;
+        if (box.contains(e.target)) return;
+        if (['wa-customer-name', 'wa-customer-phone'].includes(e.target?.id)) return;
+        waClientHide();
+    });
+    window.__waClientAutofillReady = true;
 }
 
 // Shared thread-color options — dipakai di Kasir single/bulk/custom + add-bordir.

@@ -23,10 +23,37 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 const Module = require('module');
 const path = require('path');
-const { newDb } = require('pg-mem');
+const { newDb, DataType } = require('pg-mem');
 const jwt = require('jsonwebtoken');
 
 const db = newDb();
+
+// pg-mem cuma mengimplementasikan sedikit fungsi bawaan Postgres. Yang dipakai
+// server.js tapi belum ada, kita daftarkan sendiri di sini — menambal ALAT UJI,
+// bukan mengubah kode produksi demi alat.
+db.public.registerFunction({
+    name: 'trim', args: [DataType.text], returns: DataType.text,
+    implementation: (x) => (x == null ? null : String(x).trim())
+});
+db.public.registerFunction({
+    name: 'btrim', args: [DataType.text], returns: DataType.text,
+    implementation: (x) => (x == null ? null : String(x).trim())
+});
+// regexp_replace 4-argumen (dengan flag 'g') dipakai untuk menormalkan spasi dan
+// membuang non-digit dari nomor WA.
+db.public.registerFunction({
+    name: 'regexp_replace',
+    args: [DataType.text, DataType.text, DataType.text, DataType.text],
+    returns: DataType.text,
+    implementation: (v, pat, rep, flags) =>
+        (v == null ? null : String(v).replace(new RegExp(pat, flags || ''), rep))
+});
+db.public.registerFunction({
+    name: 'regexp_replace',
+    args: [DataType.text, DataType.text, DataType.text],
+    returns: DataType.text,
+    implementation: (v, pat, rep) => (v == null ? null : String(v).replace(new RegExp(pat), rep))
+});
 const pgAdapter = db.adapters.createPg();
 const initErrors = [];
 let swallow = true;
@@ -62,6 +89,17 @@ async function boot(port) {
     TOKEN = jwt.sign({ id: 1, username: 'harness', role: 'admin' }, SECRET, { expiresIn: '1h' });
     await new Promise(r => setTimeout(r, 1500));   // tunggu initDB selesai
     swallow = false;
+    // Sebagian ALTER di initDB tidak dijalankan pg-mem, jadi ada kolom yang hilang.
+    // Tambahkan yang memang dipakai tes — sekali lagi: menambal alat uji, bukan produk.
+    const kolomWajib = [
+        ['orders', 'customer_id', 'INTEGER'],
+    ];
+    for (const [tabel, kolom, tipe] of kolomWajib) {
+        const ada = db.public.many(
+            `SELECT column_name FROM information_schema.columns WHERE table_name = '${tabel}'`
+        ).some(r => r.column_name === kolom);
+        if (!ada) db.public.none(`ALTER TABLE ${tabel} ADD COLUMN ${kolom} ${tipe}`);
+    }
     return { initErrors };
 }
 

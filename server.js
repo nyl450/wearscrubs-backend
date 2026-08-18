@@ -453,6 +453,9 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
     )`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_cust_addr_customer ON customer_addresses(customer_id)`);
+    // Direktori client: baris tanpa password = kontak hasil impor dari pesanan,
+    // belum jadi akun. Begitu customer daftar dengan nomor sama, barisnya diklaim.
+    await dbRun(`ALTER TABLE customers ALTER COLUMN password_hash DROP NOT NULL`).catch(() => {});
     // Tautan order → customer. NULLABLE: order tamu/WA/Kasir lama tetap valid.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER DEFAULT NULL`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)`);
@@ -1179,15 +1182,30 @@ app.post('/api/customer/register', loginLimiter, async (req, res) => {
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
             return res.status(400).json({ error: 'Format email tidak valid.' });
 
-        const exists = await dbGet('SELECT id FROM customers WHERE phone = $1', [canon]);
-        if (exists) return res.status(409).json({ error: 'Nomor ini sudah terdaftar. Silakan login.' });
-
         const hash = await bcrypt.hash(password, 10);
-        const result = await dbRun(
-            'INSERT INTO customers (phone, password_hash, full_name, email) VALUES ($1,$2,$3,$4) RETURNING id',
-            [canon, hash, full_name, email]
-        );
-        const id = result.rows[0].id;
+        // Nomor mungkin SUDAH ada sebagai baris direktori (hasil impor dari pesanan
+        // lama) — belum punya password. Itu bukan "sudah terdaftar": customer tinggal
+        // mengklaimnya dengan mengisi password. Riwayat pesanannya langsung ikut,
+        // karena penautan by nomor jalan di bawah. Kalau password_hash SUDAH ada,
+        // barulah nomor itu benar-benar milik akun lain.
+        const exists = await dbGet('SELECT id, password_hash FROM customers WHERE phone = $1', [canon]);
+        if (exists && exists.password_hash)
+            return res.status(409).json({ error: 'Nomor ini sudah terdaftar. Silakan login.' });
+
+        let id;
+        if (exists) {
+            await dbRun(
+                'UPDATE customers SET password_hash=$1, full_name=$2, email=$3, updated_at=NOW() WHERE id=$4',
+                [hash, full_name, email, exists.id]
+            );
+            id = exists.id;
+        } else {
+            const result = await dbRun(
+                'INSERT INTO customers (phone, password_hash, full_name, email) VALUES ($1,$2,$3,$4) RETURNING id',
+                [canon, hash, full_name, email]
+            );
+            id = result.rows[0].id;
+        }
         await linkGuestOrdersByPhone(id, canon);   // tautkan order lama by HP
         const c = { id, phone: canon, full_name, email };
         res.json({ token: signCustomerToken(c), customer: c });
@@ -1206,6 +1224,10 @@ app.post('/api/customer/login', loginLimiter, async (req, res) => {
         if (!canon || !password) return res.status(400).json({ error: 'Nomor & password wajib diisi.' });
         const c = await dbGet('SELECT * FROM customers WHERE phone = $1', [canon]);
         if (!c) return res.status(401).json({ error: 'Nomor atau password salah.' });
+        // Nomornya kami kenal (pernah belanja) tapi akunnya belum pernah dibuat.
+        // Arahkan mendaftar, bukan "password salah" yang membingungkan.
+        if (!c.password_hash)
+            return res.status(409).json({ error: 'Nomor ini sudah kami kenal tapi belum punya password. Silakan daftar untuk membuat akun — riwayat pesanan Anda otomatis ikut.' });
         const valid = await bcrypt.compare(password, c.password_hash);
         if (!valid) return res.status(401).json({ error: 'Nomor atau password salah.' });
         await linkGuestOrdersByPhone(c.id, canon);   // defensif: tautkan order baru yg belum ke-link
@@ -1331,6 +1353,140 @@ app.get('/api/customer/orders/:id', requireCustomer, async (req, res) => {
              WHERE oi.order_id = $1 ORDER BY oi.id`,
             [order.id]);
         res.json({ order, items });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── DIREKTORI CLIENT ─────────────────────────────────────────────────────────
+// Satu baris `customers` per NOMOR WA — itu identitas login-nya, jadi nomor yang
+// jadi kunci, bukan nama. Datanya memang menuntut begitu: di pesanan yang sudah
+// ada, satu nomor bisa membawa beberapa nama (klinik, keluarga, reseller pesan
+// untuk orang lain) dan beberapa alamat. Nama & alamat karena itu disimpan
+// sebagai baris penerima di `customer_addresses`, boleh banyak per nomor, dan
+// ikut dicari saat admin mengetik di Kasir.
+//
+// `password_hash` NULL = baris direktori, belum jadi akun. Begitu customer
+// mendaftar dengan nomor yang sama, barisnya tinggal "diklaim" (isi password) —
+// riwayat pesanannya otomatis ikut karena penautan by nomor sudah ada.
+const CLIENT_DIR_SOURCE = 'order';
+
+function _cleanStr(v, max = 300) {
+    return String(v || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+const _key = (s) => _cleanStr(s).toLowerCase();
+
+// Idempoten: aman dipanggil berulang untuk pesanan yang sama.
+// Tidak pernah melempar — kegagalan direktori tidak boleh menggagalkan pesanan.
+async function upsertClientDirectory({ phone, name, address, city }) {
+    try {
+        const canon = normPhone(phone);
+        if (canon.length < 9 || canon.length > 15 || !/^0\d+$/.test(canon)) return { skipped: 'hp tidak valid' };
+        const nm = _cleanStr(name, 120);
+        if (!nm) return { skipped: 'nama kosong' };
+
+        let created = false, addressCreated = false;
+        let c = await dbGet('SELECT id, full_name, password_hash FROM customers WHERE phone = $1', [canon]);
+        if (!c) {
+            const r = await dbRun(
+                'INSERT INTO customers (phone, password_hash, full_name) VALUES ($1, NULL, $2) RETURNING id',
+                [canon, nm]
+            );
+            c = { id: r.rows[0].id, full_name: nm, password_hash: null };
+            created = true;
+        } else if (!c.password_hash && _key(c.full_name) !== _key(nm)) {
+            // Belum jadi akun → pakai nama terbaru supaya daftar client tidak basi.
+            // Kalau SUDAH punya akun, nama itu milik customer — jangan ditimpa admin.
+            await dbRun('UPDATE customers SET full_name = $1, updated_at = NOW() WHERE id = $2', [nm, c.id]);
+        }
+
+        const addr = _cleanStr(address, 500);
+        const kota = _cleanStr(city, 120);
+        if (addr) {
+            const dup = await dbGet(
+                `SELECT id FROM customer_addresses
+                  WHERE customer_id = $1
+                    AND lower(regexp_replace(address, '\\s+', ' ', 'g')) = $2
+                    AND lower(coalesce(city,'')) = $3
+                    AND lower(recipient_name) = $4
+                  LIMIT 1`,
+                [c.id, _key(addr), _key(kota), _key(nm)]
+            );
+            if (!dup) {
+                const n = await dbGet('SELECT COUNT(*)::int AS n FROM customer_addresses WHERE customer_id = $1', [c.id]);
+                await dbRun(
+                    `INSERT INTO customer_addresses (customer_id, label, recipient_name, phone, address, city, is_default)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                    [c.id, CLIENT_DIR_SOURCE, nm, canon, addr, kota, n.n === 0]
+                );
+                addressCreated = true;
+            }
+        }
+        return { customer_id: c.id, created, addressCreated };
+    } catch (e) {
+        console.error('[client-dir] gagal upsert:', e?.message || e);
+        return { error: e?.message || String(e) };
+    }
+}
+
+// POST /api/admin/clients/backfill — tarik semua customer dari pesanan lama ke
+// direktori client. Admin-only & idempoten: dijalankan dua kali hasilnya sama.
+// Pesanan diproses dari yang TERLAMA supaya nama/alamat terbaru yang menang.
+app.post('/api/admin/clients/backfill', requireAuth(['admin']), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT customer_phone, customer_name, customer_address, shipping_city
+               FROM orders
+              WHERE coalesce(trim(customer_phone), '') <> ''
+              ORDER BY created_at ASC, id ASC`
+        );
+        let customersCreated = 0, addressesCreated = 0, skipped = 0;
+        for (const o of rows) {
+            const r = await upsertClientDirectory({
+                phone: o.customer_phone, name: o.customer_name,
+                address: o.customer_address, city: o.shipping_city
+            });
+            if (r.skipped || r.error) { skipped++; continue; }
+            if (r.created) customersCreated++;
+            if (r.addressCreated) addressesCreated++;
+        }
+        const total = await dbGet('SELECT COUNT(*)::int AS n FROM customers');
+        res.json({
+            message: `Selesai. ${customersCreated} client baru, ${addressesCreated} alamat baru, ${skipped} baris dilewati.`,
+            orders_scanned: rows.length,
+            customers_created: customersCreated,
+            addresses_created: addressesCreated,
+            skipped,
+            total_clients: total.n
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/clients/search?q= — sumber autofill Kasir.
+// Mencari di nama akun, nomor WA, dan nama penerima di buku alamat sekaligus,
+// karena satu nomor bisa punya beberapa penerima dengan alamat berbeda.
+app.get('/api/admin/clients/search', requireMenu('manual-order'), async (req, res) => {
+    try {
+        const q = String(req.query.q || '').trim();
+        if (q.length < 2) return res.json([]);
+        const digits = q.replace(/\D/g, '');
+        const like = `%${q.replace(/[%_]/g, m => '\\' + m)}%`;
+        const rows = await dbAll(
+            `SELECT c.id AS customer_id, c.phone,
+                    COALESCE(a.recipient_name, c.full_name) AS name,
+                    COALESCE(a.address, '') AS address,
+                    COALESCE(a.city, '')    AS city,
+                    (c.password_hash IS NOT NULL) AS has_account,
+                    COALESCE(a.is_default, FALSE) AS is_default,
+                    c.updated_at
+               FROM customers c
+               LEFT JOIN customer_addresses a ON a.customer_id = c.id
+              WHERE c.full_name ILIKE $1
+                 OR a.recipient_name ILIKE $1
+                 OR ($2 <> '' AND regexp_replace(c.phone, '\\D', '', 'g') LIKE $3)
+              ORDER BY a.is_default DESC NULLS LAST, c.updated_at DESC NULLS LAST, c.id DESC
+              LIMIT 12`,
+            [like, digits, `%${digits}%`]
+        );
+        res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3217,6 +3373,14 @@ app.post('/api/orders', async (req, res) => {
                 `• ${e.item_label}: ${e.type === 'nama' ? 'Nama: ' + safeEmbVal(e) : 'Logo: ' + safeEmbVal(e)}`
               ).join('\n')
             : '';
+
+        // Direktori client ikut diperbarui tiap ada pesanan, jadi autofill Kasir selalu
+        // segar tanpa perlu backfill ulang. Dipanggil setelah pesanan COMMIT dan tidak
+        // pernah melempar — gagal mencatat kontak tidak boleh menggagalkan pesanan.
+        await upsertClientDirectory({
+            phone: customer_phone, name: customer_name,
+            address: customer_address, city: shipping_city
+        });
 
         const discountLine = discountAmount > 0
             ? `🏷️ ${discountLabel}: -Rp ${discountAmount.toLocaleString('id-ID')}\n`
