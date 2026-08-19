@@ -1426,8 +1426,8 @@
             .is-viewonly .edit-action { display:none !important; }
         </style>
         <div>
-            <h2 class="text-xl font-bold">📊 Report</h2>
-            <p class="text-xs text-white/40 mt-0.5">Penjualan order yang sudah <b>dibayar</b> (basis tanggal bayar), tidak termasuk ongkir. Order batal tidak dihitung.</p>
+            <h2 class="text-xl font-bold">📊 Laporan Penjualan</h2>
+            <p class="text-xs text-white/45 mt-0.5">Hanya menghitung pesanan yang <b>sudah dibayar</b>, memakai tanggal pembayarannya. Ongkir tidak ikut dihitung (itu uang kurir, bukan penghasilan). Pesanan batal tidak masuk hitungan.</p>
         </div>
 
         <!-- Filter periode -->
@@ -1443,6 +1443,18 @@
                  - Mobile: stack vertikal full-width per baris. UX pattern Airbnb/Booking —
                    tiap tanggal punya space sendiri, tak ada border yg menumpuk/overlap.
                  - Desktop sm+: inline 1 baris (Dari | Sampai | Terapkan | range). -->
+            <div>
+                <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Sumber Pesanan</label>
+                <select id="report-source" onchange="loadReport()" class="w-full sm:max-w-xs">
+                    <option value="">Semua Sumber</option>
+                    <option value="collaboration_event">Collaboration Event</option>
+                    <option value="website">Website</option>
+                    <option value="whatsapp">WhatsApp / Kasir</option>
+                    <option value="event_offline">Event Offline</option>
+                    <option value="offline">Offline / Walk-in</option>
+                </select>
+                <p class="text-[11px] text-white/35 mt-1">Pilih satu sumber untuk melihat penghasilan channel itu saja — semua angka di bawah ikut menyesuaikan.</p>
+            </div>
             <div class="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-[1fr_1fr_auto_1fr] sm:gap-3 sm:items-end">
                 <div>
                     <label class="block text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Dari</label>
@@ -1460,9 +1472,9 @@
 
         <!-- Tab + Export -->
         <div class="flex flex-wrap items-center gap-1.5">
-            <button data-rtab="sales" onclick="reportTab('sales')" class="report-tab">Sales</button>
-            <button data-rtab="type" onclick="reportTab('type')" class="report-tab">Sales Type</button>
-            <button data-rtab="items" onclick="reportTab('items')" class="report-tab">Items Sales</button>
+            <button data-rtab="sales" onclick="reportTab('sales')" class="report-tab">Ringkasan</button>
+            <button data-rtab="type" onclick="reportTab('type')" class="report-tab">Per Sumber</button>
+            <button data-rtab="items" onclick="reportTab('items')" class="report-tab">Per Produk</button>
             <button id="report-export-btn" onclick="exportReportExcel()"
                 class="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-400/30 text-green-300 hover:bg-green-500/20 transition shrink-0"
                 title="Export ke Excel (sesuai tanggal yang diterapkan)">
@@ -1472,45 +1484,55 @@
 
         <!-- Tab: Sales -->
         <div id="rtab-sales" class="report-panel space-y-3">
+            <!-- Ringkasan sekalimat: jawaban langsung sebelum orang harus membaca kartu -->
+            <div id="rep-summary" class="bg-cyan-500/8 border border-cyan-400/25 rounded-2xl px-4 py-3 text-sm text-cyan-50 leading-relaxed">—</div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Gross Sales</div>
+                    <div class="text-[11px] font-semibold text-white/55">Penjualan Kotor</div>
                     <div id="rep-gross" class="text-lg lg:text-xl font-bold text-white mt-1">—</div>
+                    <div class="text-[10px] text-white/35 mt-1">Harga barang sebelum potongan</div>
                 </div>
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Discount</div>
+                    <div class="text-[11px] font-semibold text-white/55">Diskon Diberikan</div>
                     <div id="rep-discount" class="text-lg lg:text-xl font-bold text-orange-300 mt-1">—</div>
+                    <div class="text-[10px] text-white/35 mt-1">Potongan harga ke pembeli</div>
                 </div>
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Refunds</div>
+                    <div class="text-[11px] font-semibold text-white/55">Uang Dikembalikan</div>
                     <div id="rep-refunds" class="text-lg lg:text-xl font-bold text-red-300 mt-1">—</div>
+                    <div class="text-[10px] text-white/35 mt-1">Refund ke pembeli</div>
                 </div>
                 <div class="bg-darkcard border border-cyan-400/30 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Net Sales</div>
+                    <div class="text-[11px] font-semibold text-cyan-200/80">Uang Masuk Bersih</div>
                     <div id="rep-net" class="text-lg lg:text-xl font-bold text-green-400 mt-1">—</div>
+                    <div class="text-[10px] text-white/40 mt-1">Kotor − diskon − refund</div>
                 </div>
             </div>
-            <p class="text-xs text-white/40"><span id="rep-orders" class="font-bold text-white/60">0</span> order dibayar dalam periode. Net = Gross − Discount − Refunds.</p>
+            <p class="text-xs text-white/45"><span id="rep-orders" class="font-bold text-white/70">0</span> pesanan dibayar di periode ini.</p>
             <!-- Margin / Profit (admin only) -->
             <div id="rep-margin-section" class="hidden grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">COGS (HPP)</div>
+                    <div class="text-[11px] font-semibold text-white/55">Modal Barang</div>
                     <div id="rep-cogs" class="text-lg lg:text-xl font-bold text-amber-300 mt-1">—</div>
+                    <div class="text-[10px] text-white/35 mt-1">Biaya bikin barangnya (HPP)</div>
                 </div>
                 <div class="bg-darkcard border border-emerald-400/30 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Gross Profit</div>
+                    <div class="text-[11px] font-semibold text-emerald-200/80">Untung Kotor</div>
                     <div id="rep-gp" class="text-lg lg:text-xl font-bold text-emerald-400 mt-1">—</div>
+                    <div class="text-[10px] text-white/40 mt-1">Uang masuk − modal barang</div>
                 </div>
                 <div class="bg-darkcard border border-emerald-400/30 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Margin</div>
+                    <div class="text-[11px] font-semibold text-emerald-200/80">Margin Untung</div>
                     <div id="rep-margin" class="text-lg lg:text-xl font-bold text-emerald-400 mt-1">—</div>
+                    <div id="rep-margin-hint" class="text-[10px] text-white/40 mt-1">Untung per Rp 100 penjualan</div>
                 </div>
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
-                    <div class="text-[10px] uppercase tracking-wider text-white/40">Net Revenue (basis)</div>
-                    <div id="rep-netrev" class="text-lg lg:text-xl font-bold text-white/80 mt-1">—</div>
+                    <div class="text-[11px] font-semibold text-white/55">Rata-rata per Pesanan</div>
+                    <div id="rep-avg" class="text-lg lg:text-xl font-bold text-white/85 mt-1">—</div>
+                    <div class="text-[10px] text-white/35 mt-1">Uang masuk ÷ jumlah pesanan</div>
                 </div>
             </div>
-            <p id="rep-margin-note" class="hidden text-xs text-white/40">Profit = Net Revenue (produk − diskon, tanpa ongkir) − COGS. COGS dari snapshot saat order, termasuk item bonus. <span class="text-amber-300/70 font-semibold">Admin only.</span></p>
+            <p id="rep-margin-note" class="hidden text-xs text-white/40">Belum dikurangi ongkos operasional (gaji, sewa, iklan) — ini untung dari barangnya saja. Modal barang diambil dari harga pokok saat pesanan dibuat, dan item bonus tetap dihitung modalnya. <span class="text-amber-300/70 font-semibold">Hanya admin yang bisa melihat bagian ini.</span></p>
 
             <!-- Margin per Produk (admin only) — payoff COGS: mana yang paling untung -->
             <div id="rep-margin-products-section" class="hidden bg-darkcard border border-white/10 rounded-2xl overflow-x-auto mt-1">
@@ -3155,19 +3177,79 @@ function reportPreset(p) {
     document.querySelectorAll('.report-preset').forEach(b => b.classList.toggle('report-preset-active', b.dataset.preset === p));
     loadReport();
 }
+// Cocokkan chip preset dengan rentang tanggal yang benar-benar dipakai.
+function repSyncPresetChip(from, to) {
+    const now = new Date();
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const hariIni = iso(now);
+    const senin = new Date(now); senin.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const cocok = { today: [hariIni, hariIni],
+                    week:  [iso(senin), hariIni],
+                    month: [iso(new Date(now.getFullYear(), now.getMonth(), 1)), hariIni],
+                    year:  [iso(new Date(now.getFullYear(), 0, 1)), hariIni] };
+    document.querySelectorAll('.report-preset').forEach(b => {
+        const c = cocok[b.dataset.preset];
+        b.classList.toggle('report-preset-active', !!c && c[0] === from && c[1] === to);
+    });
+}
+
 function reportTab(t) {
     reportCurrentTab = t;
     document.querySelectorAll('.report-panel').forEach(el => el.classList.add('hidden'));
     document.getElementById('rtab-' + t)?.classList.remove('hidden');
     document.querySelectorAll('.report-tab').forEach(b => b.classList.toggle('report-tab-active', b.dataset.rtab === t));
 }
+// Persen gaya Indonesia: 47.6 -> "47,6%".
+function repPersen(v) {
+    return String(Number(v ?? 0).toFixed(1)).replace('.', ',') + '%';
+}
+
+// Tanggal ramah baca: 2026-08-13 -> 13 Agu 2026.
+function repTanggal(iso) {
+    if (!iso) return '';
+    const [y, m, d] = String(iso).split('-').map(Number);
+    const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    return `${d} ${bulan[(m || 1) - 1]} ${y}`;
+}
+
+// Satu kalimat yang menjawab langsung "berapa penghasilannya", supaya tidak perlu
+// menafsirkan tujuh kartu angka dulu. Data penjualan & profit datang terpisah
+// (profit admin-only dan bisa gagal), jadi potongannya disimpan lalu digabung.
+let _repSummary = {};
+function repRenderSummary(bagian) {
+    Object.assign(_repSummary, bagian);
+    const el = document.getElementById('rep-summary');
+    if (!el) return;
+    const { from, to, source, sales, margin } = _repSummary;
+    if (!sales) { el.textContent = '—'; return; }
+    const periode = from === to ? repTanggal(from) : `${repTanggal(from)} – ${repTanggal(to)}`;
+    const sumber = source ? repSourceLabelSafe(source) : 'semua sumber';
+    if (!sales.orders) {
+        el.innerHTML = `Tidak ada pesanan dibayar dari <b>${esc(sumber)}</b> pada ${esc(periode)}.`;
+        return;
+    }
+    let kalimat = `Pada <b>${esc(periode)}</b> dari <b>${esc(sumber)}</b>: `
+        + `<b>${sales.orders}</b> pesanan, uang masuk bersih <b class="text-green-300">${repRp(sales.net)}</b>`;
+    if (margin) {
+        kalimat += `, untung <b class="text-emerald-300">${repRp(margin.gross_profit)}</b>`
+                 + ` <span class="text-cyan-100/60">(${repPersen(margin.margin_pct)} dari penjualan)</span>`;
+    }
+    el.innerHTML = kalimat + '.';
+}
+
 async function loadReport() {
+    _repSummary = {};
     const from = document.getElementById('report-from')?.value;
     const to   = document.getElementById('report-to')?.value;
     if (!from || !to) return;
+    const source = document.getElementById('report-source')?.value || '';
+    // Chip preset hanya boleh menyala kalau rentangnya memang cocok dengan preset itu.
+    // Sebelumnya chip tetap menyala setelah tanggal diubah manual, jadi periode yang
+    // terbaca di layar bertentangan dengan chip yang aktif.
+    repSyncPresetChip(from, to);
     const lbl = document.getElementById('report-range-label');
-    if (lbl) lbl.textContent = `${from} → ${to}`;
-    const qs = `?from=${from}&to=${to}`;
+    if (lbl) lbl.textContent = `${repTanggal(from)} – ${repTanggal(to)}`;
+    const qs = `?from=${from}&to=${to}` + (source ? `&source=${encodeURIComponent(source)}` : '');
     try {
         const s = await apiFetch('/api/reports/sales' + qs);
         document.getElementById('rep-gross').textContent    = repRp(s.gross);
@@ -3175,6 +3257,10 @@ async function loadReport() {
         document.getElementById('rep-refunds').textContent  = s.refunds ? '−' + repRp(s.refunds) : repRp(0);
         document.getElementById('rep-net').textContent      = repRp(s.net);
         document.getElementById('rep-orders').textContent   = s.orders || 0;
+        const avg = s.orders > 0 ? Math.round(s.net / s.orders) : 0;
+        const avgEl = document.getElementById('rep-avg');
+        if (avgEl) avgEl.textContent = repRp(avg);
+        repRenderSummary({ from, to, source, sales: s });
 
         // Margin / Profit (admin-only — endpoint balas 403 utk non-admin, di-skip diam-diam)
         const _isAdminRep = (JSON.parse(localStorage.getItem('ws_admin_user') || '{}').role === 'admin');
@@ -3185,8 +3271,10 @@ async function loadReport() {
                 const m = await apiFetch('/api/reports/margin' + qs);
                 document.getElementById('rep-cogs').textContent   = m.cogs ? '−' + repRp(m.cogs) : repRp(0);
                 document.getElementById('rep-gp').textContent     = repRp(m.gross_profit);
-                document.getElementById('rep-margin').textContent = (m.margin_pct ?? 0) + '%';
-                document.getElementById('rep-netrev').textContent = repRp(m.net_revenue);
+                document.getElementById('rep-margin').textContent = repPersen(m.margin_pct);
+                const hint = document.getElementById('rep-margin-hint');
+                if (hint) hint.textContent = `Dari tiap Rp 100 penjualan, untung Rp ${Math.round(m.margin_pct ?? 0)}`;
+                repRenderSummary({ from, to, source, margin: m });
                 mSection?.classList.remove('hidden');
                 mNote?.classList.remove('hidden');
             } catch (e) { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); }
@@ -3217,7 +3305,9 @@ async function loadReport() {
             } catch (e) { mpSection?.classList.add('hidden'); }
         } else { mSection?.classList.add('hidden'); mNote?.classList.add('hidden'); document.getElementById('rep-margin-products-section')?.classList.add('hidden'); }
 
-        const types = await apiFetch('/api/reports/sales-type' + qs);
+        // Tab "Per Sumber" sengaja TIDAK ikut difilter — justru di situ gunanya
+        // membandingkan antar channel. Kalau ikut disaring, isinya cuma satu baris.
+        const types = await apiFetch(`/api/reports/sales-type?from=${from}&to=${to}`);
         document.getElementById('rep-type-body').innerHTML = (types || []).map(t => `
             <tr class="border-t border-white/5">
                 <td class="p-3 font-medium">${repSourceLabel(t.source)}</td>
@@ -3268,7 +3358,10 @@ async function exportReportExcel() {
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan…'; }
 
     try {
-        const qs = `?from=${from}&to=${to}`;
+        // Export ikut filter sumber yang sedang dipilih — kalau tidak, file Excel-nya
+        // berisi semua channel padahal layarnya menampilkan satu channel saja.
+        const srcExp = document.getElementById('report-source')?.value || '';
+        const qs = `?from=${from}&to=${to}` + (srcExp ? `&source=${encodeURIComponent(srcExp)}` : '');
         const [salesKpi, rows] = await Promise.all([
             apiFetch('/api/reports/sales' + qs),
             apiFetch('/api/reports/items-detail' + qs),

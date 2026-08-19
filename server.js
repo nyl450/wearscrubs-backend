@@ -2726,11 +2726,17 @@ const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE pa
 // gross = nilai barang (qty x harga, sudah termasuk bordir) SEBELUM diskon, TANPA
 // ongkir = total_amount - shipping_cost + discount_amount. net = gross - discount
 // - refunds. Refund dihitung by created_at (tanggal refund terjadi), non-cancelled.
+// Sumber order yang boleh difilter. Nilai di luar daftar diabaikan (dianggap
+// "semua") — bukan ditolak, supaya link report lama tidak mendadak error.
+const REPORT_SOURCES = ['website', 'whatsapp', 'event_offline', 'offline', 'collaboration_event'];
+
 function reportRange(req) {
     const { from, to } = req.query;
     const ok = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
     if (!ok(from) || !ok(to)) return null;
-    return { from, to };
+    const src = String(req.query.source || '').trim();
+    // '' = semua sumber. Dipakai sebagai parameter SQL, jadi tetap lewat whitelist.
+    return { from, to, source: REPORT_SOURCES.includes(src) ? src : '' };
 }
 
 // GET /api/reports/sales?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -2744,18 +2750,24 @@ app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => 
                     COUNT(*)::int AS orders
                FROM orders
               WHERE payment_status='paid' AND order_status<>'cancelled'
-                AND paid_at >= $1::date AND paid_at < ($2::date + 1)`,
-            [r.from, r.to]
+                AND paid_at >= $1::date AND paid_at < ($2::date + 1)
+                AND ($3 = '' OR order_source = $3)`,
+            [r.from, r.to, r.source]
         );
+        // Refund ikut disaring lewat order-nya supaya angkanya sepadan dengan
+        // penjualan di atas — kalau tidak, memilih satu channel akan mengurangi
+        // penjualan channel itu dengan refund channel lain.
         const ref = await dbGet(
-            `SELECT COALESCE(SUM(amount),0)::bigint AS refunds
-               FROM refunds
-              WHERE status<>'cancelled'
-                AND created_at >= $1::date AND created_at < ($2::date + 1)`,
-            [r.from, r.to]
+            `SELECT COALESCE(SUM(rf.amount),0)::bigint AS refunds
+               FROM refunds rf JOIN orders o ON o.id = rf.order_id
+              WHERE rf.status<>'cancelled'
+                AND rf.created_at >= $1::date AND rf.created_at < ($2::date + 1)
+                AND ($3 = '' OR o.order_source = $3)`,
+            [r.from, r.to, r.source]
         );
         const gross = Number(sales.gross), discount = Number(sales.discount), refunds = Number(ref.refunds);
-        res.json({ from: r.from, to: r.to, gross, discount, refunds, net: gross - discount - refunds, orders: sales.orders });
+        res.json({ from: r.from, to: r.to, source: r.source, gross, discount, refunds,
+                   net: gross - discount - refunds, orders: sales.orders });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2772,22 +2784,25 @@ app.get('/api/reports/margin', requireAuth(['admin']), async (req, res) => {
                     COALESCE(SUM(discount_amount),0)::bigint AS discount
                FROM orders
               WHERE payment_status='paid' AND order_status<>'cancelled'
-                AND paid_at >= $1::date AND paid_at < ($2::date + 1)`,
-            [r.from, r.to]
+                AND paid_at >= $1::date AND paid_at < ($2::date + 1)
+                AND ($3 = '' OR order_source = $3)`,
+            [r.from, r.to, r.source]
         );
         const cogsRow = await dbGet(
             `SELECT COALESCE(SUM(oi.total_cogs),0)::bigint AS cogs
                FROM order_items oi JOIN orders o ON o.id = oi.order_id
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
-                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)`,
-            [r.from, r.to]
+                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND ($3 = '' OR o.order_source = $3)`,
+            [r.from, r.to, r.source]
         );
         const gross = Number(rev.gross), discount = Number(rev.discount), cogs = Number(cogsRow.cogs);
         const net = gross - discount;
         const grossProfit = net - cogs;
         const marginPct = net > 0 ? +(grossProfit / net * 100).toFixed(1) : 0;
-        res.json({ from: r.from, to: r.to, gross_revenue: gross, discount, net_revenue: net, cogs, gross_profit: grossProfit, margin_pct: marginPct });
+        res.json({ from: r.from, to: r.to, source: r.source, gross_revenue: gross, discount,
+                   net_revenue: net, cogs, gross_profit: grossProfit, margin_pct: marginPct });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2811,9 +2826,10 @@ app.get('/api/reports/margin-by-product', requireAuth(['admin']), async (req, re
                 AND oi.is_bonus = FALSE
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
                 AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND ($3 = '' OR o.order_source = $3)
               GROUP BY product, p.sku, oi.variant_type
               ORDER BY (COALESCE(SUM(oi.price*oi.quantity),0) - COALESCE(SUM(oi.total_cogs),0)) DESC`,
-            [r.from, r.to]
+            [r.from, r.to, r.source]
         );
         res.json(rows.map(x => {
             const revenue = Number(x.revenue), cogs = Number(x.cogs), gp = revenue - cogs;
@@ -2899,8 +2915,9 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
                 AND oi.is_bonus = FALSE
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
                 AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND ($3 = '' OR o.order_source = $3)
               ORDER BY o.paid_at ASC, o.order_code ASC`,
-            [r.from, r.to]
+            [r.from, r.to, r.source]
         );
         // COGS rahasia → strip dari payload kalau bukan admin (report:view bisa dipunya staf).
         const isAdmin = req.user && req.user.role === 'admin';
@@ -2926,9 +2943,10 @@ app.get('/api/reports/items', requireMenu('report','view'), async (req, res) => 
                 AND oi.is_bonus = FALSE
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
                 AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND ($3 = '' OR o.order_source = $3)
               GROUP BY p.id, p.name, p.sku, p.category, p.price
               ORDER BY total_sales DESC`,
-            [r.from, r.to]
+            [r.from, r.to, r.source]
         );
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
