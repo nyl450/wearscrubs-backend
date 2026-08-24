@@ -4566,6 +4566,21 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
 // - total_amount += additional (nilai final, tampil di invoice/laporan)
 // - bordir_status = 'pending' (admin review lagi setelah selisih lunas)
 // - Audit note: append "[Tambah bordir post-payment: Rp X]"
+// Kategori yang boleh dibordir + posisi bordir yang sah. Kembaran daftar ini
+// ada di public/dashboard.html (BORDIR_CATS / BORDIR_POS_LABELS) — kalau
+// menambah kategori atau posisi, ubah KEDUANYA.
+// Cap masuk Agustus 2026: bidang bordirnya depan/belakang, bukan kiri/kanan dada.
+const BORDIR_CATS = ['tops', 'gown', 'set', 'caps'];
+const BORDIR_POS_BY_CAT = { caps: ['depan', 'belakang'] };
+const BORDIR_POS_DEFAULT = ['kanan', 'kiri', 'lengan-kiri', 'punggung'];
+const VALID_BORDIR_POS = new Set([...BORDIR_POS_DEFAULT, 'depan', 'belakang']);
+// Posisi default per tipe: nama opsi ke-1, logo opsi ke-2 → otomatis tidak
+// bentrok (kanan/kiri utk baju, depan/belakang utk cap).
+function bordirPosDefault(cat, type) {
+    const list = BORDIR_POS_BY_CAT[String(cat || '').trim().toLowerCase()] || BORDIR_POS_DEFAULT;
+    return type === 'logo' ? (list[1] || list[0]) : list[0];
+}
+
 app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
@@ -4581,11 +4596,16 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
 
         // Fetch existing items + product names (utk item_label rebuild)
         const orderItems = await dbAll(
-            `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) AS product_name FROM order_items oi
+            `SELECT oi.*, COALESCE(oi.custom_product_name, p.name) AS product_name,
+                    COALESCE(p.category, oi.custom_product_category) AS category
+             FROM order_items oi
              LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1`,
             [order.id]
         );
         const itemMap = new Map(orderItems.map(i => [Number(i.id), i]));
+        // Kategori per item — dipakai utk memilih posisi bordir default yang
+        // masuk akal (cap depan/belakang, sisanya kiri/kanan dada).
+        const itemCatById = new Map(orderItems.map(i => [Number(i.id), i.category || '']));
 
         // Validate each requested item
         const newEntries = []; // utk append ke embroidery_details
@@ -4617,12 +4637,16 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                 if (!(Number.isInteger(logoPrice) && logoPrice >= 0))
                     return res.status(400).json({ error: `Item "${item.product_name}": harga bordir logo tidak valid` });
             }
-            // Posisi must differ kalau both
-            if (wantNama && wantLogo) {
-                const np = r.nama_pos || 'kanan';
-                const lp = r.logo_pos || 'kiri';
-                if (np === lp) return res.status(400).json({ error: `Item "${item.product_name}": posisi nama & logo tidak boleh sama` });
-            }
+            // Posisi bordir. Dulu nilai dari client dipakai mentah — sekarang
+            // divalidasi ke whitelist supaya slug ngawur tidak ikut tersimpan di
+            // JSON (renderer invoice/WA membacanya sebagai label).
+            const itemCat = item.custom_product_category || itemCatById.get(Number(item.id)) || '';
+            const namaPos = VALID_BORDIR_POS.has(String(r.nama_pos || '').trim().toLowerCase())
+                ? String(r.nama_pos).trim().toLowerCase() : bordirPosDefault(itemCat, 'nama');
+            const logoPos = VALID_BORDIR_POS.has(String(r.logo_pos || '').trim().toLowerCase())
+                ? String(r.logo_pos).trim().toLowerCase() : bordirPosDefault(itemCat, 'logo');
+            if (wantNama && wantLogo && namaPos === logoPos)
+                return res.status(400).json({ error: `Item "${item.product_name}": posisi nama & logo tidak boleh sama` });
 
             const itemLabel = `${item.product_name} (${item.color || '-'}, ${item.size || '-'})`;
             // Variant disimpan di entry bordir — itemLabel tidak memuatnya, padahal
@@ -4640,7 +4664,7 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                     item_label: itemLabel,
                     value: String(r.nama_text).trim(),
                     color: String(r.nama_color || '').trim(),
-                    position: r.nama_pos || 'kanan'
+                    position: namaPos
                 };
                 if (t2) entry.value_line2 = t2;
                 // Garis pemisah opsional di antara baris 1 & baris 2 (visual mockup).
@@ -4661,7 +4685,7 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
                     item_label: itemLabel,
                     value: logoData,
                     color: String(r.logo_color || '').trim(),
-                    position: r.logo_pos || 'kiri'
+                    position: logoPos
                 };
                 if (itemVariant) logoEntry.variant_type = itemVariant;
                 newEntries.push(logoEntry);
@@ -5671,11 +5695,14 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
             : await dbGet('SELECT * FROM products WHERE id = $1 AND is_active = TRUE', [toProductId]);
         if (!product) return res.status(400).json({ error: 'Produk baru tidak ditemukan atau sudah dihapus dari katalog' });
 
-        // Bordir cuma bisa di Atasan & Gown (aturan yang sama dipakai Kasir). Kalau baris ini
-        // punya bordir lalu dipindah ke celana/cap/aksesoris, harga bordirnya akan tetap
-        // ditagih untuk barang yang tidak mungkin dibordir.
-        if ((item.bordir_nama || item.bordir_logo) && !['tops','gown'].includes(product.category))
-            return res.status(400).json({ error: `Item ini punya bordir, sedangkan ${product.name} kategorinya ${product.category} — bordir hanya untuk Atasan & Gown. Hapus bordirnya dulu, atau pilih produk Atasan/Gown.` });
+        // Bordir cuma bisa di kategori BORDIR_CATS (aturan yang sama dipakai Kasir).
+        // Kalau baris ini punya bordir lalu dipindah ke celana/aksesoris, harga
+        // bordirnya akan tetap ditagih untuk barang yang tidak mungkin dibordir.
+        // CATATAN: pindah antar kategori yang bidang bordirnya beda (Atasan ⇄ Cap)
+        // TIDAK mengoreksi posisi tersimpan — 'kanan' akan ikut ke cap dan harus
+        // dibetulkan admin lewat Edit Bordir.
+        if ((item.bordir_nama || item.bordir_logo) && !BORDIR_CATS.includes(product.category))
+            return res.status(400).json({ error: `Item ini punya bordir, sedangkan ${product.name} kategorinya ${product.category} — bordir hanya untuk Atasan, Gown & Cap. Hapus bordirnya dulu, atau pilih produk yang bisa dibordir.` });
 
         // Kombinasi WAJIB punya baris inventory — itu definisi "varian katalog". Di luar itu
         // namanya custom, dan custom punya alurnya sendiri (harga manual, fulfill manual).
@@ -5863,7 +5890,9 @@ app.put('/api/orders/:id/embroidery/:index', requireMenu('orders','edit'), uploa
 
         const entry = { ...arr[idx] };
         const posIn = String(req.body.position || '').trim().toLowerCase();
-        const validPos = ['kanan', 'kiri'].includes(posIn) ? posIn : entry.position;
+        // Whitelist penuh — dulu cuma kanan/kiri, jadi posisi cap (depan/belakang)
+        // diam-diam ditolak dan entry-nya balik ke nilai lama saat diedit.
+        const validPos = VALID_BORDIR_POS.has(posIn) ? posIn : entry.position;
 
         if (entry.type === 'nama') {
             const val = String(req.body.value || '').trim();

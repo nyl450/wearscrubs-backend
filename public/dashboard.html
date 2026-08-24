@@ -1619,7 +1619,7 @@
             <ol class="list-decimal pl-5 space-y-1 text-white/70">
                 <li>Isi <b>Data Pelanggan</b> (nama, no WA, kota, alamat, berat, ekspedisi, ongkir, metode bayar). Pilih ekspedisi <b>"Free Ongkir"</b>/<b>"Kirim sendiri"</b> → ongkir otomatis 0.</li>
                 <li>Pilih <b>Produk → Warna → Variant → Ukuran → Jumlah</b>. Muncul info stok (hijau aman / kuning menipis / merah habis).</li>
-                <li><b>Bordir</b> (Atasan & Gown): klik kotak <b>Nama</b>/<b>Logo</b> lalu isi detailnya. Celana/Cap otomatis tidak bisa bordir.</li>
+                <li><b>Bordir</b> (Atasan, Gown & Cap): klik kotak <b>Nama</b>/<b>Logo</b> lalu isi detailnya. Posisi untuk Cap = <b>depan/belakang</b>, selain itu kiri/kanan dada. Celana & aksesoris tidak bisa bordir.</li>
                 <li>Mau tambah produk → <b>Tambah Produk</b>. Diskon opsional (5% / 30%).</li>
                 <li>Klik <b>Simpan &amp; Generate Invoice WA</b> → tombol jadi abu-abu "Tersimpan".</li>
                 <li>Klik <b>Kirim ke WA Customer</b> → WhatsApp terbuka berisi pesan + instruksi bayar. Kirim.</li>
@@ -1687,7 +1687,7 @@
             <ol class="list-decimal pl-5 space-y-1 text-white/80">
                 <li>Produk <b>tidak pernah refund uang</b> — hanya tukar size.</li>
                 <li>Refund uang <b>hanya untuk bordir yang ditolak</b>.</li>
-                <li><b>Bordir untuk Atasan & Gown</b> (bukan celana/cap).</li>
+                <li><b>Bordir untuk Atasan, Gown & Cap</b> (bukan celana/aksesoris).</li>
                 <li>Pelanggan wajib bayar maksimal <b>2×24 jam</b>.</li>
                 <li><b>Custom &amp; Pre-Order</b> harus siap dulu sebelum dikemas.</li>
                 <li>Selalu <b>kirim WA konfirmasi</b> setelah catat order, dan <b>kirim resi</b> setelah dikirim.</li>
@@ -7546,7 +7546,7 @@ async function viewOrder(id) {
             </div>
             ${detailsMissingWarning}
             ${bordirDetails.map((e, idx) => {
-                const posLbl = e.position === 'kanan' ? 'Kanan Dada' : e.position === 'kiri' ? 'Kiri Dada' : '';
+                const posLbl = bordirPosLabel(e.position);
                 const isLogoUploaded = e.type === 'logo' && e.value && (e.value.startsWith('data:image/') || e.value.startsWith('http'));
                 // Stable filename for download — order_code + item label + index
                 const cleanLabel = (e.item_label || '').replace(/[^a-zA-Z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
@@ -8167,7 +8167,7 @@ function openAddBordirModal() {
 
     const list = document.getElementById('add-bordir-items-list');
     list.innerHTML = eligible.map(i => `
-        <div class="bg-white/3 border border-white/10 rounded-xl p-3 space-y-2.5" data-item-id="${i.id}" data-qty="${i.quantity}">
+        <div class="bg-white/3 border border-white/10 rounded-xl p-3 space-y-2.5" data-item-id="${i.id}" data-qty="${i.quantity}" data-cat="${esc(i.category || '')}">
             <label class="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" class="ab-pick mt-1 w-4 h-4 accent-teal-500 shrink-0" onchange="abOnPickChange(this)">
                 <div class="flex-1 min-w-0">
@@ -8190,10 +8190,7 @@ function openAddBordirModal() {
                             Beri garis pemisah di antara baris 1 &amp; baris 2
                         </label>
                         <select class="ab-nama-color !py-1.5 !text-xs">${THREAD_COLOR_OPTS_HTML}</select>
-                        <select class="ab-nama-pos !py-1.5 !text-xs">
-                            <option value="kanan">Posisi: Kanan Dada</option>
-                            <option value="kiri">Posisi: Kiri Dada</option>
-                        </select>
+                        <select class="ab-nama-pos !py-1.5 !text-xs">${bordirPosOptionsHTML(i.category, null, { prefix: 'Posisi: ' })}</select>
                         <input type="number" class="ab-nama-price !py-1.5 !text-xs sm:col-span-2" placeholder="Harga (default 20000)" value="20000" min="0" oninput="updateAddBordirPreview()">
                     </div>
                 </div>
@@ -8214,10 +8211,7 @@ function openAddBordirModal() {
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <select class="ab-logo-color !py-1.5 !text-xs">${LOGO_COLOR_OPTS_HTML}</select>
-                            <select class="ab-logo-pos !py-1.5 !text-xs">
-                                <option value="kiri">Posisi: Kiri Dada</option>
-                                <option value="kanan">Posisi: Kanan Dada</option>
-                            </select>
+                            <select class="ab-logo-pos !py-1.5 !text-xs">${bordirPosOptionsHTML(i.category, bordirPosDefault(i.category, 'logo'), { prefix: 'Posisi: ', forLogo: true })}</select>
                             <input type="number" class="ab-logo-price !py-1.5 !text-xs sm:col-span-2" placeholder="Harga (default 30000)" value="30000" min="0" oninput="updateAddBordirPreview()">
                         </div>
                     </div>
@@ -8346,13 +8340,13 @@ async function submitAddBordir() {
             const ul = w.querySelector('.ab-nama-underline')?.checked === true;
             if (ul) itemPayload.nama_underline = true;
             itemPayload.nama_color = w.querySelector('.ab-nama-color')?.value.trim() || '';
-            itemPayload.nama_pos = w.querySelector('.ab-nama-pos')?.value || 'kanan';
+            itemPayload.nama_pos = w.querySelector('.ab-nama-pos')?.value || bordirPosDefault(w.dataset.cat, 'nama');
             itemPayload.nama_price = parseInt(w.querySelector('.ab-nama-price')?.value || 20000);
         }
         if (wantLogo) {
             itemPayload.bordir_logo = true;
             itemPayload.logo_color = w.querySelector('.ab-logo-color')?.value.trim() || '';
-            itemPayload.logo_pos = w.querySelector('.ab-logo-pos')?.value || 'kiri';
+            itemPayload.logo_pos = w.querySelector('.ab-logo-pos')?.value || bordirPosDefault(w.dataset.cat, 'logo');
             itemPayload.logo_price = parseInt(w.querySelector('.ab-logo-price')?.value || 30000);
             // logo_data optional — kalau admin upload file, kirim base64 dataURL.
             // Backend externalize ke Supabase Storage (anti DB bloat). Kalau kosong
@@ -9707,10 +9701,13 @@ function eiPreview() {
         && String(variant) === String(it.variant_type || 'null') && size === it.size
         && qty === oldQty;
 
-    // Bordir hanya untuk Atasan & Gown — cegah pindah ke celana/cap/aksesoris selagi
-    // barisnya masih punya bordir (server juga menolak, ini biar ketahuan lebih awal).
-    if ((it.bordir_nama || it.bordir_logo) && !['tops','gown'].includes(prod.category)) {
-        box.innerHTML = `<p class="text-amber-300/80">Item ini punya bordir, sedangkan <b>${esc(prod.name)}</b> kategorinya ${esc(prod.category)}. Bordir cuma bisa di Atasan & Gown — hapus bordirnya dulu atau pilih produk lain.</p>`;
+    // Bordir cuma untuk kategori di BORDIR_CATS — cegah pindah ke celana/aksesoris
+    // selagi barisnya masih punya bordir (server juga menolak, ini biar ketahuan
+    // lebih awal). CATATAN: pindah antar kategori yang beda bidang bordirnya
+    // (mis. Atasan 'kanan dada' → Cap) tidak mengubah posisi tersimpan — admin
+    // perlu betulkan lewat Edit Bordir setelah tukar.
+    if ((it.bordir_nama || it.bordir_logo) && !catCanBordir(prod.category)) {
+        box.innerHTML = `<p class="text-amber-300/80">Item ini punya bordir, sedangkan <b>${esc(prod.name)}</b> kategorinya ${esc(prod.category)}. Bordir cuma bisa di Atasan, Gown & Cap — hapus bordirnya dulu atau pilih produk lain.</p>`;
         if (saveBtn) saveBtn.disabled = true;
         return;
     }
@@ -9785,9 +9782,18 @@ function editBordirEntry(orderId, idx) {
     const entry = arr[idx];
     if (!entry) { toast('Entry bordir tidak ditemukan.', true); return; }
 
-    const posOpts = (sel) => `
-        <option value="kanan"${sel==='kanan'?' selected':''}>Kanan Dada</option>
-        <option value="kiri"${sel==='kiri'?' selected':''}>Kiri Dada</option>`;
+    // Opsi posisi ikut KATEGORI item yang dibordir (cap = depan/belakang), jadi
+    // entry-nya dicocokkan dulu ke baris order lewat item_label. Kalau tidak
+    // ketemu (label lama/aneh), pakai daftar default kiri/kanan dada — dan
+    // posisi tersimpan yang tak ada di daftar tetap ditampilkan sebagai opsi
+    // supaya membuka modal ini tidak diam-diam mengganti posisi yang sudah benar.
+    const embItem = orderItemForLabel(o, entry.item_label);
+    const posOpts = (sel) => {
+        const cat = embItem ? (embItem.category || '') : '';
+        let list = bordirPosList(cat, entry.type === 'logo');
+        if (sel && !list.includes(sel)) list = [sel].concat(list);
+        return list.map(pv => `<option value="${pv}"${pv === sel ? ' selected' : ''}>${bordirPosLabel(pv)}</option>`).join('');
+    };
     const isNama = entry.type === 'nama';
     const curLogo = (!isNama && entry.value && (entry.value.startsWith('http') || entry.value.startsWith('data:image/'))) ? entry.value : '';
 
@@ -10752,6 +10758,66 @@ const THREAD_COLOR_OPTS_HTML = '<option value="">Pilih warna...</option>' +
 const LOGO_COLOR_OPTS_HTML = THREAD_COLOR_OPTS_HTML +
     '<option value="Multi warna">Multi warna (bawaan logo)</option>';
 
+// ── KATEGORI YANG BISA DIBORDIR ──────────────────────────────────────────────
+// Satu daftar dipakai semua gate (Kasir single, Kasir bulk, tukar item di Edit
+// Pesanan) supaya tidak lagi beda-beda antar tempat. `set` berisi atasan; `caps`
+// masuk sejak Agustus 2026 (cap bisa dibordir depan/belakang). Server punya
+// daftar kembar di server.js — kalau menambah kategori, ubah KEDUANYA.
+const BORDIR_CATS = ['tops', 'gown', 'set', 'caps'];
+function catCanBordir(cat) { return BORDIR_CATS.includes(String(cat || '').trim().toLowerCase()); }
+
+// ── POSISI BORDIR ────────────────────────────────────────────────────────────
+// Atasan/gown/set dibordir di DADA (kiri/kanan). Cap beda bidang: yang ada cuma
+// DEPAN & BELAKANG — "Kiri Dada" tidak punya arti di sebuah topi. Karena itu
+// daftar opsi posisi dipilih per KATEGORI, bukan satu daftar global.
+// Yang disimpan ke DB tetap slug ('kanan'|'kiri'|'depan'|'belakang'); label di
+// bawah murni tampilan. Slug 'lengan-kiri'/'punggung' (sudah lama ada di
+// dropdown logo mode bulk) ikut dipetakan — sebelum ini semua nilai yang bukan
+// 'kanan' dirender "Kiri Dada", jadi logo di punggung tampil salah di WA & invoice.
+const BORDIR_POS_LABELS = {
+    kanan:         { id: 'Kanan Dada',  en: 'Right Chest' },
+    kiri:          { id: 'Kiri Dada',   en: 'Left Chest'  },
+    depan:         { id: 'Depan',       en: 'Front'       },
+    belakang:      { id: 'Belakang',    en: 'Back'        },
+    'lengan-kiri': { id: 'Lengan Kiri', en: 'Left Sleeve' },
+    punggung:      { id: 'Punggung',    en: 'Back'        },
+};
+const BORDIR_POS_BY_CAT = { caps: ['depan', 'belakang'] };
+const BORDIR_POS_DEFAULT = ['kanan', 'kiri'];
+// Opsi ekstra khusus dropdown LOGO (baju): logo besar kadang di lengan/punggung.
+// Tidak berlaku utk cap — bidangnya sudah ter-cover depan/belakang.
+const BORDIR_POS_LOGO_EXTRA = ['lengan-kiri', 'punggung'];
+
+function bordirPosList(cat, forLogo) {
+    const c = String(cat || '').trim().toLowerCase();
+    if (BORDIR_POS_BY_CAT[c]) return BORDIR_POS_BY_CAT[c].slice();
+    return forLogo ? BORDIR_POS_DEFAULT.concat(BORDIR_POS_LOGO_EXTRA) : BORDIR_POS_DEFAULT.slice();
+}
+function isCapCat(cat) { return String(cat || '').trim().toLowerCase() === 'caps'; }
+// lang: 'en' utk invoice (bahasa Inggris), selain itu Bahasa Indonesia.
+// Slug tak dikenal (data lama freeform) dirender apa adanya, bukan ditebak.
+function bordirPosLabel(pos, lang) {
+    const k = String(pos || '').trim().toLowerCase();
+    const e = BORDIR_POS_LABELS[k];
+    if (e) return lang === 'en' ? e.en : e.id;
+    if (!k) return '-';
+    return k.charAt(0).toUpperCase() + k.slice(1);
+}
+function bordirPosOptionsHTML(cat, selected, opts) {
+    opts = opts || {};
+    return bordirPosList(cat, opts.forLogo).map(pv =>
+        `<option value="${pv}"${pv === selected ? ' selected' : ''}>${(opts.prefix || '') + bordirPosLabel(pv)}</option>`
+    ).join('');
+}
+// Default: nama ambil opsi ke-1, logo opsi ke-2 — supaya keduanya otomatis beda
+// (kanan/kiri utk baju, depan/belakang utk cap).
+function bordirPosDefault(cat, type) {
+    const list = bordirPosList(cat);
+    return type === 'logo' ? (list[1] || list[0]) : list[0];
+}
+// "Posisi di Dada" salah kalau barangnya cap.
+function bordirPosFieldLabel(cat) { return isCapCat(cat) ? 'Posisi Bordir' : 'Posisi di Dada'; }
+
 // Variant custom product di Kasir. Dulu input teks bebas → penulisan tidak konsisten
 // ("lengan pendek", "Pendek", "LP") sehingga menyulitkan pencocokan & laporan.
 // Sekarang dropdown; opsi "Ketik manual…" tetap disediakan untuk kasus tak terduga.
@@ -10940,7 +11006,7 @@ function waAddItem() {
                     <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waOnQtyInput(${idx})" />
                 </div>
                 <div>
-                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya Atasan, Gown & Set)</span></label>
+                    <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya Atasan, Gown, Set & Cap)</span></label>
                     <div class="grid grid-cols-2 gap-1.5 mt-0.5">
                         <div class="wa-bordir-pill" id="wa-bordir-nama-pill-${idx}" onclick="waToggleBordir(${idx},'nama')">
                             <span class="wa-bordir-box" id="wa-bordir-nama-box-${idx}"></span>
@@ -10980,11 +11046,8 @@ function waAddItem() {
                         <select id="wa-bordir-nama-color-${idx}" class="input-sm">${THREAD_COLOR_OPTS_HTML}</select>
                     </div>
                     <div>
-                        <label class="wa-field-label">Posisi di Dada</label>
-                        <select id="wa-bordir-nama-pos-${idx}" class="input-sm">
-                            <option value="kanan">Kanan Dada</option>
-                            <option value="kiri">Kiri Dada</option>
-                        </select>
+                        <label class="wa-field-label"><span id="wa-bordir-nama-pos-label-${idx}">Posisi di Dada</span></label>
+                        <select id="wa-bordir-nama-pos-${idx}" class="input-sm">${bordirPosOptionsHTML('')}</select>
                     </div>
                 </div>
                 <div>
@@ -11013,11 +11076,8 @@ function waAddItem() {
                         <select id="wa-bordir-logo-color-${idx}" class="input-sm">${LOGO_COLOR_OPTS_HTML}</select>
                     </div>
                     <div>
-                        <label class="wa-field-label">Posisi di Dada</label>
-                        <select id="wa-bordir-logo-pos-${idx}" class="input-sm">
-                            <option value="kiri">Kiri Dada</option>
-                            <option value="kanan">Kanan Dada</option>
-                        </select>
+                        <label class="wa-field-label"><span id="wa-bordir-logo-pos-label-${idx}">Posisi di Dada</span></label>
+                        <select id="wa-bordir-logo-pos-${idx}" class="input-sm">${bordirPosOptionsHTML('', 'kiri', { forLogo: true })}</select>
                     </div>
                 </div>
                 <div>
@@ -11091,19 +11151,25 @@ function waToggleBonus(idx) {
     waUpdateTotal();
 }
 
-// Bordir berlaku untuk atasan, gown, dan SET (set berisi atasan — "Ariel Set"
-// dulu terpaksa diinput sebagai kategori 'tops' supaya bordirnya bisa aktif).
-// Kategori lain (pants/caps/aksesoris) → pill bordir dimatikan & di-reset.
+// Bordir berlaku untuk atasan, gown, SET (set berisi atasan — "Ariel Set" dulu
+// terpaksa diinput sebagai kategori 'tops' supaya bordirnya bisa aktif), dan
+// CAP. Kategori lain (celana/aksesoris) → pill bordir dimatikan & di-reset.
+// Daftar kategorinya di BORDIR_CATS; opsi posisi menyesuaikan kategori
+// (cap = depan/belakang, sisanya kiri/kanan dada).
+// Kategori efektif satu baris Kasir. Custom Product ambil dari dropdown
+// cprod-cat (dataset option-nya kosong utk sentinel), selain itu dari dataset
+// option produk. Dipakai gating bordir + pemilihan opsi posisi.
+function waItemCat(idx) {
+    if (waIsCustomProduct(idx)) return document.getElementById(`wa-cprod-cat-${idx}`)?.value || '';
+    return document.getElementById(`wa-prod-${idx}`)?.selectedOptions?.[0]?.dataset?.cat || '';
+}
+
 function waSetBordirEnabled(idx) {
-    const prodEl = document.getElementById(`wa-prod-${idx}`);
-    // Custom Product mode: category comes from the cprod-cat dropdown, not the
-    // product option's dataset (which is empty for the sentinel).
-    const cat = waIsCustomProduct(idx)
-        ? (document.getElementById(`wa-cprod-cat-${idx}`)?.value || '')
-        : (prodEl?.selectedOptions?.[0]?.dataset?.cat || '');
-    const enabled = cat === 'tops' || cat === 'gown' || cat === 'set';
+    const cat = waItemCat(idx);
+    const enabled = catCanBordir(cat);
     const hint = document.getElementById(`wa-bordir-hint-${idx}`);
     if (hint) hint.classList.toggle('hidden', enabled || !cat); // show hint only when a non-top product is chosen
+    if (enabled) waSyncBordirPosOptions(idx, cat);
     ['nama','logo'].forEach(type => {
         const pill = document.getElementById(`wa-bordir-${type}-pill-${idx}`);
         if (pill) pill.classList.toggle('wa-disabled', !enabled);
@@ -11121,6 +11187,25 @@ function waSetBordirEnabled(idx) {
         if (prev) { prev.innerHTML = ''; prev.classList.add('hidden'); }
         waCheckBordirSection();
     }
+}
+
+// Isi ulang dropdown posisi mengikuti kategori item. Dipanggil tiap kali produk
+// / kategori custom-product berubah — dropdown di template dirender statis
+// (kiri/kanan) karena saat itu kategorinya belum diketahui.
+// Nilai yang sudah dipilih dipertahankan kalau masih valid di kategori baru;
+// kalau tidak (mis. admin pindah dari Atasan 'kanan' ke Cap), jatuh ke default
+// kategori itu supaya tidak ada posisi tak masuk akal yang ikut tersimpan.
+function waSyncBordirPosOptions(idx, cat) {
+    ['nama', 'logo'].forEach(type => {
+        const sel = document.getElementById(`wa-bordir-${type}-pos-${idx}`);
+        if (!sel) return;
+        const valid = bordirPosList(cat, type === 'logo');
+        const cur = sel.value;
+        sel.innerHTML = bordirPosOptionsHTML(cat, null, { forLogo: type === 'logo' });
+        sel.value = valid.includes(cur) ? cur : bordirPosDefault(cat, type);
+        const lbl = document.getElementById(`wa-bordir-${type}-pos-label-${idx}`);
+        if (lbl) lbl.textContent = bordirPosFieldLabel(cat);
+    });
 }
 
 function waToggleBordir(idx, type) {
@@ -11141,9 +11226,12 @@ function waToggleBordir(idx, type) {
         const namaPos = document.getElementById(`wa-bordir-nama-pos-${idx}`);
         const logoPos = document.getElementById(`wa-bordir-logo-pos-${idx}`);
         if (namaPos && logoPos && namaPos.value === logoPos.value) {
-            // Newly activated type gets the opposite position
-            if (type === 'logo') logoPos.value = namaPos.value === 'kanan' ? 'kiri' : 'kanan';
-            else namaPos.value = logoPos.value === 'kanan' ? 'kiri' : 'kanan';
+            // Yang baru diaktifkan pindah ke posisi lain. Dulu hardcoded
+            // kanan↔kiri; sekarang ambil opsi lain dari dropdown itu sendiri
+            // supaya ikut benar di cap (depan↔belakang).
+            const other = (sel, taken) => [...sel.options].map(o => o.value).find(v => v && v !== taken);
+            if (type === 'logo') logoPos.value = other(logoPos, namaPos.value) || logoPos.value;
+            else namaPos.value = other(namaPos, logoPos.value) || namaPos.value;
         }
     }
     waUpdateTotal();
@@ -11610,7 +11698,9 @@ function buildOrderWaMessage(o) {
     const items = o.items || [];
     const itemLines = items.map(it => {
         const lineTotal = it.is_bonus ? 0 : (Number(it.price) || 0) * (it.quantity || 1);
-        let line = `- ${it.product_name || 'Produk'} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS' : rp(lineTotal)}`;
+        // Nama ikut "Set" (lihat setNameSuffix) — pesan ini adalah rincian tagihan
+        // yang dibaca customer, jadi harus sama dengan invoice.
+        let line = `- ${displayProductName(it)} (${it.color || '-'}${it.variant_type && it.variant_type !== 'null' ? ', ' + it.variant_type : ''}, ${it.size || '-'}) x${it.quantity} = ${it.is_bonus ? 'GRATIS' : rp(lineTotal)}`;
         if (it.is_custom_size) line += ' [Custom]';
         if (it.is_custom_product) line += ' [Custom Product]';
         if (it.is_po) line += ' [Pre-Order]';
@@ -11624,7 +11714,7 @@ function buildOrderWaMessage(o) {
     try { emb = o.embroidery_details ? (typeof o.embroidery_details === 'string' ? JSON.parse(o.embroidery_details) : o.embroidery_details) : []; } catch (e) {}
     const bordirLines = (Array.isArray(emb) && emb.length)
         ? `\n\n*Detail Bordir:*\n` + emb.map(e => {
-            const posLabel = e.position === 'kanan' ? 'Kanan Dada' : 'Kiri Dada';
+            const posLabel = bordirPosLabel(e.position);
             if (e.type === 'nama') {
                 // Baris ke-2 opsional (mis. jabatan/gelar). Pakai " // " separator
                 // supaya jelas di WA single-line.
@@ -11843,6 +11933,40 @@ function stripItemLabelPrice(lbl) {
         .trim();
 }
 
+// Kategori "set" = atasan + bawahan dalam 1 item. Ini mengubah barang yang
+// benar-benar dikirim/dijahit, jadi WAJIB kelihatan di invoice MAUPUN Format
+// Order — nama produk custom ("Hakurodi") sendirian tidak memberi tahu bahwa
+// yang dibeli sepasang. Kategori lain (tops/pants/caps/gown/aksesoris) tidak
+// ditempel: nama + warna + size sudah cukup, dan "Hakurodi Tops" cuma noise.
+// Kalau admin sudah mengetik "Set" di nama produk, jangan dobel.
+// CATATAN: ini murni LABEL TAMPILAN. Jangan dipakai untuk membangun
+// `item_label` atau kunci matching bordir — yang tersimpan di DB tetap nama
+// mentah, dan menempelkan "Set" di sana akan memutus pencocokan bordir↔item.
+// Cari baris order yang dipakai satu entry bordir, lewat `item_label`
+// ("Produk (Warna, Size)"). Dipakai untuk hal-hal yang butuh KATEGORI item —
+// mis. opsi posisi bordir (cap depan/belakang vs baju kiri/kanan dada).
+function orderItemForLabel(order, itemLabel) {
+    const lbl = String(typeof stripItemLabelPrice === 'function' ? stripItemLabelPrice(itemLabel) : itemLabel || '').trim();
+    if (!lbl || !order || !Array.isArray(order.items)) return null;
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const m = /^(.*)\(([^,]+),\s*([^)]+)\)\s*$/.exec(lbl);
+    if (!m) return null;
+    const [name, color, size] = [norm(m[1]), norm(m[2]), norm(m[3])];
+    return order.items.find(it =>
+        norm(it.product_name) === name && norm(it.color) === color && norm(it.size) === size) || null;
+}
+
+function setNameSuffix(item) {
+    if (!item) return '';
+    const cat = String(item.category || item.custom_product_category || '').trim().toLowerCase();
+    if (cat !== 'set') return '';
+    if (/\bset\b/i.test(item.product_name || '')) return '';
+    return ' Set';
+}
+function displayProductName(item, fallback) {
+    return (item && item.product_name ? item.product_name : (fallback || 'Produk')) + setNameSuffix(item);
+}
+
 function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
     const items = order.items || [];
     const embDetails = (() => {
@@ -11864,19 +11988,6 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         if (lv === 'pendek' || lv === 'lengan pendek') return 'Short Sleeve';
         if (lv === 'panjang' || lv === 'lengan panjang') return 'Long Sleeve';
         return v.charAt(0).toUpperCase() + v.slice(1);
-    };
-
-    // Kategori "set" = atasan + bawahan dalam 1 item. Ini mengubah barang yang
-    // benar-benar dikirim, jadi WAJIB kelihatan di baris invoice — nama produk
-    // custom ("Hakurodi") sendirian tidak memberi tahu customer bahwa yang
-    // dibeli sepasang. Kategori lain (tops/pants/caps/gown/aksesoris) tidak
-    // ditempel: nama + warna + size sudah cukup, dan "Hakurodi Tops" cuma noise.
-    // Kalau admin sudah mengetik "Set" di nama produk, jangan dobel.
-    const categorySuffix = (item) => {
-        const cat = String(item.category || item.custom_product_category || '').trim().toLowerCase();
-        if (cat !== 'set') return '';
-        if (/\bset\b/i.test(item.product_name || '')) return '';
-        return ' Set';
     };
 
     // Status pembayaran. Bedakan LUNAS penuh vs DP (baru bayar sebagian):
@@ -11951,7 +12062,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             : '';
         itemRowsHTML += `<tr>
             <td>
-                <div style="line-height:1.45;">${esc((item.product_name || 'Product') + categorySuffix(item))} <strong>${esc(item.color || '')}</strong>${vt} <span style="color:#6b7280">·</span> Size: ${esc(item.size || '')}</div>
+                <div style="line-height:1.45;">${esc(displayProductName(item, 'Product'))} <strong>${esc(item.color || '')}</strong>${vt} <span style="color:#6b7280">·</span> Size: ${esc(item.size || '')}</div>
                 ${badgeStrip}
             </td>
             <td>${isBonus ? 'Free' : fmtRp(basePrice)}</td>
@@ -12080,7 +12191,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                 // (dulu supaya visible di background #f9f9f9; sekarang bg = warna baju,
                 // biasanya gelap → putih tampil kontras).
                 const col = THREAD_HEX[rawCol.toLowerCase()] || rawCol || (dark ? '#ffffff' : '#1a1a1a');
-                const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+                const posLbl = bordirPosLabel(emb.position, 'en');
                 // Divider pakai currentColor → auto match warna text.
                 const dividerHTML = emb.value_underline
                     ? `<div style="border-top:1.5px solid currentColor;margin:5px auto 3px;width:60%;"></div>`
@@ -12095,7 +12206,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
                     ${emb.value_line2 ? `<p style="font-size:14px;font-weight:600;margin:${emb.value_underline ? '0' : '3px 0 0'};font-family:Georgia,serif;letter-spacing:0.02em;">${esc(emb.value_line2)}</p>` : ''}
                 </div>`;
             } else {
-                const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+                const posLbl = bordirPosLabel(emb.position, 'en');
                 const rawCol = (emb.color || '').trim();
                 const isMulti = rawCol.toLowerCase() === 'multi warna';
                 // Use logo from emb.value — base64 (legacy) or Storage URL (new) — else WA form upload, else placeholder
@@ -12152,7 +12263,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         // DB; penambahan "Set" murni tampilan, kategorinya diambil dari items.
         const setKeys = new Set();
         items.forEach(it => {
-            if (String(it.category || it.custom_product_category || '').trim().toLowerCase() !== 'set') return;
+            if (!setNameSuffix(it)) return;
             setKeys.add(labelKey(it.product_name || it.custom_product_name || '', it.color, it.size));
         });
         const applySetSuffix = (lbl) => {
@@ -12247,26 +12358,30 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
 
             if (hasBoth) {
                 // ── Both bordir: SATU item per kolom, konsisten detail + visual ──
-                // Urut kolom by POSISI dada: item posisi 'kiri' → kolom kiri, 'kanan' →
-                // kolom kanan. Detail & visual sama-sama ikut → tiap kolom = 1 item utuh
-                // (dulu detail per-tipe tapi visual per-posisi → kolom kiri: detail Nama
-                // tapi visual Logo, bikin bingung). Fallback urutan tipe kalau posisi
+                // Urut kolom by POSISI: 'kiri' → kolom kiri, 'kanan' → kolom kanan.
+                // Detail & visual sama-sama ikut → tiap kolom = 1 item utuh (dulu
+                // detail per-tipe tapi visual per-posisi → kolom kiri: detail Nama
+                // tapi visual Logo, bikin bingung). Untuk CAP posisinya
+                // depan/belakang — kiri/kanan tak berlaku, jadi 'depan' yang
+                // ditaruh duluan (urutan baca). Fallback urutan tipe kalau posisi
                 // kebetulan sama (order lama/edge).
                 let leftColEmb, rightColEmb;
-                if (nama.position === 'kanan' && logo.position === 'kiri') { leftColEmb = logo; rightColEmb = nama; }
+                const firstPos = (a, b) => (a.position === 'kanan' && b.position === 'kiri')
+                    || (a.position === 'belakang' && b.position === 'depan');
+                if (firstPos(nama, logo)) { leftColEmb = logo; rightColEmb = nama; }
                 else { leftColEmb = nama; rightColEmb = logo; }
 
                 const detFor = (e) => e.type === 'nama'
                     ? `<p style="margin:0 0 6px;font-weight:700;">✏️ Embroidery Name / Text</p>
                        <p style="margin:3px 0;">Name: <strong style="font-size:15px;">${esc(e.value||'-')}</strong></p>
                        <p style="margin:3px 0;">Thread: ${esc(e.color||'-')}</p>
-                       <p style="margin:3px 0;">Position: ${e.position==='kanan'?'Right':'Left'} Chest</p>
+                       <p style="margin:3px 0;">Position: ${bordirPosLabel(e.position, 'en')}</p>
                        <p style="margin:5px 0 0;font-size:11px;color:#555;">Letter height ~1.2 cm</p>`
                     : `<p style="margin:0 0 6px;font-weight:700;">🎨 Embroidery Logo</p>
                        <p style="margin:3px 0;">Thread: ${esc(e.color||'-')}</p>
-                       <p style="margin:3px 0;">Position: ${e.position==='kanan'?'Right':'Left'} Chest</p>`;
+                       <p style="margin:3px 0;">Position: ${bordirPosLabel(e.position, 'en')}</p>`;
                 const headFor = (e) => e.type === 'nama' ? 'Request Details — Embroidery Name / Text' : 'Request Details — Embroidery Logo';
-                const posLbl  = (e) => e.position === 'kanan' ? 'RIGHT CHEST' : 'LEFT CHEST';
+                const posLbl  = (e) => bordirPosLabel(e.position, 'en').toUpperCase();
 
                 sectionTables.push(`${cardOpen}
                 <table style="${cardTable}">
@@ -12301,7 +12416,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             } else {
                 // ── Single bordir: detail | mockup side by side ──
                 const emb = nama || logo;
-                const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+                const posLbl = bordirPosLabel(emb.position, 'en');
                 const prodLine = `<p style="margin:0 0 8px;${prodLineStyle}">Product: ${prodLineText(emb.item_label, pairVariant)}</p>`;
                 const det = emb.type === 'nama'
                     ? `${prodLine}
@@ -12334,7 +12449,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         for (let i = 0; i < embDetails.length; i++) {
             if (embDetails[i].type !== 'logo' || usedLogoIdx.has(i)) continue;
             const emb = embDetails[i];
-            const posLbl = emb.position === 'kanan' ? 'Right Chest' : 'Left Chest';
+            const posLbl = bordirPosLabel(emb.position, 'en');
             const det = `<p style="margin:0 0 8px;${prodLineStyle}">Product: ${prodLineText(emb.item_label, resolveVariant(emb))}</p>
                 <p style="margin:0 0 4px;font-weight:700;">🎨 Embroidery Logo</p>
                 <p style="margin:2px 0;font-size:11px;">Thread: ${esc(emb.color||'-')}</p>
@@ -12760,7 +12875,7 @@ function bulkAddPanel() {
         </div>
 
         <div class="bg-white/2 border border-white/8 rounded-lg p-3 space-y-3">
-            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">2 · Bordir (berlaku semua baris di panel ini) <span class="bulk-bordir-hint hidden text-amber-300/70 normal-case">— hanya Atasan & Gown</span></p>
+            <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">2 · Bordir (berlaku semua baris di panel ini) <span class="bulk-bordir-hint hidden text-amber-300/70 normal-case">— hanya Atasan, Gown & Cap</span></p>
             <div class="flex flex-wrap items-center gap-3">
                 <label class="wa-bordir-pill" onclick="bulkToggleBordir(this, 'nama')">
                     <span class="wa-bordir-box"></span>
@@ -12784,10 +12899,7 @@ function bulkAddPanel() {
                     </div>
                     <div>
                         <label class="text-[9px] text-white/40 uppercase">Posisi</label>
-                        <select class="bulk-cell-nama-pos bulk-input mt-0.5 text-[11px]">
-                            <option value="kanan">Dada Kanan</option>
-                            <option value="kiri">Dada Kiri</option>
-                        </select>
+                        <select class="bulk-cell-nama-pos bulk-input mt-0.5 text-[11px]">${bordirPosOptionsHTML('')}</select>
                     </div>
                 </div>
                 <label class="flex items-center gap-2 text-[11px] text-white/70 mt-2 cursor-pointer select-none">
@@ -12811,12 +12923,7 @@ function bulkAddPanel() {
                         <div class="grid grid-cols-3 gap-2">
                             <div>
                                 <label class="text-[9px] text-white/40 uppercase">Posisi</label>
-                                <select class="bulk-cell-logo-pos bulk-input mt-0.5 text-[11px]">
-                                    <option value="kiri">Dada Kiri</option>
-                                    <option value="kanan">Dada Kanan</option>
-                                    <option value="lengan-kiri">Lengan Kiri</option>
-                                    <option value="punggung">Punggung</option>
-                                </select>
+                                <select class="bulk-cell-logo-pos bulk-input mt-0.5 text-[11px]">${bordirPosOptionsHTML('', 'kiri', { forLogo: true })}</select>
                             </div>
                             <div>
                                 <label class="text-[9px] text-white/40 uppercase">Warna</label>
@@ -12977,13 +13084,24 @@ function bulkToggleBordir(el, kind) {
     bulkUpdateGrandTotal();
 }
 
-// Bordir hanya untuk tops (atasan) & gown. Produk lain → matikan + reset bordir.
+// Bordir mengikuti BORDIR_CATS (atasan, gown, set, cap). Produk lain → matikan
+// + reset bordir. Opsi posisi ikut kategori: cap = depan/belakang.
 function bulkSetBordirEnabled(panel) {
     if (!panel) return;
     const cat = panel._state.selectedProduct?.category || '';
-    const enabled = cat === 'tops' || cat === 'gown';
+    const enabled = catCanBordir(cat);
     const hint = panel.querySelector('.bulk-bordir-hint');
     if (hint) hint.classList.toggle('hidden', enabled || !cat);
+    if (enabled) {
+        [['nama', '.bulk-cell-nama-pos'], ['logo', '.bulk-cell-logo-pos']].forEach(([type, selector]) => {
+            const sel = panel.querySelector(selector);
+            if (!sel) return;
+            const valid = bordirPosList(cat, type === 'logo');
+            const cur = sel.value;
+            sel.innerHTML = bordirPosOptionsHTML(cat, null, { forLogo: type === 'logo' });
+            sel.value = valid.includes(cur) ? cur : bordirPosDefault(cat, type);
+        });
+    }
     ['nama','logo'].forEach(kind => {
         const hidden = panel.querySelector('.bulk-cell-bordir-' + kind);
         const pill = hidden ? hidden.closest('.wa-bordir-pill') : null;
@@ -13699,7 +13817,7 @@ function _kasirCollectSingleItems() {
                     const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
                     const ul = document.getElementById(`wa-bordir-nama-underline-${idx}`)?.checked === true;
                     const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
-                    nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                    nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || bordirPosDefault(waItemCat(idx), 'nama');
                     if (!t) { posErrors.push(`${il}: isi teks bordir nama.`); continue; }
                     const payload = { item_label: il, type: 'nama', value: t, color: c, position: nP };
                     if (t2) payload.value_line2 = t2;
@@ -13709,7 +13827,7 @@ function _kasirCollectSingleItems() {
                 }
                 if (bordirLogoCP) {
                     const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
-                    lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                    lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || bordirPosDefault(waItemCat(idx), 'logo');
                     embroideryDetails.push({ item_label: il, type: 'logo', value: waBordirLogoFiles[idx] || 'kirim via WA', color: c, position: lP, ...(cpVariant ? { variant_type: cpVariant } : {}) });
                 }
                 if (bordirNamaCP && bordirLogoCP && nP && lP && nP === lP) posErrors.push(`${il}: posisi bordir nama dan logo tidak boleh sama.`);
@@ -13777,7 +13895,7 @@ function _kasirCollectSingleItems() {
                 const t2 = document.getElementById(`wa-bordir-nama-text2-${idx}`)?.value.trim() || '';
                 const ul = document.getElementById(`wa-bordir-nama-underline-${idx}`)?.checked === true;
                 const c  = document.getElementById(`wa-bordir-nama-color-${idx}`)?.value.trim() || '';
-                nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || 'kanan';
+                nP = document.getElementById(`wa-bordir-nama-pos-${idx}`)?.value || bordirPosDefault(waItemCat(idx), 'nama');
                 if (!t) { posErrors.push(`Nama bordir untuk ${pName} belum diisi.`); continue; }
                 const payload = { type: 'nama', item_label: il, value: t, color: c, position: nP };
                 if (t2) payload.value_line2 = t2;
@@ -13787,7 +13905,7 @@ function _kasirCollectSingleItems() {
             }
             if (bordirLogo) {
                 const c = document.getElementById(`wa-bordir-logo-color-${idx}`)?.value.trim() || '';
-                lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || 'kiri';
+                lP = document.getElementById(`wa-bordir-logo-pos-${idx}`)?.value || bordirPosDefault(waItemCat(idx), 'logo');
                 embroideryDetails.push({ type: 'logo', item_label: il, value: waBordirLogoFiles[idx] || 'Logo dikirim via WA', color: c, position: lP, ...(ilVariant ? { variant_type: ilVariant } : {}) });
             }
             if (bordirNama && bordirLogo && nP && lP && nP === lP) posErrors.push(`${pName}: posisi bordir nama dan logo tidak boleh sama.`);
@@ -13854,8 +13972,9 @@ function kasirAddToCartBulk() {
         const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
         const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
         if (logoActive && !panel._state.logoFile) { errors.push(pl + ': logo belum diupload.'); continue; }
-        const namaPos = panel.querySelector('.bulk-cell-nama-pos')?.value || 'kanan';
-        const logoPos = panel.querySelector('.bulk-cell-logo-pos').value || 'kiri';
+        const bulkCat = panel._state.selectedProduct?.category || '';
+        const namaPos = panel.querySelector('.bulk-cell-nama-pos')?.value || bordirPosDefault(bulkCat, 'nama');
+        const logoPos = panel.querySelector('.bulk-cell-logo-pos').value || bordirPosDefault(bulkCat, 'logo');
         if (namaActive && logoActive && namaPos === logoPos) { errors.push(pl + ': posisi bordir nama & logo tidak boleh sama.'); continue; }
         const isCustomColor = color === '__custom__';
         const customColorName = isCustomColor ? panel.querySelector('.bulk-cell-custom-color-name').value.trim() : '';
@@ -14196,8 +14315,12 @@ function _generateFormatOrderText(o, opts) {
         const variantStr = (it.variant_type && it.variant_type !== 'null') ? `, ${it.variant_type}` : '';
         const tags = `${it.is_po ? ' [Pre-Order]' : ''}${(it.is_custom_size || it.is_custom_product) ? ' [Custom]' : ''}`;
         const priceTag = withPrice ? ` (${rp(basePerUnit)})` : '';
-        const headLine = `${it.product_name || 'Produk'}`;
-        const detailLine = `- ${it.product_name}, Warna ${it.color}${variantStr}, Size ${it.size}`;
+        // Nama tampilan (ikut "Set" utk kategori set) — lihat setNameSuffix().
+        // `il` di bawah SENGAJA tetap nama mentah: itu kunci pencocokan ke
+        // `item_label` yang tersimpan di DB, menempel "Set" akan memutusnya.
+        const dispName = displayProductName(it, 'Produk');
+        const headLine = `${dispName}`;
+        const detailLine = `- ${dispName}, Warna ${it.color}${variantStr}, Size ${it.size}`;
 
         const il = `${it.product_name} (${it.color}, ${it.size})`;
         const namas = claim(it, il, 'nama');
@@ -14213,7 +14336,7 @@ function _generateFormatOrderText(o, opts) {
         if (namas.length && logos.length) bordirTag = 'bordir nama & logo, ';
         else if (namas.length) bordirTag = 'bordir nama, ';
         else if (logos.length) bordirTag = 'bordir logo, ';
-        rekap.push(`- ${it.product_name}, Warna ${it.color}${variantStr}, Size ${it.size}, ${bordirTag}${qty} pcs`);
+        rekap.push(`- ${dispName}, Warna ${it.color}${variantStr}, Size ${it.size}, ${bordirTag}${qty} pcs`);
 
         if (!hasBordir) {
             // ── Item tanpa bordir: grouped, tanpa garis pemisah ──
@@ -14229,10 +14352,12 @@ function _generateFormatOrderText(o, opts) {
                 text += `${detailLine}${priceTag}${tags}\n`;
                 if (namas[p]) {
                     text += `\nBordir nama:\n${namaLines(namas[p])}\nwarna bordir ${namas[p].color || '-'}\n`;
+                    text += `posisi ${bordirPosLabel(namas[p].position).toLowerCase()}\n`;
                     if (withPrice) text += `(${rp(bNP)})\n`;
                 }
                 if (logos[p]) {
                     text += `\nBordir logo:\nwarna bordir ${logos[p].color || '-'}\n`;
+                    text += `posisi ${bordirPosLabel(logos[p].position).toLowerCase()}\n`;
                     if (withPrice) text += `(${rp(bLP)})\n`;
                 }
                 text += `\nJumlah: 1 ${unitLabel(it.category)}\n`;
