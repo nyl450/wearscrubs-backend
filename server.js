@@ -4621,6 +4621,12 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
             const wantLogo = !!r.bordir_logo;
             if (!wantNama && !wantLogo)
                 return res.status(400).json({ error: `Item "${item.product_name}": pilih minimal 1 (nama / logo)` });
+            // Gate kategori — aturan yang sama dipakai Kasir & tukar item. Endpoint
+            // ini dulu tidak mengeceknya sama sekali, jadi bordir bisa ditambahkan
+            // ke celana/aksesoris lewat modal Tambah Bordir dan ikut tertagih.
+            const catForItem = itemCatById.get(Number(item.id)) || '';
+            if (!BORDIR_CATS.includes(catForItem))
+                return res.status(400).json({ error: `Item "${item.product_name}" kategorinya ${catForItem || 'tidak diketahui'} — bordir hanya untuk Atasan, Gown, Set & Cap.` });
             // Validate nama detail
             let namaPrice = 0;
             if (wantNama) {
@@ -4640,11 +4646,10 @@ app.post('/api/orders/:id/add-bordir', requireMenu('orders','edit'), async (req,
             // Posisi bordir. Dulu nilai dari client dipakai mentah — sekarang
             // divalidasi ke whitelist supaya slug ngawur tidak ikut tersimpan di
             // JSON (renderer invoice/WA membacanya sebagai label).
-            const itemCat = item.custom_product_category || itemCatById.get(Number(item.id)) || '';
             const namaPos = VALID_BORDIR_POS.has(String(r.nama_pos || '').trim().toLowerCase())
-                ? String(r.nama_pos).trim().toLowerCase() : bordirPosDefault(itemCat, 'nama');
+                ? String(r.nama_pos).trim().toLowerCase() : bordirPosDefault(catForItem, 'nama');
             const logoPos = VALID_BORDIR_POS.has(String(r.logo_pos || '').trim().toLowerCase())
-                ? String(r.logo_pos).trim().toLowerCase() : bordirPosDefault(itemCat, 'logo');
+                ? String(r.logo_pos).trim().toLowerCase() : bordirPosDefault(catForItem, 'logo');
             if (wantNama && wantLogo && namaPos === logoPos)
                 return res.status(400).json({ error: `Item "${item.product_name}": posisi nama & logo tidak boleh sama` });
 

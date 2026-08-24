@@ -7744,7 +7744,7 @@ async function viewOrder(id) {
             ${o.order_status==='shipped' ? `<button onclick="confirmMarkDone(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white font-bold flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Tandai Diterima</button>` : ''}
             ${!isTrial && o.order_status==='done' ? `<button onclick="openExchangeCreate(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 font-bold border border-cyan-500/20 flex items-center gap-1.5"><i class="fa-solid fa-right-left"></i> Tukar Size</button>` : ''}
             ${!isTrial && isAdmin && !['cancelled','done','shipped'].includes(o.order_status) && (o.items||[]).length >= 2 ? `<button onclick="openSplitOrderModal()" title="Pisah jadi 2 pesanan (mis. sebagian diambil, sebagian dikirim)" class="text-xs px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/25 flex items-center gap-1.5"><i class="fa-solid fa-arrows-split-up-and-left"></i> Pisah Pesanan</button>` : ''}
-            ${!isTrial && isAdmin && o.payment_status === 'paid' && !['shipped','done','cancelled'].includes(o.order_status) && !Number(o.additional_amount_due || 0) && (o.items||[]).some(i => !i.bordir_nama && !i.bordir_logo) ? `<button onclick="openAddBordirModal()" title="Customer minta tambah bordir setelah bayar" class="text-xs px-4 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 font-bold border border-teal-400/25 flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> Tambah Bordir</button>` : ''}
+            ${!isTrial && isAdmin && o.payment_status === 'paid' && !['shipped','done','cancelled'].includes(o.order_status) && !Number(o.additional_amount_due || 0) && (o.items||[]).some(i => !i.bordir_nama && !i.bordir_logo && catCanBordir(i.category)) ? `<button onclick="openAddBordirModal()" title="Customer minta tambah bordir setelah bayar" class="text-xs px-4 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 font-bold border border-teal-400/25 flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> Tambah Bordir</button>` : ''}
             ${isAdmin && o.order_status !== 'done' && o.order_status !== 'cancelled' ? `<button onclick="openCancelOrder(${o.id})" class="text-xs px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold border border-red-500/20 flex items-center gap-1.5 mt-2 sm:mt-0 sm:ml-6" title="Batalkan pesanan ini"><i class="fa-solid fa-ban"></i> Batalkan</button>` : ''}
         </div>`;
 
@@ -8158,9 +8158,17 @@ function openAddBordirModal() {
     if (Number(o.additional_amount_due || 0) > 0) {
         toast('Masih ada selisih outstanding — konfirmasi yg lama dulu', true); return;
     }
-    const eligible = (o.items || []).filter(i => !i.bordir_nama && !i.bordir_logo);
+    // Saring KATEGORI juga, bukan cuma "belum punya bordir". Tanpa ini celana &
+    // aksesoris ikut terdaftar di sini padahal Kasir memblokirnya — bordir bisa
+    // ikut tertagih untuk barang yang tidak mungkin dibordir. Server menolak
+    // juga; ini supaya tidak muncul sejak awal.
+    const unbordired = (o.items || []).filter(i => !i.bordir_nama && !i.bordir_logo);
+    const eligible = unbordired.filter(i => catCanBordir(i.category));
     if (eligible.length === 0) {
-        toast('Semua item sudah punya bordir — tidak bisa tambah lagi', true); return;
+        toast(unbordired.length
+            ? 'Item yang belum dibordir kategorinya tidak bisa dibordir (bordir hanya Atasan, Gown, Set & Cap)'
+            : 'Semua item sudah punya bordir — tidak bisa tambah lagi', true);
+        return;
     }
 
     document.getElementById('add-bordir-order-code').textContent = o.order_code;
