@@ -11866,6 +11866,19 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         return v.charAt(0).toUpperCase() + v.slice(1);
     };
 
+    // Kategori "set" = atasan + bawahan dalam 1 item. Ini mengubah barang yang
+    // benar-benar dikirim, jadi WAJIB kelihatan di baris invoice — nama produk
+    // custom ("Hakurodi") sendirian tidak memberi tahu customer bahwa yang
+    // dibeli sepasang. Kategori lain (tops/pants/caps/gown/aksesoris) tidak
+    // ditempel: nama + warna + size sudah cukup, dan "Hakurodi Tops" cuma noise.
+    // Kalau admin sudah mengetik "Set" di nama produk, jangan dobel.
+    const categorySuffix = (item) => {
+        const cat = String(item.category || item.custom_product_category || '').trim().toLowerCase();
+        if (cat !== 'set') return '';
+        if (/\bset\b/i.test(item.product_name || '')) return '';
+        return ' Set';
+    };
+
     // Status pembayaran. Bedakan LUNAS penuh vs DP (baru bayar sebagian):
     //  - fully paid  → stempel hijau "PAID" + status Lunas
     //  - DP pending  → stempel amber "DP PAID / BELUM LUNAS" + sisa tagihan
@@ -11938,7 +11951,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             : '';
         itemRowsHTML += `<tr>
             <td>
-                <div style="line-height:1.45;">${esc(item.product_name || 'Product')} <strong>${esc(item.color || '')}</strong>${vt} Size: ${esc(item.size || '')}</div>
+                <div style="line-height:1.45;">${esc((item.product_name || 'Product') + categorySuffix(item))} <strong>${esc(item.color || '')}</strong>${vt} <span style="color:#6b7280">·</span> Size: ${esc(item.size || '')}</div>
                 ${badgeStrip}
             </td>
             <td>${isBonus ? 'Free' : fmtRp(basePrice)}</td>
@@ -12132,6 +12145,24 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
             const m = /^(.*)\(([^,]+),\s*([^)]+)\)\s*$/.exec(stripItemLabelPrice(lbl || ''));
             return m ? labelKey(m[1], m[2], m[3]) : null;
         };
+        // Label bordir juga ikut menampilkan "Set" (lihat `categorySuffix` di
+        // atas) — tim produksi membaca baris Product ini untuk tahu potong mana
+        // yang dibordir; kalau item-nya sepasang, itu harus kelihatan di sini
+        // juga, bukan cuma di tabel item. `item_label` tersimpan apa adanya di
+        // DB; penambahan "Set" murni tampilan, kategorinya diambil dari items.
+        const setKeys = new Set();
+        items.forEach(it => {
+            if (String(it.category || it.custom_product_category || '').trim().toLowerCase() !== 'set') return;
+            setKeys.add(labelKey(it.product_name || it.custom_product_name || '', it.color, it.size));
+        });
+        const applySetSuffix = (lbl) => {
+            const clean = stripItemLabelPrice(lbl || '');
+            const m = /^(.*)\(([^,]+),\s*([^)]+)\)\s*$/.exec(clean);
+            if (!m) return clean;
+            const nm = m[1].trim();
+            if (!setKeys.has(labelKey(m[1], m[2], m[3])) || /\bset\b/i.test(nm)) return clean;
+            return `${nm} Set (${m[2].trim()}, ${m[3].trim()})`;
+        };
         const slotCursor = {};
         const resolveVariant = (emb) => {
             const stored = variantLabel(emb.variant_type);
@@ -12161,7 +12192,7 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         const cardClose = '</div>';
         const cardTable = 'width:100%;border-collapse:collapse;';
         const prodLineText = (lbl, variant) => {
-            const base = esc(stripItemLabelPrice(lbl) || '-');
+            const base = esc(applySetSuffix(lbl) || '-');
             return variant ? `${base} <span style="color:#6b7280;font-weight:600;">·</span> ${esc(variant)}` : base;
         };
 
