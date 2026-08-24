@@ -10757,10 +10757,11 @@ function waClientAutofillInit() {
 }
 
 // Shared thread-color options — dipakai di Kasir single/bulk/custom + add-bordir.
-// 13 warna standar user request; 1 opsi ekstra (Multi warna) khusus logo.
+// 14 warna standar user request (Gold ditambah 24 Agu 2026); 1 opsi ekstra
+// (Multi warna) khusus logo.
 // Backward compat: warna existing di DB (freeform text spt "kuning tua") tetap
 // render via colorMap di renderer — dropdown ini hanya utk order BARU.
-const THREAD_COLOR_LIST = ['Putih','Hitam','Kuning','Pink','Navy','Terracotta','Biru','Abu-abu','Silver','Hijau','Toska','Merah','Ungu'];
+const THREAD_COLOR_LIST = ['Putih','Hitam','Kuning','Pink','Navy','Terracotta','Biru','Abu-abu','Silver','Hijau','Toska','Merah','Ungu','Gold'];
 const THREAD_COLOR_OPTS_HTML = '<option value="">Pilih warna...</option>' +
     THREAD_COLOR_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
 const LOGO_COLOR_OPTS_HTML = THREAD_COLOR_OPTS_HTML +
@@ -12134,16 +12135,19 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         // ThreadColor + garment palette — Bahasa Indonesia (input user) → hex.
         // Fallback: raw value (kalau user isi hex/nama CSS valid); default #1a1a1a.
         const THREAD_HEX = {
-            // 13 opsi dropdown (warna benang standar)
+            // 14 opsi dropdown (warna benang standar)
             'putih': '#ffffff', 'hitam': '#111111', 'kuning': '#eab308',
             'pink': '#ec4899', 'navy': '#1e3a8a', 'terracotta': '#b45309',
             'biru': '#2563eb', 'abu-abu': '#6b7280', 'abu abu': '#6b7280', 'abu': '#6b7280',
             'silver': '#94a3b8', 'hijau': '#16a34a', 'toska': '#0d9488', 'tosca': '#0d9488',
             'merah': '#dc2626', 'ungu': '#7c3aed',
+            // Samakan dgn swatch Gold di ALL_ACCESSORY_COLORS — dua "gold" beda
+            // hex di satu dashboard cuma bikin bingung saat cocokkan benang.
+            'gold': '#c9a227',
             // Legacy freeform (backward compat order lama)
             'oranye': '#ea580c', 'orange': '#ea580c',
             'coklat': '#78350f', 'cokelat': '#78350f',
-            'emas': '#b45309', 'gold': '#b45309',
+            'emas': '#c9a227',
             'perak': '#94a3b8',
             'krem': '#d6b98a', 'cream': '#d6b98a', 'beige': '#d6b98a',
             'maroon': '#7f1d1d', 'ungu tua': '#5b21b6',
