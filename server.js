@@ -3614,7 +3614,7 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
             if (photoUrl) {
                 await client.query(
                     `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
-                    [order.id, 'payment', photoUrl, req.body.note || '', req.user.username]
+                    [order.id, 'payment', photoUrl, (req.body && req.body.note) || '', req.user.username]
                 );
             }
 
@@ -3814,11 +3814,28 @@ app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.sing
         // Outstanding selisih bordir tambahan harus lunas dulu.
         if (Number(order.additional_amount_due || 0) > 0 && !order.additional_paid_at)
             return res.status(409).json({ error: 'Selisih bordir tambahan belum lunas. Konfirmasi bayar dulu.' });
-        // PO katalog unfulfilled guard: bordir fisik tidak bisa dimulai/selesai kalau
-        // barang fisik belum lengkap. PO katalog otomatis fulfilled saat receive stok
-        // (FIFO, paid-only). Custom_size/custom_product di-fulfill manual via fulfill-po
-        // — di sini tidak di-block karena custom dijahit dari nol (terpisah dari proses
-        // bordir katalog), jadi bisa parallel.
+        // Barang belum ada → bordir mustahil dikerjakan, apalagi diselesaikan. Bordir
+        // dijahit DI ATAS garmennya; tidak ada yang bisa dibordir kalau garmennya
+        // belum jadi. Dua sumber "barang belum ada", keduanya di-block:
+        //   - Custom (size / product): dijahit dari nol, ditandai siap manual
+        //     lewat fulfill-po ("Tandai Siap" per item di detail pesanan).
+        //   - PO katalog: menunggu stok masuk, otomatis fulfilled saat receive (FIFO).
+        //
+        // PERUBAHAN 27 Agu 2026 (permintaan James): custom DULU sengaja TIDAK di-block
+        // di sini, dengan alasan penjahitan custom bisa jalan paralel dengan bordir
+        // katalog. Itu keliru di lapangan — WS-WA-20260824-8914 masuk fase bordir
+        // padahal 6 item customnya belum dijahit sama sekali. Urutannya wajib:
+        // jahit dulu, baru bordir. Gate 'pack' sudah memeriksa ketiganya sejak awal;
+        // sekarang gate bordir disamakan.
+        const pendingCustom = await dbGet(
+            `SELECT COUNT(*)::int AS n FROM order_items
+              WHERE order_id = $1 AND (is_custom_size = TRUE OR is_custom_product = TRUE)
+                AND po_fulfilled = FALSE`,
+            [order.id]
+        );
+        if (pendingCustom && pendingCustom.n > 0)
+            return res.status(409).json({ error: 'Ada item Custom yang belum selesai dijahit — bordir baru bisa dikerjakan setelah barangnya jadi. Tandai "Siap" per item dulu di detail pesanan.' });
+
         const pendingCatPO = await dbGet(
             'SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1 AND is_po = TRUE AND po_fulfilled = FALSE',
             [order.id]
@@ -3838,7 +3855,7 @@ app.put('/api/orders/:id/bordir-done', requireMenu('orders','edit'), upload.sing
         await withTransaction(async (client) => {
             await client.query(
                 `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
-                [order.id, 'bordir', photoUrl, req.body.note || '', req.user.username]
+                [order.id, 'bordir', photoUrl, (req.body && req.body.note) || '', req.user.username]
             );
             await client.query(
                 `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
@@ -3899,7 +3916,7 @@ app.put('/api/orders/:id/pack', requireMenu('orders','edit'), upload.single('pac
         await withTransaction(async (client) => {
             await client.query(
                 `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,$2,$3,$4,$5)`,
-                [order.id, 'pack', photoUrl, req.body.note || '', req.user.username]
+                [order.id, 'pack', photoUrl, (req.body && req.body.note) || '', req.user.username]
             );
             await client.query(
                 `UPDATE orders SET order_status = 'packed', updated_at = NOW() WHERE id = $1`,

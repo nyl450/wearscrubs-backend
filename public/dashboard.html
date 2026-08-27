@@ -1643,7 +1643,7 @@
             <h3 class="font-bold text-base">4. Pre-Order &amp; Custom (barang belum ada / dijahit dulu)</h3>
             <p class="text-white/70">Pesanan Custom/Pre-Order <b>tidak bisa dikemas</b> sampai barang siap.</p>
             <ul class="list-disc pl-5 space-y-1 text-white/70">
-                <li><b>Custom</b>: setelah baju jadi → buka pesanan → <b>Tandai Siap</b>.</li>
+                <li><b>Custom</b>: setelah baju jadi → buka pesanan → <b>Tandai Siap</b>. Kalau ada bordir, bordir baru bisa ditandai selesai setelah semua item custom ditandai siap.</li>
                 <li><b>Pre-Order katalog</b>: <b>otomatis siap</b> begitu Anda <b>Terima Stok</b> ukuran itu (poin 7). Tak perlu klik.</li>
                 <li>Lihat antrian di menu <b>Pre-Order</b> (ada umur hari-nya).</li>
             </ul>
@@ -6855,15 +6855,18 @@ function renderOrders() {
                         : `<button onclick="openConfirmPayment(${o.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold">✅ Konfirmasi Bayar</button>`
                 ) : ''}
                 ${o.order_status==='bordir' ? (() => {
-                    // Gate "Tandai Bordir Selesai": butuh PO siap + bordir approved + selisih
-                    // (kalau ada) sudah lunas. Backend juga reject 409 — ini polish UX biar
-                    // admin nggak salah klik. Priority: PO > selisih > review > selesai
-                    // (PO paling atas karena bordir fisik tidak bisa dimulai kalau barang
-                    // belum lengkap).
+                    // Gate "Tandai Bordir Selesai": barang harus ADA dulu (custom sudah
+                    // dijahit, PO katalog sudah masuk), bordir approved, selisih lunas.
+                    // Backend juga reject 409 — ini polish UX biar admin nggak salah klik.
+                    // Priority: custom > PO katalog > selisih > review > selesai. Dua yang
+                    // pertama paling atas karena bordir dijahit DI ATAS garmennya: tidak
+                    // ada yang bisa dibordir kalau barangnya belum jadi.
                     const items = o.items || [];
+                    const customUnfulfilled = items.filter(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled).length;
                     const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
                     const hasOutstanding = Number(o.additional_amount_due || 0) > 0 && !o.additional_paid_at;
                     const notApproved = o.bordir_status !== 'approved';
+                    if (customUnfulfilled > 0) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Item custom belum selesai dijahit — bordir baru bisa dikerjakan setelah barangnya jadi" class="text-xs px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-400/30 text-sky-300 font-bold">✂️ Tandai Custom Siap Dulu</button>`;
                     if (poUnfulfilled > 0) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Pre-Order menunggu stok masuk — bordir mulai setelah barang ready" class="text-xs px-3 py-1.5 rounded-lg bg-orange-500/15 border border-orange-400/30 text-orange-300 font-bold">⏳ Menunggu Stok PO</button>`;
                     if (hasOutstanding) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Selisih bordir tambahan belum lunas — konfirmasi bayar dulu" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">💰 Bayar Selisih Dulu</button>`;
                     if (notApproved) return `<button onclick="event.stopPropagation();viewOrder(${o.id})" title="Review bordir dulu (Setujui/Tolak) sebelum tandai selesai" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">🔍 Review Bordir Dulu</button>`;
@@ -7713,13 +7716,15 @@ async function viewOrder(id) {
             ) : ''}
             ${o.order_status==='bordir' ? (() => {
                 const items = o.items || [];
+                const customUnfulfilled = items.filter(i => (i.is_custom_size || i.is_custom_product) && !i.po_fulfilled).length;
                 const poUnfulfilled = items.filter(i => i.is_po && !i.po_fulfilled).length;
                 const hasOutstanding = Number(o.additional_amount_due || 0) > 0 && !o.additional_paid_at;
                 const notApproved = o.bordir_status !== 'approved';
-                // Priority: PO > selisih > review > selesai (bordir fisik tidak bisa
-                // dimulai sebelum barang ready). PO unfulfilled → tombol info-only
-                // (admin tunggu receive stok katalog). Selisih → scroll banner.
-                // Belum approved → scroll review section.
+                // Priority: custom > PO katalog > selisih > review > selesai. Barang harus
+                // ADA dulu — bordir dijahit di atas garmennya. Custom → scroll ke section
+                // item (ada tombol "Tandai Siap" per item). PO katalog → info-only, admin
+                // tunggu receive stok. Selisih → scroll banner. Belum approved → scroll review.
+                if (customUnfulfilled > 0) return `<button onclick="scrollToCustomFulfill()" title="Item custom belum selesai dijahit — tandai siap per item di section Item Pesanan" class="text-xs px-4 py-2 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-300 font-bold flex items-center gap-1.5 hover:bg-sky-500/25 transition"><i class="fa-solid fa-scissors"></i> Tandai Custom Siap Dulu (${customUnfulfilled})</button>`;
                 if (poUnfulfilled > 0) return `<button title="Pre-Order menunggu stok masuk — otomatis fulfilled saat receive stok. Bordir dimulai setelah barang ready." class="text-xs px-4 py-2 rounded-xl bg-orange-500/15 border border-orange-400/30 text-orange-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-hourglass-half"></i> Menunggu Stok PO (${poUnfulfilled})</button>`;
                 if (hasOutstanding) return `<button onclick="scrollToAdditionalPayment()" title="Selisih bordir tambahan belum lunas" class="text-xs px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-money-bill-wave"></i> Bayar Selisih Dulu</button>`;
                 if (notApproved) return `<button onclick="scrollToBordirReview()" title="Review bordir dulu (Setujui/Tolak)" class="text-xs px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Review Bordir Dulu</button>`;
