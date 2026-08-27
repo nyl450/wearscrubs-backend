@@ -181,13 +181,33 @@ async function run() {
     group('8. Daftar order partner + hitungan nomor terisi');
     r = await req('GET', '/api/admin/partner-billing/receipts?partner_id=1');
     check('diterima', r.status === 200, r);
-    check('4 order milik partner 1 (termasuk yang batal & yang partner_id NULL)',
-        r.body.total === 4, r.body.total);
+    // Penghitung hanya soal order NON-BATAL: order batal tidak butuh nomor
+    // kwitansi, jadi kalau ikut dihitung "belum" menunjukkan sisa pekerjaan palsu.
+    check('total = 3 order aktif (yang batal TIDAK ikut dihitung)',
+        r.body.total === 3, r.body.total);
+    check('batal dihitung terpisah = 1', r.body.cancelled === 1, r.body.cancelled);
     check('1 sudah punya nomor', r.body.filled === 1, r.body.filled);
+    check('belum = 2 (3 aktif − 1 terisi), bukan 3', r.body.missing === 2, r.body.missing);
+    check('order batal TETAP tampil di daftar (nomor tidak terlihat lompat)',
+        (r.body.orders || []).some(o => o.order_code === 'WS-EV-003'), (r.body.orders || []).map(o => o.order_code));
+    check('4 baris ditampilkan walau yang dihitung 3',
+        (r.body.orders || []).length === 4, (r.body.orders || []).length);
     check('order partner lain tidak ikut',
         !(r.body.orders || []).some(o => o.order_code === 'WS-EV-101'));
     check('order non-collab tidak ikut',
         !(r.body.orders || []).some(o => o.order_code === 'WS-WA-001'));
+
+    // 8b — semua order aktif terisi -> "belum" harus 0 walau ada order batal
+    seed();
+    none(`UPDATE orders SET receipt_no = 'B-101' WHERE id = 101`);
+    none(`UPDATE orders SET receipt_no = 'B-102' WHERE id = 102`);
+    none(`UPDATE orders SET receipt_no = 'B-104' WHERE id = 104`);
+    group('8b. Semua order aktif terisi -> belum = 0, batal tidak bikin "belum" palsu');
+    r = await req('GET', '/api/admin/partner-billing/receipts?partner_id=1');
+    check('belum = 0', r.body.missing === 0, r.body.missing);
+    check('total aktif = 3', r.body.total === 3, r.body.total);
+    check('terisi = 3', r.body.filled === 3, r.body.filled);
+    check('batal tetap terlihat = 1', r.body.cancelled === 1, r.body.cancelled);
 
     // 9 — filter tanggal memakai invoice_date
     group('9. Filter tanggal memakai tanggal invoice');

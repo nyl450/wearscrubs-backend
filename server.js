@@ -1722,11 +1722,20 @@ app.get('/api/admin/partner-billing/receipts', requireMenu('partner-billing'), a
             }
         }
 
-        const filled = rows.filter(r => r.receipt_no && String(r.receipt_no).trim()).length;
+        // Penghitung SENGAJA hanya menghitung order non-batal. Order batal tidak
+        // butuh nomor kwitansi — lembarnya hangus — jadi kalau ikut dihitung,
+        // "belum" akan menunjukkan sisa pekerjaan yang sebenarnya tidak ada, dan
+        // admin mengejar sesuatu yang tidak perlu dikejar. Batal dihitung sendiri
+        // supaya tetap terlihat, bukan disembunyikan.
+        const aktif = rows.filter(r => r.order_status !== 'cancelled');
+        const punyaNomor = (r) => !!(r.receipt_no && String(r.receipt_no).trim());
+        const filled = aktif.filter(punyaNomor).length;
         res.json({
             partner: { id: partner.id, name: partner.name, pic_name: partner.pic_name },
-            total: rows.length,
+            total: aktif.length,
             filled,
+            missing: aktif.length - filled,
+            cancelled: rows.length - aktif.length,
             orders: rows,
         });
     } catch (err) { res.status(500).json({ error: err.message }); }

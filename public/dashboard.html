@@ -14766,9 +14766,14 @@ function pbShowInvoiceModal(inv) {
 function pbRender(data) {
     const summary = document.getElementById('pb-summary');
     const body = document.getElementById('pb-body');
+    // Semua penghitung di bawah hanya soal order NON-BATAL. Order batal tidak
+    // butuh nomor kwitansi, jadi kalau ikut dihitung, "Belum" menunjukkan sisa
+    // pekerjaan yang sebenarnya tidak ada. Batal punya kolom sendiri supaya tetap
+    // terlihat, dan hanya muncul kalau memang ada.
     const total = data.total || 0;
     const filled = data.filled || 0;
-    const kurang = total - filled;
+    const kurang = (data.missing != null) ? data.missing : Math.max(0, total - filled);
+    const batal = data.cancelled || 0;
 
     if (summary) {
         summary.classList.remove('hidden');
@@ -14776,9 +14781,10 @@ function pbRender(data) {
         summary.innerHTML = `
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex flex-wrap items-center gap-5">
-                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Order</p><p class="text-lg font-bold">${total}</p></div>
+                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Order aktif</p><p class="text-lg font-bold">${total}</p></div>
                     <div><p class="text-[10px] uppercase tracking-wider text-white/35">Sudah ada nomor</p><p class="text-lg font-bold text-emerald-300">${filled}</p></div>
                     <div><p class="text-[10px] uppercase tracking-wider text-white/35">Belum</p><p class="text-lg font-bold ${kurang ? 'text-amber-300' : 'text-white/30'}">${kurang}</p></div>
+                    ${batal ? `<div><p class="text-[10px] uppercase tracking-wider text-white/35">Batal</p><p class="text-lg font-bold text-white/30" title="Order batal tidak butuh nomor kwitansi dan tidak ikut dihitung">${batal}</p></div>` : ''}
                 </div>
                 ${total === 0 ? '' : lengkap
                     ? '<span class="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-bold"><i class="fa-solid fa-check"></i> Nomor kwitansi lengkap</span>'
@@ -14799,7 +14805,7 @@ function pbRender(data) {
         // lompat di buku tidak terbaca sebagai lembar hilang — tapi tidak bisa diedit.
         const dis = batal || terkunci;
         const ket = batal
-            ? '<span class="text-[10px] text-red-400/80">dibatalkan</span>'
+            ? '<span class="text-[10px] text-red-400/80">dibatalkan &middot; tidak perlu nomor</span>'
             : terkunci
                 ? `<span class="text-[10px] text-white/40">sudah ditagih ${esc(o.billed_on)}</span>`
                 : '';
