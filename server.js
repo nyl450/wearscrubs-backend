@@ -120,8 +120,8 @@ function requireAuth(roles = []) {
 // ─── Per-menu permissions (admin = full; staff = map {menu: 'view'|'edit'}) ─────
 // Canonical menu keys. EDITABLE = menus that have write actions (can be 'edit').
 // `customers` (Data Client) sengaja TIDAK ada di EDITABLE_MENUS — read-only.
-const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','temp-order','preorder','refund','exchange','customers','report'];
-const EDITABLE_MENUS = ['products','inventory','popular','orders','manual-order','temp-order','refund','exchange'];
+const MENU_KEYS = ['overview','products','inventory','popular','orders','manual-order','temp-order','preorder','refund','exchange','customers','report','partner-billing'];
+const EDITABLE_MENUS = ['products','inventory','popular','orders','manual-order','temp-order','refund','exchange','partner-billing'];
 
 // Normalize a user's stored permission into a map {menu:'view'|'edit'}.
 // Returns null for admin (full access sentinel). Legacy formats degrade to least
@@ -862,6 +862,97 @@ async function initDB() {
     // MENIMPA versi 11-values di atas → setiap Railway boot ulang, constraint
     // hilangkan test_out/test_return → POST /api/temp-orders pecah di production.
 
+    // ── TAGIHAN PARTNER EVENT (Tahap A, 27 Agu 2026) ─────────────────────────
+    // Menagih partner collab (mis. PT Arta Otto) atas seluruh penjualan selama
+    // event. Pencocokan dilakukan lewat NOMOR KWITANSI: di event ada buku
+    // kwitansi bernomor, tiap order client ditulis di satu nomor, dan nomor itu
+    // yang dipakai bagian keuangan partner untuk mencocokkan.
+
+    // receipt_no — nomor lembar kwitansi fisik. Melekat ke ORDER (satu order =
+    // satu lembar), bukan ke tagihan: satu tagihan memuat puluhan nomor berbeda.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_no TEXT DEFAULT NULL`);
+    // partner_id — menggantikan `billing_to` yang selama ini teks bebas. Kolom
+    // lama SENGAJA dibiarkan: order Agustus menyimpan namanya di sana, dan
+    // riwayat kerja sama yang sudah selesai masih perlu terbaca.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS partner_id INTEGER DEFAULT NULL REFERENCES event_partners(id)`).catch(() => {});
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_orders_partner ON orders(partner_id)');
+
+    // Backfill partner_id dari billing_to (cocokkan nama, abai huruf besar/kecil
+    // & spasi ganda). Idempotent: hanya mengisi yang masih NULL.
+    await dbRun(`
+        UPDATE orders o SET partner_id = ep.id
+          FROM event_partners ep
+         WHERE o.partner_id IS NULL
+           AND o.billing_to IS NOT NULL
+           AND lower(btrim(o.billing_to)) = lower(btrim(ep.name))`).catch(() => {});
+
+    // Satu nomor kwitansi hanya boleh dipakai SATU order per partner. Nomor
+    // dicetak unik di bukunya, jadi nomor kembar selalu berarti salah ketik —
+    // dan salah ketik di sini membuat dua order saling menimpa saat partner
+    // mencocokkan. Order batal dikecualikan: lembarnya memang hangus, nomornya
+    // tidak dipakai ulang tapi tak perlu memblokir apa pun.
+    await createIdx(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_order_receipt_per_partner
+        ON orders(partner_id, lower(btrim(receipt_no)))
+        WHERE receipt_no IS NOT NULL AND btrim(receipt_no) <> '' AND order_status <> 'cancelled'`);
+
+    // Tagihan partner. Dokumen yang DIKUNCI: begitu terbit, angkanya dibekukan
+    // supaya lembar yang sudah dipegang partner tidak berubah kalau ordernya
+    // diedit belakangan.
+    await dbRun(`CREATE TABLE IF NOT EXISTS partner_invoices (
+        id SERIAL PRIMARY KEY,
+        invoice_no TEXT NOT NULL UNIQUE,
+        partner_id INTEGER NOT NULL REFERENCES event_partners(id),
+        partner_name_snapshot TEXT NOT NULL,
+        period_start DATE,
+        period_end DATE,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','issued','paid','void')),
+        gross_total INTEGER NOT NULL DEFAULT 0,
+        discount_total INTEGER NOT NULL DEFAULT 0,
+        total_due INTEGER NOT NULL DEFAULT 0,
+        order_count INTEGER NOT NULL DEFAULT 0,
+        item_count INTEGER NOT NULL DEFAULT 0,
+        notes TEXT DEFAULT '',
+        issued_at TIMESTAMPTZ,
+        paid_at TIMESTAMPTZ,
+        paid_proof_url TEXT,
+        void_reason TEXT,
+        voided_at TIMESTAMPTZ,
+        created_by TEXT DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_pinv_partner ON partner_invoices(partner_id)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_pinv_status  ON partner_invoices(status)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_pinv_created ON partner_invoices(created_at DESC)');
+
+    // Isi tagihan — SALINAN BEKU per order. Kolom order_code/customer_name/
+    // receipt_no/items_json sengaja diduplikasi dari orders: kalau ordernya
+    // diedit setelah tagihan terbit, lembar yang sudah dikirim tetap utuh.
+    await dbRun(`CREATE TABLE IF NOT EXISTS partner_invoice_orders (
+        id SERIAL PRIMARY KEY,
+        invoice_id INTEGER NOT NULL REFERENCES partner_invoices(id) ON DELETE CASCADE,
+        order_id INTEGER NOT NULL REFERENCES orders(id),
+        receipt_no TEXT,
+        order_code TEXT NOT NULL,
+        order_date DATE,
+        customer_name TEXT,
+        items_json TEXT DEFAULT '[]',
+        gross_amount INTEGER NOT NULL DEFAULT 0,
+        discount_amount INTEGER NOT NULL DEFAULT 0,
+        net_amount INTEGER NOT NULL DEFAULT 0,
+        is_cancelled BOOLEAN NOT NULL DEFAULT FALSE,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_pinv_ord_invoice ON partner_invoice_orders(invoice_id)');
+    // ⚠️ INDEKS PALING PENTING DI FITUR INI. Satu order tidak boleh masuk dua
+    // tagihan AKTIF sekaligus. Dijaga database, bukan pengecekan di kode — kalau
+    // dua admin menekan "Terbitkan" pada detik yang sama, pengecekan di kode
+    // bisa sama-sama lolos, indeks ini tidak. Saat tagihan dibatalkan,
+    // is_active di-set FALSE sehingga ordernya bebas ditagih ulang.
+    await createIdx(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_order_per_invoice
+        ON partner_invoice_orders(order_id) WHERE is_active`);
+
     // ── Seed default admin ────────────────────────────────────────────────────
     // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
     // Dev: fall back to 'admin123' only when explicitly not in production.
@@ -991,6 +1082,23 @@ function safeJSON(str, fallback = []) {
 // publik (checkout) yang TIDAK terautentikasi.
 function sanitizeCourier(s) {
     return String(s == null ? '' : s).replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+// Nomor kwitansi event. Ditulis tangan di buku fisik lalu diketik ulang admin,
+// jadi bentuknya bebas ("B-121", "b123", "0451"). Yang dijaga di sini cuma dua:
+// karakter yang bisa dipakai untuk injeksi HTML/atribut dibuang (dashboard tanpa
+// CSP — escaping adalah pertahanan utama), dan panjangnya dibatasi.
+// Mengembalikan null untuk string kosong supaya "belum diisi" konsisten NULL di DB
+// dan indeks unik parsialnya tidak ikut menahan baris kosong.
+function sanitizeReceiptNo(s) {
+    const v = String(s == null ? '' : s).replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    return v || null;
+}
+// Bentrok nomor kwitansi dijaga indeks unik parsial di DB
+// (uniq_order_receipt_per_partner). Kalau yang meledak indeks itu, ubah jadi
+// pesan yang bisa ditindaklanjuti admin — bukan 500 mentah.
+function isReceiptConflict(err) {
+    return err && err.code === '23505' && String(err.constraint || '').includes('uniq_order_receipt_per_partner');
 }
 
 // ── app_settings (key-value global config) ────────────────────────────────────
@@ -1513,6 +1621,215 @@ app.get('/api/admin/clients/search', requireMenu('manual-order'), async (req, re
         );
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── TAGIHAN PARTNER — NOMOR KWITANSI (Tahap A2) ──────────────────────────────
+// Di event ada buku kwitansi bernomor; tiap order client ditulis di satu nomor.
+// Nomor itu yang dipakai bagian keuangan partner untuk mencocokkan tagihan dengan
+// catatan mereka, jadi nomor ini prasyarat sebelum tagihan bisa diterbitkan.
+//
+// Untuk event ke depan nomornya terisi dari Kasir saat order dibuat. Endpoint di
+// bawah untuk event yang SUDAH LEWAT: mengisi nomor secara mundur tanpa harus
+// membuka Edit Pesanan satu per satu.
+
+// Rentang tanggal event memakai invoice_date (tanggal yang tertulis di nota yang
+// dipegang pembeli), mundur ke created_at kalau kosong. Dipakai bersama oleh
+// daftar kwitansi dan — nanti — penyusun tagihan, supaya keduanya tidak pernah
+// menghasilkan daftar order yang berbeda.
+const PARTNER_ORDER_DATE = `COALESCE(o.invoice_date, o.created_at)`;
+
+// Cocokkan order ke partner lewat relasi BARU (partner_id) atau nama LAMA
+// (billing_to). Order Agustus 2026 dibuat sebelum partner_id ada, jadi selama
+// masa transisi keduanya harus dibaca — kalau hanya partner_id, order lama
+// hilang diam-diam dari tagihan dan itu berarti kurang tagih.
+const PARTNER_MATCH = `(o.partner_id = $1 OR lower(btrim(COALESCE(o.billing_to,''))) = lower(btrim($2)))`;
+
+async function getPartnerOr404(id, res) {
+    const partner = await dbGet('SELECT * FROM event_partners WHERE id = $1', [id]);
+    if (!partner) { res.status(404).json({ error: 'Partner tidak ditemukan' }); return null; }
+    return partner;
+}
+
+// GET /api/admin/partner-billing/receipts?partner_id=&from=&to=
+// Daftar order collab satu partner dalam satu rentang tanggal, beserta nomor
+// kwitansinya (kosong = belum diisi). Order BATAL ikut ditampilkan: lembar
+// kwitansinya tetap ada di buku, dan nomor yang hilang dari deret akan terbaca
+// sebagai lembar yang terlewat.
+app.get('/api/admin/partner-billing/receipts', requireMenu('partner-billing'), async (req, res) => {
+    try {
+        const partnerId = parseInt(req.query.partner_id, 10);
+        if (!Number.isInteger(partnerId)) return res.status(400).json({ error: 'partner_id wajib diisi' });
+        const partner = await getPartnerOr404(partnerId, res);
+        if (!partner) return;
+
+        const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+        const from = isDate(req.query.from) ? req.query.from : null;
+        const to   = isDate(req.query.to)   ? req.query.to   : null;
+
+        const params = [partnerId, partner.name];
+        let where = `o.order_source = 'collaboration_event' AND ${PARTNER_MATCH}`;
+        // Batas tanggal dirakit sebagai timestamp penuh, bukan lewat cast ::date.
+        // invoice_date bertipe timestamptz, jadi batas atas HARUS eksklusif ke hari
+        // berikutnya — `<= '2026-08-18'` akan membuang order yang jamnya lewat 00:00.
+        if (from) { params.push(from + ' 00:00:00'); where += ` AND ${PARTNER_ORDER_DATE} >= $${params.length}`; }
+        if (to)   { params.push(to   + ' 23:59:59.999'); where += ` AND ${PARTNER_ORDER_DATE} <= $${params.length}`; }
+
+        const rows = await dbAll(
+            `SELECT o.id, o.order_code, o.customer_name, o.receipt_no, o.order_status,
+                    o.total_amount, o.discount_amount, o.partner_id, o.billing_to,
+                    ${PARTNER_ORDER_DATE} AS order_date,
+                    pinv.invoice_no AS billed_on
+               FROM orders o
+               LEFT JOIN partner_invoice_orders pio ON pio.order_id = o.id AND pio.is_active
+               LEFT JOIN partner_invoices pinv ON pinv.id = pio.invoice_id
+              WHERE ${where}
+              ORDER BY ${PARTNER_ORDER_DATE} ASC, o.id ASC`,
+            params
+        );
+
+        // Ringkasan barang diambil terpisah lalu digabung di JS. Sebelumnya ini dua
+        // sub-query berkorelasi di dalam SELECT — benar di Postgres, tapi tidak bisa
+        // dijalankan pg-mem sehingga endpoint ini mustahil diuji otomatis. Dipecah
+        // supaya tetap benar DAN teruji; datanya kecil (satu event, puluhan order).
+        if (rows.length) {
+            const ids = rows.map(r => Number(r.id));
+            const ph = ids.map((_, i) => '$' + (i + 1)).join(',');
+            const lines = await dbAll(
+                `SELECT oi.order_id, oi.quantity,
+                        COALESCE(oi.custom_product_name, pr.name) AS nama
+                   FROM order_items oi
+                   LEFT JOIN products pr ON pr.id = oi.product_id
+                  WHERE oi.order_id IN (${ph})
+                    AND oi.is_bonus = FALSE AND oi.is_test_returned = FALSE
+                  ORDER BY oi.id ASC`,
+                ids
+            );
+            // Penjumlahan & penggabungan nama dikerjakan di JS, bukan SUM/string_agg
+            // di SQL: barisnya sedikit (satu event, puluhan order) dan hasilnya sama,
+            // sementara query polos begini bisa diuji otomatis.
+            const byOrder = new Map();
+            for (const l of lines) {
+                const k = Number(l.order_id);
+                if (!byOrder.has(k)) byOrder.set(k, { qty: 0, nama: [] });
+                const b = byOrder.get(k);
+                b.qty += Number(l.quantity || 0);
+                if (l.nama) b.nama.push(l.nama);
+            }
+            for (const r of rows) {
+                const b = byOrder.get(Number(r.id));
+                r.qty = b ? b.qty : 0;
+                r.items_summary = b ? b.nama.join(', ') : '';
+            }
+        }
+
+        const filled = rows.filter(r => r.receipt_no && String(r.receipt_no).trim()).length;
+        res.json({
+            partner: { id: partner.id, name: partner.name, pic_name: partner.pic_name },
+            total: rows.length,
+            filled,
+            orders: rows,
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/admin/partner-billing/receipts — simpan banyak nomor kwitansi sekaligus.
+// Body: { partner_id, entries: [{ order_id, receipt_no }] }
+//
+// Semua-atau-tidak sama sekali: satu baris bermasalah membatalkan seluruh
+// simpanan. Kalau separuh tersimpan, admin tidak punya cara tahu mana yang masuk
+// dan mana yang tidak — dan nomor kwitansi adalah hal yang paling tidak boleh
+// setengah benar di fitur ini.
+app.put('/api/admin/partner-billing/receipts', requireMenu('partner-billing', 'edit'), async (req, res) => {
+    try {
+        const partnerId = parseInt(req.body.partner_id, 10);
+        if (!Number.isInteger(partnerId)) return res.status(400).json({ error: 'partner_id wajib diisi' });
+        const partner = await getPartnerOr404(partnerId, res);
+        if (!partner) return;
+
+        const entries = Array.isArray(req.body.entries) ? req.body.entries : null;
+        if (!entries || entries.length === 0) return res.status(400).json({ error: 'Tidak ada nomor yang dikirim' });
+        if (entries.length > 500) return res.status(400).json({ error: 'Terlalu banyak baris sekaligus (maks 500)' });
+
+        // Bersihkan + tolak nomor kembar di dalam kiriman ini sendiri. Indeks unik
+        // DB hanya melihat baris yang sudah tersimpan, jadi dua baris kembar dalam
+        // satu kiriman perlu ditangkap di sini.
+        const cleaned = [];
+        const seen = new Map();
+        for (const e of entries) {
+            const oid = parseInt(e && e.order_id, 10);
+            if (!Number.isInteger(oid)) return res.status(400).json({ error: 'order_id tidak valid' });
+            const no = sanitizeReceiptNo(e && e.receipt_no);
+            if (no) {
+                const key = no.toLowerCase();
+                if (seen.has(key))
+                    return res.status(400).json({ error: `Nomor kwitansi "${no}" dipakai lebih dari sekali dalam kiriman ini.` });
+                seen.set(key, oid);
+            }
+            cleaned.push({ order_id: oid, receipt_no: no });
+        }
+
+        // Tiap order WAJIB milik partner ini dan bersumber collaboration_event —
+        // tanpa ini, nomor kwitansi bisa ditempelkan ke order partner lain lewat
+        // request yang dirakit manual.
+        // Daftar id dirakit sebagai placeholder satuan, bukan ANY(...::int[]) —
+        // semua id sudah divalidasi integer di atas, jadi tetap terparameterisasi,
+        // dan bentuk ini jalan di mana pun tanpa bergantung pada dukungan array.
+        const ids = cleaned.map(c => c.order_id);
+        const ph = ids.map((_, i) => '$' + (i + 3)).join(',');
+        const owned = await dbAll(
+            `SELECT o.id FROM orders o
+              WHERE o.id IN (${ph}) AND o.order_source = 'collaboration_event' AND ${PARTNER_MATCH}`,
+            [partnerId, partner.name, ...ids]
+        );
+        const ownedSet = new Set(owned.map(r => Number(r.id)));
+        const asing = ids.filter(id => !ownedSet.has(id));
+        if (asing.length)
+            return res.status(400).json({ error: `Order ${asing.join(', ')} bukan order Collaboration Event milik ${partner.name}.` });
+
+        // Bentrok dengan nomor yang SUDAH tersimpan di partner ini.
+        // Indeks unik di DB tidak cukup sendirian: indeks itu berkunci pada
+        // partner_id, sedangkan order lama (dibuat sebelum kolom partner_id ada)
+        // bisa punya partner_id NULL — dan di indeks unik, NULL tidak pernah
+        // dianggap sama dengan NULL, jadi nomor kembar akan lolos begitu saja.
+        // Pengecekan ini memakai PARTNER_MATCH yang juga membaca billing_to,
+        // sehingga order lama ikut terjaga.
+        const nomorBaru = cleaned.filter(c => c.receipt_no);
+        if (nomorBaru.length) {
+            const ph2 = nomorBaru.map((_, i) => '$' + (i + 3)).join(',');
+            const idPh = cleaned.map((_, i) => '$' + (i + 3 + nomorBaru.length)).join(',');
+            const bentrok = await dbAll(
+                `SELECT o.id, o.order_code, o.receipt_no FROM orders o
+                  WHERE ${PARTNER_MATCH}
+                    AND o.order_status <> 'cancelled'
+                    AND lower(btrim(COALESCE(o.receipt_no,''))) IN (${ph2})
+                    AND o.id NOT IN (${idPh})`,
+                [partnerId, partner.name,
+                 ...nomorBaru.map(c => c.receipt_no.toLowerCase()),
+                 ...cleaned.map(c => c.order_id)]
+            );
+            if (bentrok.length) {
+                const d = bentrok[0];
+                return res.status(409).json({
+                    error: `Nomor kwitansi "${d.receipt_no}" sudah dipakai order ${d.order_code}. Satu lembar kwitansi hanya untuk satu order.`
+                });
+            }
+        }
+
+        await withTransaction(async (client) => {
+            for (const c of cleaned) {
+                await client.query(
+                    'UPDATE orders SET receipt_no = $1, updated_at = NOW() WHERE id = $2',
+                    [c.receipt_no, c.order_id]
+                );
+            }
+        });
+
+        res.json({ message: `${cleaned.length} nomor kwitansi tersimpan`, saved: cleaned.length });
+    } catch (err) {
+        if (isReceiptConflict(err))
+            return res.status(409).json({ error: 'Ada nomor kwitansi yang sudah dipakai order lain di partner ini. Periksa lagi nomornya — satu lembar kwitansi hanya untuk satu order.' });
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ─── PARTNER COLLABORATION EVENT ──────────────────────────────────────────────
@@ -3078,6 +3395,7 @@ app.post('/api/orders', async (req, res) => {
             payment_method,  // 'BCA', 'BRI', 'Mandiri', 'BNI', 'QRIS', dll
             discount_percent,// 0, 5, atau 30 — hanya untuk WA order
             billing_to,      // nama partner yang ditagih (collaboration_event), admin-only
+            receipt_no,      // nomor lembar kwitansi fisik di event (collaboration_event), admin-only
             invoice_date,    // override tanggal invoice (admin-only, opsional)
             invoice_notes    // catatan customer-facing di PDF invoice (admin-only, opsional)
         } = req.body;
@@ -3286,6 +3604,25 @@ app.post('/api/orders', async (req, res) => {
             ? billing_to.trim().slice(0, 120)
             : null;
 
+        // partner_id: relasi asli ke event_partners, diresolve dari nama yang
+        // dikirim Kasir. Client tidak perlu tahu id-nya — daftar partner di Kasir
+        // memang memilih berdasarkan nama. Nama yang tidak ada di daftar (partner
+        // lama / ketikan manual) tetap tersimpan di billing_to dengan partner_id
+        // NULL, jadi tidak ada order yang gagal cuma karena partnernya belum
+        // terdaftar. Tagihan partner mencocokkan lewat KEDUANYA selama transisi.
+        let safePartnerId = null;
+        if (safeBillingTo) {
+            const prow = await dbGet(
+                'SELECT id FROM event_partners WHERE lower(btrim(name)) = lower(btrim($1))', [safeBillingTo]);
+            safePartnerId = prow ? prow.id : null;
+        }
+
+        // receipt_no: nomor lembar kwitansi fisik. Hanya relevan (dan hanya
+        // diterima) untuk collaboration_event — order lain tidak punya buku kwitansi.
+        const safeReceiptNo = (isAdmin && safeOrderSource === 'collaboration_event')
+            ? sanitizeReceiptNo(receipt_no)
+            : null;
+
         // invoice_date: admin override utk tanggal yg tampil di invoice (customer request,
         // mis. backdated). YYYY-MM-DD dari client. Public callers DI-IGNORE (anti-tamper
         // — supaya tidak bisa backdate sale di public checkout). Format invalid → NULL.
@@ -3379,8 +3716,9 @@ app.post('/api/orders', async (req, res) => {
                 `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
-                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount, invoice_notes)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING id`,
+                  payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount, invoice_notes,
+                  partner_id, receipt_no)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
@@ -3396,7 +3734,9 @@ app.post('/api/orders', async (req, res) => {
                  safeBillingTo,
                  safeInvoiceDate,
                  safeDpAmount,
-                 safeInvoiceNotes]
+                 safeInvoiceNotes,
+                 safePartnerId,
+                 safeReceiptNo]
             );
             const newOrderId = orderResult.rows[0].id;
 
@@ -3577,7 +3917,10 @@ app.post('/api/orders', async (req, res) => {
             discount_label: discountLabel,
             dp_amount: safeDpAmount
         });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+        if (isReceiptConflict(err)) return res.status(409).json({ error: 'Nomor kwitansi ini sudah dipakai order lain di partner yang sama. Satu lembar kwitansi hanya untuk satu order.' });
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // PUT /api/orders/:id/confirm-payment  (multipart: payment_proof photo)
@@ -4261,7 +4604,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             customer_name, customer_phone, customer_address,
             shipping_city, shipping_courier, shipping_weight_kg,
             shipping_cost, payment_method,
-            order_source, billing_to, notes, invoice_notes
+            order_source, billing_to, receipt_no, notes, invoice_notes
         } = req.body;
 
         const setClauses = [];
@@ -4343,14 +4686,30 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             if (effectiveSource === 'collaboration_event') {
                 const v = String(billing_to).trim();
                 if (!v) return res.status(400).json({ error: 'Bill To (Partner) wajib diisi untuk Collaboration Event' });
-                setClauses.push(`billing_to = $${idx++}`); params.push(v.slice(0, 120));
+                const name = v.slice(0, 120);
+                setClauses.push(`billing_to = $${idx++}`); params.push(name);
+                // partner_id ikut nama — kalau tidak, relasi jadi basi begitu admin
+                // memindahkan order ke partner lain, dan tagihan menariknya ke
+                // partner yang salah.
+                const prow = await dbGet(
+                    'SELECT id FROM event_partners WHERE lower(btrim(name)) = lower(btrim($1))', [name]);
+                setClauses.push(`partner_id = $${idx++}`); params.push(prow ? prow.id : null);
             } else {
                 // Source bukan collab tapi admin coba isi billing_to → tolak biar konsisten.
                 setClauses.push(`billing_to = $${idx++}`); params.push(null);
+                setClauses.push(`partner_id = $${idx++}`); params.push(null);
             }
         } else if (sourceChangedAwayFromCollab) {
             // Source di-switch keluar dari collab tanpa kirim billing_to → bersihkan otomatis.
             setClauses.push(`billing_to = $${idx++}`); params.push(null);
+            setClauses.push(`partner_id = $${idx++}`); params.push(null);
+        }
+        // receipt_no: nomor kwitansi event. Ikut dibersihkan kalau order dipindah
+        // keluar dari collaboration_event — order non-event tidak punya kwitansi.
+        if (receipt_no !== undefined && effectiveSource === 'collaboration_event') {
+            setClauses.push(`receipt_no = $${idx++}`); params.push(sanitizeReceiptNo(receipt_no));
+        } else if (sourceChangedAwayFromCollab || (receipt_no !== undefined && effectiveSource !== 'collaboration_event')) {
+            setClauses.push(`receipt_no = $${idx++}`); params.push(null);
         }
         // Notes — bebas teks, batasi panjang anti-abuse.
         if (notes !== undefined) {
@@ -4372,7 +4731,10 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
 
         const updated = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         res.json({ message: 'Pesanan diperbarui', order: updated });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+        if (isReceiptConflict(err)) return res.status(409).json({ error: 'Nomor kwitansi ini sudah dipakai order lain di partner yang sama. Satu lembar kwitansi hanya untuk satu order.' });
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // POST /api/orders/:id/split — Pisahkan order jadi 2 berdasar items terpilih.

@@ -644,6 +644,9 @@
             <button onclick="showModule('report')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="report">
                 <i class="fa-solid fa-chart-pie w-4 text-xs"></i> Report
             </button>
+            <button onclick="showModule('partner-billing')" class="sidebar-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all text-left" data-menu="partner-billing">
+                <i class="fa-solid fa-file-invoice-dollar w-4 text-xs"></i> Tagihan Partner
+            </button>
         </div>
     </nav>
     <!-- Bantuan (semua role) -->
@@ -1000,6 +1003,14 @@
                 <label class="wa-field-label">Ditagihkan Ke / Bill To (Partner) <span class="text-red-400">*</span></label>
                 <input type="text" id="wa-billing-to" placeholder="Nama pihak ke-2 / partner yang ditagih" />
                 <p class="text-[11px] text-amber-300/70 mt-1">Pembeli bayar ke partner & ambil barang langsung. Invoice ditagihkan ke partner ini (consignment 30%). Jangan lupa pilih diskon Consignment 30%.</p>
+              </div>
+              <!-- Nomor lembar kwitansi fisik di event. Ini yang dipakai partner untuk
+                   mencocokkan tagihan dengan buku mereka, jadi diisi saat order dibuat
+                   supaya tidak perlu dikejar mundur setelah event bubar. -->
+              <div id="wa-receipt-no-wrap" class="hidden sm:col-span-2">
+                <label class="wa-field-label">No. Kwitansi <span class="wa-optional">(dari buku kwitansi event)</span></label>
+                <input type="text" id="wa-receipt-no" placeholder="Contoh: B-121" maxlength="40" autocomplete="off" />
+                <p class="text-[11px] text-white/30 mt-1">Nomor lembar kwitansi yang ditulis untuk pembeli ini. Dipakai partner untuk mencocokkan tagihan. Satu nomor hanya untuk satu order.</p>
               </div>
               <div class="sm:col-span-2">
                 <label class="wa-field-label">Catatan <span class="wa-optional">(opsional)</span></label>
@@ -1417,6 +1428,41 @@
     </div>
 
     <!-- ═══ REPORT ═════════════════════════════════════════════════════════ -->
+    <!-- ═══ TAGIHAN PARTNER ═══════════════════════════════════════════════════
+         Tahap A2: mengisi nomor kwitansi. Penyusun tagihan menyusul di tahap B. -->
+    <div id="module-partner-billing" class="hidden p-4 md:p-6 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h2 class="text-lg font-bold">Tagihan Partner</h2>
+                <p class="text-xs text-white/40 mt-0.5">Menagih partner collab event. Nomor kwitansi adalah dasar pencocokannya.</p>
+            </div>
+        </div>
+
+        <!-- Pilih partner + rentang tanggal -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-4 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div class="sm:col-span-2">
+                    <label class="text-[11px] text-white/60 mb-1 block">Partner</label>
+                    <select id="pb-partner" class="w-full" onchange="pbLoad()">
+                        <option value="">— Pilih Partner —</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] text-white/60 mb-1 block">Tanggal dari <span class="text-white/30">(opsional)</span></label>
+                    <input type="date" id="pb-from" class="date-fluid w-full" onchange="pbLoad()" />
+                </div>
+                <div>
+                    <label class="text-[11px] text-white/60 mb-1 block">Sampai <span class="text-white/30">(opsional)</span></label>
+                    <input type="date" id="pb-to" class="date-fluid w-full" onchange="pbLoad()" />
+                </div>
+            </div>
+            <p class="text-[11px] text-white/30">Rentang tanggal memakai tanggal invoice — sama dengan tanggal yang tertulis di nota pembeli. Kosongkan untuk melihat semua order partner ini.</p>
+        </div>
+
+        <div id="pb-summary" class="hidden bg-darkcard border border-darkborder rounded-2xl p-4"></div>
+        <div id="pb-body" class="text-sm text-white/40 py-10 text-center">Pilih partner untuk mulai.</div>
+    </div>
+
     <div id="module-report" class="hidden p-4 md:p-6 space-y-4">
         <style>
             .report-preset, .report-tab { font-size:.78rem; font-weight:700; padding:.45rem .9rem; border-radius:.75rem; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); color:rgba(255,255,255,.6); transition:all .15s; cursor:pointer; }
@@ -2252,6 +2298,11 @@
         <label class="text-[11px] text-white/60 mb-1 block">Ditagihkan Ke / Bill To (Partner) <span class="text-red-400">*</span></label>
         <input type="text" id="edit-billing-to" placeholder="Nama pihak ke-2 / partner yang ditagih" />
         <p class="text-[11px] text-amber-300/70 mt-1">Wajib diisi untuk Collaboration Event. Tampil di invoice & detail.</p>
+      </div>
+      <div id="edit-receipt-no-wrap" class="hidden">
+        <label class="text-[11px] text-white/60 mb-1 block">No. Kwitansi <span class="text-white/30">(dari buku kwitansi event)</span></label>
+        <input type="text" id="edit-receipt-no" placeholder="Contoh: B-121" maxlength="40" autocomplete="off" />
+        <p class="text-[11px] text-white/30 mt-1">Dipakai partner untuk mencocokkan tagihan. Satu nomor hanya untuk satu order.</p>
       </div>
       <div>
         <label class="text-[11px] text-white/60 mb-1 block">Catatan Internal <span class="text-white/30">(opsional)</span></label>
@@ -3107,6 +3158,7 @@ function showModule(name) {
     if (name === 'customers')     loadCustomers();
     if (name === 'settings')      loadPartners();
     if (name === 'report')        reportInit();
+    if (name === 'partner-billing') pbInit();
     markViewOnly(name);
 }
 
@@ -7791,7 +7843,11 @@ async function viewOrder(id) {
                 </div>
                 ${isAdmin && waResiLink ? `<a href="${waResiLink}" target="_blank" class="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold transition shrink-0"><i class="fa-brands fa-whatsapp"></i> Kirim Resi ke Customer</a>` : ''}
             </div>` : ''}
-            ${o.billing_to ? `<div class="col-span-2 bg-pink-500/10 border border-pink-400/20 rounded-xl p-3"><p class="text-pink-300/70 text-xs mb-1"><i class="fa-solid fa-handshake"></i> Ditagihkan ke (Partner) · Consignment</p><p class="font-bold">${esc(o.billing_to)}</p></div>` : ''}
+            ${o.billing_to ? `<div class="col-span-2 bg-pink-500/10 border border-pink-400/20 rounded-xl p-3"><p class="text-pink-300/70 text-xs mb-1"><i class="fa-solid fa-handshake"></i> Ditagihkan ke (Partner) · Consignment</p><p class="font-bold">${esc(o.billing_to)}</p>
+                ${o.receipt_no
+                    ? `<p class="text-xs text-white/50 mt-1.5">No. Kwitansi: <span class="font-mono font-bold text-white/80">${esc(o.receipt_no)}</span></p>`
+                    : `<p class="text-xs text-amber-300/70 mt-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Nomor kwitansi belum diisi — partner tidak bisa mencocokkan order ini</p>`}
+                </div>` : ''}
             ${Number(o.additional_amount_due || 0) > 0 ? (
                 o.additional_paid_at
                     ? `<div class="col-span-2 bg-green-500/10 border border-green-400/25 rounded-xl p-3"><p class="text-green-300 text-xs mb-1"><i class="fa-solid fa-circle-check"></i> Selisih Bordir Tambahan · Lunas</p><p class="font-bold text-sm">Rp ${fmt(o.additional_amount_due)} (dibayar ${fmtDateShort(o.additional_paid_at)})</p></div>`
@@ -8068,6 +8124,7 @@ function openEditOrderModal() {
     document.getElementById('edit-payment-method').value = o.payment_method || '';
     document.getElementById('edit-order-source').value = o.order_source || 'whatsapp';
     document.getElementById('edit-billing-to').value = o.billing_to || '';
+    const rcp = document.getElementById('edit-receipt-no'); if (rcp) rcp.value = o.receipt_no || '';
     document.getElementById('edit-notes').value = o.notes || '';
     const invNotesEl = document.getElementById('edit-invoice-notes');
     if (invNotesEl) invNotesEl.value = o.invoice_notes || '';
@@ -8095,8 +8152,11 @@ function openEditOrderModal() {
 // Toggle visibility box "Bill To (Partner)" — relevan hanya utk collaboration_event.
 function editOnSourceChange() {
     const src = document.getElementById('edit-order-source')?.value;
+    const isCollab = src === 'collaboration_event';
     const wrap = document.getElementById('edit-billing-to-wrap');
-    if (wrap) wrap.classList.toggle('hidden', src !== 'collaboration_event');
+    if (wrap) wrap.classList.toggle('hidden', !isCollab);
+    const rWrap = document.getElementById('edit-receipt-no-wrap');
+    if (rWrap) rWrap.classList.toggle('hidden', !isCollab);
 }
 
 function closeEditOrderModal() {
@@ -8128,6 +8188,7 @@ async function submitEditOrder() {
             payment_method:      document.getElementById('edit-payment-method').value,
             order_source:        orderSource,
             billing_to:          billingTo,
+            receipt_no:          (document.getElementById('edit-receipt-no')?.value || '').trim(),
             notes:               document.getElementById('edit-notes').value.trim(),
             invoice_notes:       (document.getElementById('edit-invoice-notes')?.value || '').trim(),
         };
@@ -10057,6 +10118,7 @@ const MENU_DEFS = [
     // Data Client = akun customer website. Read-only (tidak ada di EDITABLE_MENUS server).
     { key: 'customers',    label: 'Data Client',    icon: 'fa-address-book', editable: false },
     { key: 'report',       label: 'Report',         icon: 'fa-chart-pie',    editable: false },
+    { key: 'partner-billing', label: 'Tagihan Partner', icon: 'fa-file-invoice-dollar', editable: true },
 ];
 
 // ── Current-user permission helpers (mirror server: admin=full, staff=map) ──────
@@ -11588,8 +11650,13 @@ function waCatalogUnitPrice(idx) {
 // collaboration_event. Diskon TIDAK auto-set (admin pilih manual sesuai keputusan).
 function waOnSourceChange() {
     const src = document.getElementById('wa-order-source')?.value;
+    const isCollab = src === 'collaboration_event';
     const wrap = document.getElementById('wa-billing-to-wrap');
-    if (wrap) wrap.classList.toggle('hidden', src !== 'collaboration_event');
+    if (wrap) wrap.classList.toggle('hidden', !isCollab);
+    // No. Kwitansi hanya ada di event collab — order lain tidak punya buku kwitansi.
+    const rWrap = document.getElementById('wa-receipt-no-wrap');
+    if (rWrap) rWrap.classList.toggle('hidden', !isCollab);
+    if (!isCollab) { const r = document.getElementById('wa-receipt-no'); if (r) r.value = ''; }
 }
 
 // Label opsi variant di dropdown: nama enak dibaca + harga per variant (kalau ada),
@@ -11905,6 +11972,7 @@ function waResetForm() {
         // Reset sumber order → default WhatsApp + sembunyikan/clear box Bill To partner.
         const srcEl = document.getElementById('wa-order-source'); if (srcEl) srcEl.value = 'whatsapp';
         const billEl = document.getElementById('wa-billing-to'); if (billEl) billEl.value = '';
+        const rcpEl = document.getElementById('wa-receipt-no'); if (rcpEl) rcpEl.value = '';
         if (typeof waOnSourceChange === 'function') waOnSourceChange();
         // Reset tanggal order → hari ini (anti customer-request lama nyangkut di order berikutnya).
         const dateEl = document.getElementById('wa-invoice-date');
@@ -14171,6 +14239,7 @@ async function kasirCartSubmit() {
                 shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes,
                 invoice_notes: invoiceNotes,
                 order_source: orderSource, payment_method: paymentMethod, billing_to: billingTo,
+                receipt_no: (document.getElementById('wa-receipt-no')?.value || '').trim() || null,
                 invoice_date: invoiceDate || null, items: allItems,
                 embroidery_details: allEmb.length ? allEmb : null,
                 discount_percent: 0, discount_amount_custom: totalDiscountAmount,
@@ -14199,6 +14268,208 @@ async function kasirCartSubmit() {
     } catch(err) {
         alert('Error: ' + (err.message || 'Unknown error'));
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Simpan & Generate Invoice WA'; }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAGIHAN PARTNER — Tahap A2: mengisi nomor kwitansi
+// ═══════════════════════════════════════════════════════════════════════════
+// Di event ada buku kwitansi bernomor; tiap order client ditulis di satu nomor.
+// Nomor itu yang dipakai bagian keuangan partner untuk mencocokkan tagihan, jadi
+// harus lengkap sebelum tagihan bisa diterbitkan (tahap B).
+//
+// Untuk event ke depan nomornya terisi dari Kasir. Layar ini untuk event yang
+// sudah lewat: satu daftar, satu kolom isian, Enter untuk lompat ke bawah.
+
+let pbOrders = [];          // hasil terakhir dari server
+let pbPartnerLoaded = false;
+
+async function pbInit() {
+    if (!pbPartnerLoaded) {
+        try {
+            const rows = await apiFetch('/api/admin/partners?all=1');
+            const sel = document.getElementById('pb-partner');
+            if (sel) {
+                sel.innerHTML = '<option value="">— Pilih Partner —</option>' +
+                    (rows || []).map(r => `<option value="${r.id}">${esc(r.name)}${r.is_active ? '' : ' (nonaktif)'}</option>`).join('');
+            }
+            pbPartnerLoaded = true;
+        } catch (e) {
+            toast('Gagal memuat daftar partner: ' + e.message, true);
+        }
+    }
+    if (document.getElementById('pb-partner')?.value) pbLoad();
+}
+
+async function pbLoad() {
+    const partnerId = document.getElementById('pb-partner')?.value;
+    const body = document.getElementById('pb-body');
+    const summary = document.getElementById('pb-summary');
+    if (!partnerId) {
+        pbOrders = [];
+        if (summary) summary.classList.add('hidden');
+        if (body) body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center">Pilih partner untuk mulai.</p>';
+        return;
+    }
+    const from = document.getElementById('pb-from')?.value || '';
+    const to   = document.getElementById('pb-to')?.value || '';
+    if (body) body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center"><i class="fa-solid fa-spinner spin"></i> Memuat…</p>';
+    try {
+        const qs = new URLSearchParams({ partner_id: partnerId });
+        if (from) qs.set('from', from);
+        if (to) qs.set('to', to);
+        const data = await apiFetch('/api/admin/partner-billing/receipts?' + qs.toString());
+        pbOrders = data.orders || [];
+        pbRender(data);
+    } catch (e) {
+        if (body) body.innerHTML = `<p class="text-sm text-red-400/80 py-10 text-center">Gagal memuat: ${esc(e.message)}</p>`;
+    }
+}
+
+function pbRender(data) {
+    const summary = document.getElementById('pb-summary');
+    const body = document.getElementById('pb-body');
+    const total = data.total || 0;
+    const filled = data.filled || 0;
+    const kurang = total - filled;
+
+    if (summary) {
+        summary.classList.remove('hidden');
+        const lengkap = total > 0 && kurang === 0;
+        summary.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-5">
+                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Order</p><p class="text-lg font-bold">${total}</p></div>
+                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Sudah ada nomor</p><p class="text-lg font-bold text-emerald-300">${filled}</p></div>
+                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Belum</p><p class="text-lg font-bold ${kurang ? 'text-amber-300' : 'text-white/30'}">${kurang}</p></div>
+                </div>
+                ${total === 0 ? '' : lengkap
+                    ? '<span class="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-bold"><i class="fa-solid fa-check"></i> Nomor kwitansi lengkap</span>'
+                    : `<span class="text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold">${kurang} order belum punya nomor</span>`}
+            </div>`;
+    }
+
+    if (!body) return;
+    if (total === 0) {
+        body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center">Tidak ada order Collaboration Event untuk partner &amp; rentang tanggal ini.</p>';
+        return;
+    }
+
+    const rows = pbOrders.map((o, i) => {
+        const batal = o.order_status === 'cancelled';
+        const terkunci = !!o.billed_on;
+        // Order batal & yang sudah masuk tagihan tetap DITAMPILKAN supaya nomor yang
+        // lompat di buku tidak terbaca sebagai lembar hilang — tapi tidak bisa diedit.
+        const dis = batal || terkunci;
+        const ket = batal
+            ? '<span class="text-[10px] text-red-400/80">dibatalkan</span>'
+            : terkunci
+                ? `<span class="text-[10px] text-white/40">sudah ditagih ${esc(o.billed_on)}</span>`
+                : '';
+        return `
+        <tr class="border-b border-white/5 ${dis ? 'opacity-50' : ''}">
+            <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${o.order_date ? new Date(o.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'}</td>
+            <td class="px-3 py-2 text-[11px] font-mono text-white/60 whitespace-nowrap">${esc(o.order_code)}</td>
+            <td class="px-3 py-2 text-sm">${esc(o.customer_name || '-')} ${ket}</td>
+            <td class="px-3 py-2 text-[11px] text-white/40 max-w-[220px] truncate" title="${esc(o.items_summary || '')}">${esc(o.items_summary || '-')}</td>
+            <td class="px-3 py-2 text-right text-sm font-mono whitespace-nowrap">Rp ${Number(o.total_amount || 0).toLocaleString('id-ID')}</td>
+            <td class="px-3 py-2">
+                <input type="text" maxlength="40" autocomplete="off"
+                       class="pb-receipt w-full !py-1.5 !text-sm font-mono"
+                       data-order-id="${o.id}" data-row="${i}"
+                       value="${esc(o.receipt_no || '')}"
+                       placeholder="${dis ? '—' : 'ketik nomor'}"
+                       ${dis ? 'disabled' : ''}
+                       onkeydown="pbOnKey(event, ${i})" oninput="pbMarkDirty()" />
+            </td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-white/5">
+                        <tr class="text-[10px] uppercase tracking-wider text-white/40">
+                            <th class="px-3 py-2.5 text-left">Tgl</th>
+                            <th class="px-3 py-2.5 text-left">No. Order</th>
+                            <th class="px-3 py-2.5 text-left">Pembeli</th>
+                            <th class="px-3 py-2.5 text-left">Barang</th>
+                            <th class="px-3 py-2.5 text-right">Total</th>
+                            <th class="px-3 py-2.5 text-left w-[170px]">No. Kwitansi</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <div class="p-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-[11px] text-white/30">Enter untuk pindah ke baris berikutnya. Nomor kembar ditolak — satu lembar kwitansi hanya untuk satu order.</p>
+                <button onclick="pbSave(this)" class="edit-action text-xs px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-floppy-disk"></i> Simpan Nomor Kwitansi
+                </button>
+            </div>
+        </div>`;
+    markViewOnly('partner-billing');
+}
+
+// Enter = lompat ke input berikutnya yang masih bisa diisi. Mengisi 22 nomor dari
+// buku fisik jadi satu aliran ketik-Enter-ketik, tanpa pindah tangan ke mouse.
+function pbOnKey(ev, rowIdx) {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const inputs = [...document.querySelectorAll('.pb-receipt')].filter(el => !el.disabled);
+    const pos = inputs.findIndex(el => Number(el.dataset.row) === rowIdx);
+    const next = inputs[pos + 1];
+    if (next) { next.focus(); next.select(); }
+    else pbSave(document.querySelector('#pb-body button'));
+}
+
+function pbMarkDirty() {
+    // Bentrok nomor di dalam layar ini sendiri ditandai langsung, tidak menunggu
+    // server — admin sedang menyalin dari buku, koreksinya paling murah saat itu juga.
+    const inputs = [...document.querySelectorAll('.pb-receipt')].filter(el => !el.disabled);
+    const hitung = {};
+    inputs.forEach(el => {
+        const v = el.value.trim().toLowerCase();
+        if (v) hitung[v] = (hitung[v] || 0) + 1;
+    });
+    inputs.forEach(el => {
+        const v = el.value.trim().toLowerCase();
+        const kembar = v && hitung[v] > 1;
+        el.classList.toggle('!border-red-500', !!kembar);
+        el.title = kembar ? 'Nomor ini dipakai lebih dari satu order' : '';
+    });
+}
+
+async function pbSave(btn) {
+    const partnerId = document.getElementById('pb-partner')?.value;
+    if (!partnerId) return;
+    const inputs = [...document.querySelectorAll('.pb-receipt')].filter(el => !el.disabled);
+    const entries = inputs.map(el => ({ order_id: Number(el.dataset.orderId), receipt_no: el.value.trim() }));
+    if (entries.length === 0) return;
+
+    // Kembar di layar ditolak sebelum dikirim — pesannya lebih spesifik daripada
+    // yang bisa diberikan server, karena di sini tahu barisnya yang mana.
+    const hitung = {};
+    for (const e of entries) {
+        const v = (e.receipt_no || '').toLowerCase();
+        if (!v) continue;
+        if (hitung[v]) { toast(`Nomor "${e.receipt_no}" dipakai lebih dari satu order. Betulkan dulu.`, true); return; }
+        hitung[v] = 1;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menyimpan…'; }
+    try {
+        const data = await apiFetch('/api/admin/partner-billing/receipts', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ partner_id: Number(partnerId), entries }),
+        });
+        toast('✓ ' + (data.message || 'Tersimpan'));
+        await pbLoad();
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Simpan Nomor Kwitansi'; }
     }
 }
 
