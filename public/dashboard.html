@@ -714,7 +714,21 @@
                     </div>
                 </div>
                 <p id="stat-revenue" class="text-2xl font-bold text-indigo-400">—</p>
-                <p class="text-[10px] text-white/30 mt-1" title="Total uang yang masuk dari order terbayar (lifetime). Termasuk ongkir, sebelum refund. Untuk pendapatan bersih, cek menu Report → Net Sales.">Termasuk ongkir, sebelum refund · cek Report utk Net Sales</p>
+                <p class="text-[10px] text-white/30 mt-1" title="Uang yang benar-benar sudah diterima Wearscrubs (lifetime). Order event consignment BARU dihitung di sini setelah partner melunasi tagihannya. Termasuk ongkir, sebelum refund.">Yang sudah benar-benar diterima · termasuk ongkir</p>
+            </div>
+            <!-- Piutang partner: barang sudah terjual & pembeli sudah bayar, tapi
+                 uangnya masih di partner sampai tagihan dilunasi. Kartu ini hanya
+                 muncul kalau memang ada piutang — kalau nol, tidak perlu ruang. -->
+            <div id="stat-piutang-card" class="hidden bg-darkcard border border-amber-400/25 rounded-2xl p-5">
+                <div class="flex items-start justify-between mb-3">
+                    <p class="text-[10px] text-amber-300/70 uppercase tracking-wider">Piutang Partner</p>
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-hourglass-half text-amber-400 text-[10px]"></i>
+                    </div>
+                </div>
+                <p id="stat-piutang" class="text-2xl font-bold text-amber-300">—</p>
+                <p id="stat-piutang-sub" class="text-[10px] text-white/30 mt-1">Sudah terjual, uangnya masih di partner</p>
+                <button onclick="showModule('partner-billing')" class="text-[10px] text-amber-400/60 hover:text-amber-400 transition-colors font-medium mt-1">Lihat tagihan →</button>
             </div>
         </div>
         <div class="bg-darkcard border border-darkborder rounded-2xl p-6">
@@ -1555,9 +1569,25 @@
                     <div class="text-[10px] text-white/35 mt-1">Refund ke pembeli</div>
                 </div>
                 <div class="bg-darkcard border border-cyan-400/30 rounded-2xl p-4">
-                    <div class="text-[11px] font-semibold text-cyan-200/80">Uang Masuk Bersih</div>
+                    <div class="text-[11px] font-semibold text-cyan-200/80">Penjualan Bersih</div>
                     <div id="rep-net" class="text-lg lg:text-xl font-bold text-green-400 mt-1">—</div>
                     <div class="text-[10px] text-white/40 mt-1">Kotor − diskon − refund</div>
+                </div>
+            </div>
+            <!-- Uang masuk dipisah dari penjualan: penjualan event tercatat saat
+                 barang terjual, tapi uangnya baru masuk saat partner melunasi
+                 tagihan. Kalau digabung, uang yang belum kita pegang ikut terhitung
+                 — dan terhitung dua kali begitu partner membayar. -->
+            <div id="rep-kas-row" class="hidden grid grid-cols-2 gap-3 pt-1">
+                <div class="bg-darkcard border border-emerald-400/30 rounded-2xl p-4">
+                    <div class="text-[11px] font-semibold text-emerald-200/80">Uang Benar-benar Masuk</div>
+                    <div id="rep-cash" class="text-lg lg:text-xl font-bold text-emerald-400 mt-1">—</div>
+                    <div class="text-[10px] text-white/40 mt-1">Yang sudah diterima di periode ini</div>
+                </div>
+                <div class="bg-darkcard border border-amber-400/25 rounded-2xl p-4">
+                    <div class="text-[11px] font-semibold text-amber-200/80">Belum Diterima (Piutang Partner)</div>
+                    <div id="rep-piutang" class="text-lg lg:text-xl font-bold text-amber-300 mt-1">—</div>
+                    <div id="rep-piutang-sub" class="text-[10px] text-white/40 mt-1">Penjualan event yang tagihannya belum lunas</div>
                 </div>
             </div>
             <p class="text-xs text-white/45"><span id="rep-orders" class="font-bold text-white/70">0</span> pesanan dibayar di periode ini.</p>
@@ -3314,6 +3344,20 @@ async function loadReport() {
         document.getElementById('rep-discount').textContent = s.discount ? '−' + repRp(s.discount) : repRp(0);
         document.getElementById('rep-refunds').textContent  = s.refunds ? '−' + repRp(s.refunds) : repRp(0);
         document.getElementById('rep-net').textContent      = repRp(s.net);
+        // Baris kas hanya muncul kalau memang ada bedanya — untuk periode tanpa
+        // penjualan event, penjualan = uang masuk, dan dua kartu tambahan yang
+        // menampilkan angka sama hanya bikin bingung.
+        const adaSelisih = Number(s.receivable || 0) > 0 || Number(s.cash_in || 0) !== Number(s.net || 0);
+        const kasRow = document.getElementById('rep-kas-row');
+        if (kasRow) {
+            kasRow.classList.toggle('hidden', !adaSelisih);
+            const c = document.getElementById('rep-cash'); if (c) c.textContent = repRp(s.cash_in || 0);
+            const p = document.getElementById('rep-piutang'); if (p) p.textContent = repRp(s.receivable || 0);
+            const sub = document.getElementById('rep-piutang-sub');
+            if (sub) sub.textContent = (s.receivable_orders || 0) > 0
+                ? `${s.receivable_orders} order event, tagihannya belum lunas`
+                : 'Semua penjualan event sudah dibayar partner';
+        }
         document.getElementById('rep-orders').textContent   = s.orders || 0;
         const avg = s.orders > 0 ? Math.round(s.net / s.orders) : 0;
         const avgEl = document.getElementById('rep-avg');
@@ -4442,6 +4486,16 @@ async function loadOverview() {
         document.getElementById('stat-done').textContent = statsData.done_orders;
         document.getElementById('stat-pending').textContent = statsData.pending_orders;
         document.getElementById('stat-revenue').textContent = 'Rp ' + fmt(statsData.total_revenue);
+        // Piutang partner event — uang yang sudah jadi hak kita tapi belum masuk.
+        const piutang = Number(statsData.partner_receivable || 0);
+        const pCard = document.getElementById('stat-piutang-card');
+        if (pCard) {
+            pCard.classList.toggle('hidden', piutang <= 0);
+            const el = document.getElementById('stat-piutang');
+            if (el) el.textContent = 'Rp ' + fmt(piutang);
+            const sub = document.getElementById('stat-piutang-sub');
+            if (sub) sub.textContent = `${statsData.partner_receivable_orders || 0} order event · uangnya masih di partner`;
+        }
         if (statsData.pending_orders > 0) {
             document.getElementById('header-pending-badge').classList.remove('hidden');
             document.getElementById('header-pending-badge').classList.add('flex');

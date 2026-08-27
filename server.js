@@ -3451,8 +3451,21 @@ app.get('/api/stats/overview', requireAuth(), async (req, res) => {
 const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'pending' AND order_status NOT IN ('cancelled','test_sent','test_pending_pay','test_pending_return')");
         const paidOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
         const doneOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE order_status = 'done'");
-        // Revenue: hanya order PAID yang TIDAK dibatalkan
-        const totalRevenue = await dbGet("SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE payment_status = 'paid' AND order_status != 'cancelled'");
+        // Uang masuk: order PAID yang TIDAK dibatalkan — TAPI order event hanya
+        // dihitung kalau partnernya sudah melunasi tagihan. Sebelum ini, uang yang
+        // masih di tangan partner ikut terhitung sebagai uang masuk (dan akan
+        // terhitung dua kali begitu partner membayar).
+        const totalRevenue = await dbGet(
+            `SELECT COALESCE(SUM(o.total_amount),0) AS total
+               FROM orders o ${CASH_JOIN}
+              WHERE o.payment_status = 'paid' AND o.order_status <> 'cancelled'
+                AND (o.order_source <> 'collaboration_event' OR pinv.id IS NOT NULL)`);
+        // Piutang partner: sudah dijual & dibayar pembeli, uangnya masih di partner.
+        const piutangPartner = await dbGet(
+            `SELECT COALESCE(SUM(o.total_amount),0) AS total, COUNT(*)::int AS orders
+               FROM orders o ${CASH_JOIN}
+              WHERE o.payment_status = 'paid' AND o.order_status <> 'cancelled'
+                AND o.order_source = 'collaboration_event' AND pinv.id IS NULL`);
         const lowStock = await dbGet("SELECT COUNT(*) as count FROM inventory WHERE stock < 5 AND stock >= 0");
         const byCategory = await dbAll("SELECT category, COUNT(*) as count FROM products WHERE is_active = TRUE GROUP BY category");
 
@@ -3472,6 +3485,8 @@ const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE pa
             paid_orders: paidOrders.count,
             done_orders: doneOrders.count,
             total_revenue: totalRevenue.total,
+            partner_receivable: piutangPartner.total,
+            partner_receivable_orders: piutangPartner.orders,
             low_stock_items: lowStock.count,
             by_category: byCategory,
             monthly: monthlyOrders.reverse()
@@ -3509,11 +3524,40 @@ function reportRange(req) {
     const ok = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
     if (!ok(from) || !ok(to)) return null;
     const src = String(req.query.source || '').trim();
+    // Batas periode dirakit sebagai timestamp penuh, bukan lewat cast `::date` di
+    // SQL. Hasilnya identik (batas atas tetap inklusif sampai akhir hari), tapi
+    // query polos begini bisa dijalankan mesin uji — modul Report sebelumnya
+    // MUSTAHIL diuji otomatis gara-gara cast itu, padahal isinya angka uang.
     // '' = semua sumber. Dipakai sebagai parameter SQL, jadi tetap lewat whitelist.
-    return { from, to, source: REPORT_SOURCES.includes(src) ? src : '' };
+    return {
+        from, to,
+        fromTs: from + ' 00:00:00',
+        toTs: to + ' 23:59:59.999',
+        source: REPORT_SOURCES.includes(src) ? src : '',
+    };
 }
 
 // GET /api/reports/sales?from=YYYY-MM-DD&to=YYYY-MM-DD
+// ─── PIUTANG PARTNER EVENT ────────────────────────────────────────────────────
+// Order collaboration_event berstatus 'paid' artinya PEMBELI sudah bayar — tapi
+// ke PARTNER, bukan ke Wearscrubs. Uangnya baru benar-benar masuk saat partner
+// melunasi tagihan. Sampai itu terjadi, nilainya adalah PIUTANG.
+//
+// Tanpa pemisahan ini, "Uang Masuk" menghitung uang yang belum kita pegang —
+// dan begitu partner bayar, angkanya akan terhitung dua kali.
+//
+// JOIN (bukan sub-query berkorelasi) supaya query tetap bisa diuji otomatis.
+const CASH_JOIN = `
+    LEFT JOIN partner_invoice_orders pio ON pio.order_id = o.id AND pio.is_active
+    LEFT JOIN partner_invoices pinv ON pinv.id = pio.invoice_id AND pinv.status = 'paid'`;
+// Tanggal uang masuk: order biasa = saat dibayar; order event = saat partner
+// melunasi tagihannya. NULL untuk event yang tagihannya belum lunas — itulah
+// yang membuatnya keluar dari hitungan uang masuk.
+const CASH_AT = `CASE WHEN o.order_source = 'collaboration_event' THEN pinv.paid_at ELSE o.paid_at END`;
+// Nilai per order yang dipakai di semua hitungan uang (ongkir & diskon ikut
+// aturan yang sama dengan laporan lama supaya angkanya sebanding).
+const ORDER_NET = `(o.total_amount - o.shipping_cost)`;
+
 app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => {
     try {
         const r = reportRange(req);
@@ -3524,9 +3568,9 @@ app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => 
                     COUNT(*)::int AS orders
                FROM orders
               WHERE payment_status='paid' AND order_status<>'cancelled'
-                AND paid_at >= $1::date AND paid_at < ($2::date + 1)
+                AND paid_at >= $1 AND paid_at <= $2
                 AND ($3 = '' OR order_source = $3)`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
         );
         // Refund ikut disaring lewat order-nya supaya angkanya sepadan dengan
         // penjualan di atas — kalau tidak, memilih satu channel akan mengurangi
@@ -3535,13 +3579,36 @@ app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => 
             `SELECT COALESCE(SUM(rf.amount),0)::bigint AS refunds
                FROM refunds rf JOIN orders o ON o.id = rf.order_id
               WHERE rf.status<>'cancelled'
-                AND rf.created_at >= $1::date AND rf.created_at < ($2::date + 1)
+                AND rf.created_at >= $1 AND rf.created_at <= $2
                 AND ($3 = '' OR o.order_source = $3)`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
+        );
+        // UANG MASUK — basis kas. Order event ikut tanggal partner melunasi, bukan
+        // tanggal pembeli bayar (keputusan James 27 Agu 2026). Refund periode ini
+        // tetap dikurangkan, sama seperti angka penjualan di atas.
+        const cash = await dbGet(
+            `SELECT COALESCE(SUM(${ORDER_NET}),0)::bigint AS masuk
+               FROM orders o ${CASH_JOIN}
+              WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+                AND ${CASH_AT} >= $1 AND ${CASH_AT} <= $2
+                AND ($3 = '' OR o.order_source = $3)`,
+            [r.fromTs, r.toTs, r.source]
+        );
+        // PIUTANG — order event yang terjual di periode ini tapi tagihannya belum
+        // dilunasi partner. Ini yang menjelaskan selisih penjualan vs uang masuk.
+        const piutang = await dbGet(
+            `SELECT COALESCE(SUM(${ORDER_NET}),0)::bigint AS nilai, COUNT(*)::int AS orders
+               FROM orders o ${CASH_JOIN}
+              WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+                AND o.order_source = 'collaboration_event' AND pinv.id IS NULL
+                AND o.paid_at >= $1 AND o.paid_at <= $2`,
+            [r.fromTs, r.toTs]
         );
         const gross = Number(sales.gross), discount = Number(sales.discount), refunds = Number(ref.refunds);
         res.json({ from: r.from, to: r.to, source: r.source, gross, discount, refunds,
-                   net: gross - discount - refunds, orders: sales.orders });
+                   net: gross - discount - refunds, orders: sales.orders,
+                   cash_in: Math.max(0, Number(cash.masuk) - refunds),
+                   receivable: Number(piutang.nilai), receivable_orders: piutang.orders });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3558,18 +3625,18 @@ app.get('/api/reports/margin', requireAuth(['admin']), async (req, res) => {
                     COALESCE(SUM(discount_amount),0)::bigint AS discount
                FROM orders
               WHERE payment_status='paid' AND order_status<>'cancelled'
-                AND paid_at >= $1::date AND paid_at < ($2::date + 1)
+                AND paid_at >= $1 AND paid_at <= $2
                 AND ($3 = '' OR order_source = $3)`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
         );
         const cogsRow = await dbGet(
             `SELECT COALESCE(SUM(oi.total_cogs),0)::bigint AS cogs
                FROM order_items oi JOIN orders o ON o.id = oi.order_id
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
-                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND o.paid_at >= $1 AND o.paid_at <= $2
                 AND ($3 = '' OR o.order_source = $3)`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
         );
         const gross = Number(rev.gross), discount = Number(rev.discount), cogs = Number(cogsRow.cogs);
         const net = gross - discount;
@@ -3599,11 +3666,11 @@ app.get('/api/reports/margin-by-product', requireAuth(['admin']), async (req, re
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND oi.is_bonus = FALSE
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
-                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND o.paid_at >= $1 AND o.paid_at <= $2
                 AND ($3 = '' OR o.order_source = $3)
               GROUP BY product, p.sku, oi.variant_type
               ORDER BY (COALESCE(SUM(oi.price*oi.quantity),0) - COALESCE(SUM(oi.total_cogs),0)) DESC`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
         );
         res.json(rows.map(x => {
             const revenue = Number(x.revenue), cogs = Number(x.cogs), gp = revenue - cogs;
@@ -3625,18 +3692,18 @@ app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res
                     COALESCE(SUM(discount_amount),0)::bigint AS discount
                FROM orders
               WHERE payment_status='paid' AND order_status<>'cancelled'
-                AND paid_at >= $1::date AND paid_at < ($2::date + 1)
+                AND paid_at >= $1 AND paid_at <= $2
               GROUP BY order_source`,
-            [r.from, r.to]
+            [r.fromTs, r.toTs]
         );
         // Refunds per channel (join ke order untuk dapat source), by refund date.
         const refRows = await dbAll(
             `SELECT o.order_source AS source, COALESCE(SUM(r.amount),0)::bigint AS refunds
                FROM refunds r JOIN orders o ON o.id = r.order_id
               WHERE r.status<>'cancelled'
-                AND r.created_at >= $1::date AND r.created_at < ($2::date + 1)
+                AND r.created_at >= $1 AND r.created_at <= $2
               GROUP BY o.order_source`,
-            [r.from, r.to]
+            [r.fromTs, r.toTs]
         );
         const refMap = Object.fromEntries(refRows.map(x => [x.source, Number(x.refunds)]));
         const all = ['website', 'whatsapp', 'event_offline', 'offline', 'collaboration_event'];
@@ -3688,10 +3755,10 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND oi.is_bonus = FALSE
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
-                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND o.paid_at >= $1 AND o.paid_at <= $2
                 AND ($3 = '' OR o.order_source = $3)
               ORDER BY o.paid_at ASC, o.order_code ASC`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
         );
         // COGS rahasia → strip dari payload kalau bukan admin (report:view bisa dipunya staf).
         const isAdmin = req.user && req.user.role === 'admin';
@@ -3716,11 +3783,11 @@ app.get('/api/reports/items', requireMenu('report','view'), async (req, res) => 
               WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
                 AND oi.is_bonus = FALSE
                 AND COALESCE(oi.is_test_returned, FALSE) = FALSE
-                AND o.paid_at >= $1::date AND o.paid_at < ($2::date + 1)
+                AND o.paid_at >= $1 AND o.paid_at <= $2
                 AND ($3 = '' OR o.order_source = $3)
               GROUP BY p.id, p.name, p.sku, p.category, p.price
               ORDER BY total_sales DESC`,
-            [r.from, r.to, r.source]
+            [r.fromTs, r.toTs, r.source]
         );
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }

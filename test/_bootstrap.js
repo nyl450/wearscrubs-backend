@@ -54,6 +54,20 @@ db.public.registerFunction({
     returns: DataType.text,
     implementation: (v, pat, rep) => (v == null ? null : String(v).replace(new RegExp(pat), rep))
 });
+// to_char dipakai grafik bulanan di /api/stats/overview. pg-mem tidak punya, dan
+// tanpa ini endpoint overview mustahil diuji. Hanya pola 'YYYY-MM' yang dipakai
+// produksi, jadi itu yang diimplementasikan — sisanya dikembalikan apa adanya.
+db.public.registerFunction({
+    name: 'to_char', args: [DataType.timestamp, DataType.text], returns: DataType.text,
+    implementation: (d, fmt) => {
+        if (d == null) return null;
+        const dt = d instanceof Date ? d : new Date(d);
+        if (isNaN(dt.getTime())) return null;
+        if (fmt === 'YYYY-MM') return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+        return dt.toISOString();
+    }
+});
+
 const pgAdapter = db.adapters.createPg();
 const initErrors = [];
 let swallow = true;
