@@ -14393,8 +14393,10 @@ function pbRenderBuat(data) {
 
     const rows = pbCandidates.map(o => {
         const bisa = o.billable;
-        const rincian = (o.items || []).map(i =>
-            `${i.nama}${i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : ''} ${i.color || ''} ${i.size || ''}`.trim()).join(', ');
+        const rincian = (o.items || []).map(i => {
+            const L = pbItemLabel(i);
+            return L.dasar + (L.bordir ? ' ' + L.bordir : '');
+        }).join(' · ');
         return `
         <tr class="border-b border-white/5 ${bisa ? '' : 'opacity-45'}">
             <td class="px-3 py-2">
@@ -14579,10 +14581,26 @@ Alasan pembatalan:`);
 //
 // ONGKIR TIDAK MUNCUL SAMA SEKALI di lembar ini — bukan sebagai baris Rp 0.
 // Baris nol hanya mengundang pertanyaan yang tidak perlu.
+// Satu baris barang, lengkap dengan keterangan bordirnya. Harga item SUDAH
+// termasuk bordir, jadi tanpa keterangan ini partner melihat angka yang tidak
+// bisa dia cocokkan dengan harga produk biasa.
+function pbItemLabel(i) {
+    const v = i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : '';
+    const dasar = `${i.nama || ''}${v} · ${i.color || '-'} · ${i.size || '-'}`;
+    const b = [];
+    if (i.bordir_nama) b.push('nama');
+    if (i.bordir_logo) b.push('logo');
+    if (!b.length) return { dasar, bordir: '' };
+    const nilai = Number(i.bordir_total || 0);
+    return { dasar, bordir: `+ bordir ${b.join(' & ')}${nilai ? ' (Rp ' + nilai.toLocaleString('id-ID') + ')' : ''}` };
+}
+
 function pbInvoicePrintHTML(inv) {
     const rp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
     const tgl = (d, opts) => d ? new Date(d).toLocaleDateString('id-ID', opts || { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-    const rows = inv.orders || [];
+    // Order batal tidak ditampilkan di lembar tagihan (keputusan James). Filter
+    // ini juga menjaga tagihan LAMA yang terlanjur menyalin baris batal.
+    const rows = (inv.orders || []).filter(r => !r.is_cancelled);
     const nomor = rows.map(r => r.receipt_no).filter(Boolean);
     const rentangKwitansi = nomor.length
         ? (nomor.length === 1 ? nomor[0] : `${nomor[0]} s/d ${nomor[nomor.length - 1]}`)
@@ -14593,18 +14611,11 @@ function pbInvoicePrintHTML(inv) {
 
     const baris = rows.map(r => {
         const items = (r.items || []).map(i => {
-            const v = i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : '';
-            return esc(`${i.nama || ''}${v} · ${i.color || '-'} · ${i.size || '-'}`);
+            const L = pbItemLabel(i);
+            return esc(L.dasar) + (L.bordir
+                ? `<br><span style="color:#5b6a7d;font-size:9.5px;">&nbsp;&nbsp;${esc(L.bordir)}</span>`
+                : '');
         }).join('<br>');
-        if (r.is_cancelled) {
-            return `<tr style="color:#9aa3ad;">
-                <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;font-family:monospace;font-weight:700;">${esc(r.receipt_no || '—')}</td>
-                <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;white-space:nowrap;">${tgl(r.order_date, { day: '2-digit', month: 'short' })}</td>
-                <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;">${esc(r.customer_name || '-')}</td>
-                <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;font-style:italic;" colspan="4">Dibatalkan — tidak ditagihkan</td>
-                <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;">0</td>
-            </tr>`;
-        }
         return `<tr>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;font-family:monospace;font-weight:700;vertical-align:top;">${esc(r.receipt_no || '—')}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;white-space:nowrap;vertical-align:top;">${tgl(r.order_date, { day: '2-digit', month: 'short' })}</td>
@@ -14646,6 +14657,7 @@ function pbInvoicePrintHTML(inv) {
                 <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#8d9aa9;font-family:monospace;">Dasar penagihan</div>
                 <div style="color:#5b6a7d;padding-top:2px;">Penjualan event dengan potongan Consignment</div>
                 <div style="color:#5b6a7d;">${inv.order_count} order &middot; ${inv.item_count} pcs</div>
+                ${Number(inv.bordir_total) ? `<div style="color:#5b6a7d;">termasuk bordir Rp ${Number(inv.bordir_total).toLocaleString('id-ID')}</div>` : ''}
             </div>
         </div>
 

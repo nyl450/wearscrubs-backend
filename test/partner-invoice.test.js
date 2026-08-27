@@ -8,7 +8,9 @@
 //
 //   1. Ongkir TIDAK ikut ditagihkan (ditanggung Wearscrubs) — ini paling gampang
 //      salah karena orders.total_amount SUDAH memuat ongkir
-//   2. Order batal ikut tampil tapi bernilai 0
+//   2. Order batal TIDAK masuk lembar tagihan sama sekali
+//   2b. Bordir ikut tertagih (harga item sudah termasuk) DAN rinciannya tercatat,
+//       tanpa pernah ditambahkan dua kali
 //   3. Order tanpa nomor kwitansi tidak bisa ditagih
 //   4. Satu order tidak bisa masuk dua tagihan aktif
 //   5. Batalkan tagihan -> ordernya bebas ditagih ulang
@@ -59,12 +61,14 @@ function seed() {
       (902, 'WS-EV-902', 'Ayu',   '0812', '-', 395500, 'paid', 'confirmed',     0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-14', 169500, 'Consignment 30%', '00124'),
       (903, 'WS-EV-903', 'Heidi', '0813', '-', 546000, 'paid', 'cancelled',     0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0,      NULL, '00125'),
       (904, 'WS-EV-904', 'Deo',   '0814', '-', 300000, 'paid', 'done',          0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-15', 0,      NULL, NULL);
-    INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price) VALUES
-      (801, 901, 1, 'L', 'black', 'straight', 1, 240000),
-      (802, 902, 2, 'L', 'black', 'panjang',  1, 290000),
-      (803, 902, 2, 'L', 'black', 'pendek',   1, 275000),
-      (804, 903, 1, 'M', 'black', 'straight', 1, 546000),
-      (805, 904, 1, 'M', 'black', 'straight', 1, 300000);
+    INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price,
+                             bordir_nama, bordir_nama_price, bordir_logo, bordir_logo_price) VALUES
+      (801, 901, 1, 'L', 'black', 'straight', 1, 240000, FALSE, NULL, FALSE, NULL),
+      -- 802 punya bordir nama+logo; harganya SUDAH termasuk bordir 50.000
+      (802, 902, 2, 'L', 'black', 'panjang',  1, 290000, TRUE, 20000, TRUE, 30000),
+      (803, 902, 2, 'L', 'black', 'pendek',   1, 275000, FALSE, NULL, FALSE, NULL),
+      (804, 903, 1, 'M', 'black', 'straight', 1, 546000, FALSE, NULL, FALSE, NULL),
+      (805, 904, 1, 'M', 'black', 'straight', 1, 300000, FALSE, NULL, FALSE, NULL);
     `);
 }
 
@@ -76,7 +80,7 @@ async function run() {
 
     // 1 — perhitungan kandidat
     seed();
-    group('1. Perhitungan kandidat: ongkir tidak ikut, batal jadi nol');
+    group('1. Perhitungan kandidat: ongkir tidak ikut, batal tidak bisa ditagih');
     let r = await candidates(1);
     check('diterima', r.status === 200, r);
     const byCode = Object.fromEntries((r.body.orders || []).map(o => [o.order_code, o]));
@@ -101,9 +105,26 @@ async function run() {
     const invId = r.body.invoice_id;
     check('2 order tersalin aktif',
         one(`SELECT COUNT(*)::int AS n FROM partner_invoice_orders WHERE invoice_id=${invId} AND is_active AND NOT is_cancelled`).n === 2);
-    check('order batal ikut tersalin (nilai 0) supaya nomornya tidak lompat',
-        one(`SELECT COUNT(*)::int AS n FROM partner_invoice_orders WHERE invoice_id=${invId} AND is_cancelled`).n === 1);
+    check('order batal TIDAK ikut disalin ke tagihan',
+        one(`SELECT COUNT(*)::int AS n FROM partner_invoice_orders WHERE invoice_id=${invId} AND is_cancelled`).n === 0);
+    check('total baris tagihan = 2 (hanya yang ditagih)',
+        one(`SELECT COUNT(*)::int AS n FROM partner_invoice_orders WHERE invoice_id=${invId}`).n === 2);
     check('status issued', one(`SELECT status FROM partner_invoices WHERE id=${invId}`).status === 'issued');
+
+    // 2b — bordir ikut tertagih DAN terterangkan di tagihan
+    group('2b. Bordir ikut ditagih dan tercatat rinciannya');
+    r = await req('GET', `/api/admin/partner-billing/invoices/${invId}`);
+    const brs = (r.body.orders || []).find(o => o.order_code === 'WS-EV-902');
+    const itemBordir = (brs?.items || []).find(i => i.bordir_nama || i.bordir_logo);
+    check('item berbordir tersalin dengan penanda', !!itemBordir, brs?.items);
+    check('nilai bordir per item tercatat 50.000', Number(itemBordir?.bordir_total) === 50000, itemBordir);
+    check('nilai bordir order ikut di ringkasan tagihan',
+        Number(r.body.bordir_total || 0) === 50000, r.body.bordir_total);
+    // Harga item memang SUDAH termasuk bordir - ini yang menjaga supaya suatu
+    // saat nilai bordir tidak tanpa sengaja ditambahkan dua kali.
+    check('bordir TIDAK ditambahkan dua kali ke total',
+        Number(r.body.gross_total) === 805000, r.body.gross_total);
+    check('total tetap 563.500', Number(r.body.total_due) === 563500, r.body.total_due);
 
     // 3 — anti tagih ganda
     group('3. Order yang sudah ditagih tidak bisa masuk tagihan lain');

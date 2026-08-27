@@ -1897,6 +1897,7 @@ async function fetchPartnerCandidates(partner, from, to) {
     const ph = ids.map((_, i) => '$' + (i + 1)).join(',');
     const lines = await dbAll(
         `SELECT oi.order_id, oi.quantity, oi.price, oi.size, oi.color, oi.variant_type,
+                oi.bordir_nama, oi.bordir_nama_price, oi.bordir_logo, oi.bordir_logo_price,
                 COALESCE(oi.custom_product_name, pr.name) AS nama,
                 COALESCE(pr.category, oi.custom_product_category) AS kategori
            FROM order_items oi
@@ -1918,10 +1919,22 @@ async function fetchPartnerCandidates(partner, from, to) {
         const cancelled = r.order_status === 'cancelled';
         const gross = its.reduce((sum, i) => sum + Number(i.price || 0) * Number(i.quantity || 0), 0);
         const disc  = Number(r.discount_amount || 0);
-        r.items = its.map(i => ({
-            nama: i.nama, variant_type: i.variant_type, color: i.color, size: i.size,
-            quantity: Number(i.quantity || 0), price: Number(i.price || 0), kategori: i.kategori,
-        }));
+        // Harga item SUDAH termasuk bordir (server menyimpannya begitu sejak order
+        // dibuat), jadi bordir memang sudah ikut tertagih. Yang selama ini hilang
+        // adalah KETERANGANNYA: partner melihat "Minna panjang L" seharga 310.000
+        // padahal produknya 290.000, tanpa penjelasan selisihnya. Rincian bordir
+        // ikut disalin supaya lembar tagihan bisa menerangkan angkanya sendiri.
+        r.items = its.map(i => {
+            const bn = i.bordir_nama ? Number(i.bordir_nama_price || 0) : 0;
+            const bl = i.bordir_logo ? Number(i.bordir_logo_price || 0) : 0;
+            return {
+                nama: i.nama, variant_type: i.variant_type, color: i.color, size: i.size,
+                quantity: Number(i.quantity || 0), price: Number(i.price || 0), kategori: i.kategori,
+                bordir_nama: !!i.bordir_nama, bordir_logo: !!i.bordir_logo,
+                bordir_total: (bn + bl) * Number(i.quantity || 0),
+            };
+        });
+        r.bordir_amount = r.items.reduce((sum, i) => sum + i.bordir_total, 0);
         r.qty = its.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
         // Order batal tetap tampil, tapi nilainya nol — bukan dikeluarkan diam-diam.
         r.gross_amount = cancelled ? 0 : gross;
@@ -1948,6 +1961,7 @@ function ringkasKandidat(rows) {
         gross_total: ikut.reduce((s, r) => s + r.gross_amount, 0),
         discount_total: ikut.reduce((s, r) => s + r.discount_amount_calc, 0),
         total_due: ikut.reduce((s, r) => s + r.net_amount, 0),
+        bordir_total: ikut.reduce((s, r) => s + (r.bordir_amount || 0), 0),
         blocked_count: rows.filter(r => !r.billable && !r.is_cancelled).length,
         cancelled_count: rows.filter(r => r.is_cancelled).length,
     };
@@ -2019,10 +2033,11 @@ app.post('/api/admin/partner-billing/invoices', requireMenu('partner-billing', '
             dipilih.push(r);
         }
 
-        // Order batal ikut DISALIN ke tagihan (nilai 0) supaya nomor kwitansinya
-        // tetap terbaca di lembar tagihan — tapi tidak ikut dipilih dan tidak
-        // menahan apa pun. Hanya yang ada di rentang yang sama.
-        const batal = kandidat.filter(r => r.is_cancelled);
+        // Order batal TIDAK masuk tagihan sama sekali (keputusan James 27 Agu 2026,
+        // merevisi rancangan awal yang menampilkannya bernilai 0). Alasannya:
+        // lembar tagihan adalah dokumen penagihan, bukan rekap event — baris
+        // bernilai nol hanya menambah pertanyaan. Order batal tetap terlihat di
+        // layar penyusun beserta alasannya, jadi tidak ada yang hilang diam-diam.
 
         const ringkas = {
             order_count: dipilih.length,
@@ -2030,6 +2045,7 @@ app.post('/api/admin/partner-billing/invoices', requireMenu('partner-billing', '
             gross_total: dipilih.reduce((s, r) => s + r.gross_amount, 0),
             discount_total: dipilih.reduce((s, r) => s + r.discount_amount_calc, 0),
             total_due: dipilih.reduce((s, r) => s + r.net_amount, 0),
+            bordir_total: dipilih.reduce((s, r) => s + (r.bordir_amount || 0), 0),
         };
         if (ringkas.total_due <= 0)
             return res.status(400).json({ error: 'Total tagihan Rp 0 — tidak ada yang perlu ditagihkan.' });
@@ -2051,7 +2067,7 @@ app.post('/api/admin/partner-billing/invoices', requireMenu('partner-billing', '
             );
             const invoiceId = inv.rows[0].id;
 
-            for (const r of [...dipilih, ...batal]) {
+            for (const r of dipilih) {
                 await client.query(
                     `INSERT INTO partner_invoice_orders
                        (invoice_id, order_id, receipt_no, order_code, order_date, customer_name,
@@ -2102,6 +2118,11 @@ app.get('/api/admin/partner-billing/invoices/:id', requireMenu('partner-billing'
             `SELECT * FROM partner_invoice_orders WHERE invoice_id = $1`, [inv.id]);
         for (const r of rows) { try { r.items = JSON.parse(r.items_json || '[]'); } catch { r.items = []; } }
         inv.orders = sortByReceipt(rows);
+        // Nilai bordir DITURUNKAN dari salinan beku, bukan disimpan sebagai kolom
+        // sendiri. Dengan begitu angkanya mustahil melenceng dari rincian yang
+        // tercetak di lembar tagihan — keduanya membaca sumber yang sama.
+        inv.bordir_total = rows.reduce((s, r) =>
+            s + (r.items || []).reduce((x, i) => x + Number(i.bordir_total || 0), 0), 0);
         const partner = await dbGet('SELECT * FROM event_partners WHERE id = $1', [inv.partner_id]);
         inv.partner = partner || null;
         res.json(inv);
