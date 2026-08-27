@@ -1832,6 +1832,297 @@ app.put('/api/admin/partner-billing/receipts', requireMenu('partner-billing', 'e
     }
 });
 
+// ─── TAGIHAN PARTNER — PENYUSUN TAGIHAN (Tahap B) ─────────────────────────────
+// Aturan uang yang dikunci James (27 Agu 2026):
+//   • ONGKIR TIDAK PERNAH ditagihkan — ditanggung Wearscrubs, digratiskan ke
+//     pembeli di event. Karena itu net dihitung dari item, BUKAN dari
+//     orders.total_amount (yang sudah memuat ongkir).
+//   • Status pengerjaan barang tidak menentukan apa pun. Pembeli selalu bayar di
+//     tempat, jadi uangnya sudah di partner berapa pun status ordernya.
+//   • Hanya PEMBATALAN yang mengeluarkan order dari tagihan — tapi barisnya tetap
+//     ditampilkan dengan nilai 0 supaya nomor kwitansi tidak terlihat lompat.
+//   • Nomor kwitansi WAJIB ada. Tanpa itu partner tidak bisa mencocokkan.
+
+// Urutan tampil = urutan lembar di buku kwitansi. Nomor bisa "00123" atau "B-9",
+// jadi diurutkan secara alami: bagian angka dibandingkan sebagai angka supaya
+// B-9 tetap di atas B-10, sisanya sebagai teks.
+function receiptSortKey(no) {
+    const v = String(no || '');
+    const digits = v.replace(/\D+/g, '');
+    return [v.replace(/\d+/g, ''), digits ? parseInt(digits, 10) : Number.MAX_SAFE_INTEGER, v];
+}
+function sortByReceipt(rows) {
+    return rows.sort((a, b) => {
+        const ka = receiptSortKey(a.receipt_no), kb = receiptSortKey(b.receipt_no);
+        for (let i = 0; i < 3; i++) {
+            if (ka[i] < kb[i]) return -1;
+            if (ka[i] > kb[i]) return 1;
+        }
+        return 0;
+    });
+}
+
+// Ambil order kandidat + hitung uangnya. Dipakai bersama oleh layar penyusun
+// (pratinjau) dan penerbitan (perhitungan final) — SATU sumber, supaya angka
+// yang dilihat admin dan angka yang tersimpan mustahil berbeda.
+async function fetchPartnerCandidates(partner, from, to) {
+    const params = [partner.id, partner.name];
+    let where = `o.order_source = 'collaboration_event' AND ${PARTNER_MATCH}`;
+    if (from) { params.push(from + ' 00:00:00'); where += ` AND ${PARTNER_ORDER_DATE} >= $${params.length}`; }
+    if (to)   { params.push(to + ' 23:59:59.999'); where += ` AND ${PARTNER_ORDER_DATE} <= $${params.length}`; }
+
+    const rows = await dbAll(
+        `SELECT o.id, o.order_code, o.customer_name, o.receipt_no, o.order_status,
+                o.discount_amount, o.discount_label, o.shipping_cost, o.total_amount,
+                ${PARTNER_ORDER_DATE} AS order_date,
+                pinv.id AS billed_invoice_id, pinv.invoice_no AS billed_on, pinv.status AS billed_status
+           FROM orders o
+           LEFT JOIN partner_invoice_orders pio ON pio.order_id = o.id AND pio.is_active
+           LEFT JOIN partner_invoices pinv ON pinv.id = pio.invoice_id
+          WHERE ${where}`,
+        params
+    );
+    if (!rows.length) return [];
+
+    const ids = rows.map(r => Number(r.id));
+    const ph = ids.map((_, i) => '$' + (i + 1)).join(',');
+    const lines = await dbAll(
+        `SELECT oi.order_id, oi.quantity, oi.price, oi.size, oi.color, oi.variant_type,
+                COALESCE(oi.custom_product_name, pr.name) AS nama,
+                COALESCE(pr.category, oi.custom_product_category) AS kategori
+           FROM order_items oi
+           LEFT JOIN products pr ON pr.id = oi.product_id
+          WHERE oi.order_id IN (${ph})
+            AND oi.is_bonus = FALSE AND oi.is_test_returned = FALSE
+          ORDER BY oi.id ASC`,
+        ids
+    );
+    const byOrder = new Map();
+    for (const l of lines) {
+        const k = Number(l.order_id);
+        if (!byOrder.has(k)) byOrder.set(k, []);
+        byOrder.get(k).push(l);
+    }
+
+    for (const r of rows) {
+        const its = byOrder.get(Number(r.id)) || [];
+        const cancelled = r.order_status === 'cancelled';
+        const gross = its.reduce((sum, i) => sum + Number(i.price || 0) * Number(i.quantity || 0), 0);
+        const disc  = Number(r.discount_amount || 0);
+        r.items = its.map(i => ({
+            nama: i.nama, variant_type: i.variant_type, color: i.color, size: i.size,
+            quantity: Number(i.quantity || 0), price: Number(i.price || 0), kategori: i.kategori,
+        }));
+        r.qty = its.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
+        // Order batal tetap tampil, tapi nilainya nol — bukan dikeluarkan diam-diam.
+        r.gross_amount = cancelled ? 0 : gross;
+        r.discount_amount_calc = cancelled ? 0 : disc;
+        // Ongkir sengaja TIDAK masuk hitungan sama sekali.
+        r.net_amount = cancelled ? 0 : Math.max(0, gross - disc);
+        r.is_cancelled = cancelled;
+        // Alasan sebuah order tidak bisa ikut ditagih. null = bisa ikut.
+        r.blocked_reason =
+            cancelled ? 'Order dibatalkan'
+            : r.billed_on ? `Sudah masuk tagihan ${r.billed_on}`
+            : (!r.receipt_no || !String(r.receipt_no).trim()) ? 'Nomor kwitansi belum diisi'
+            : null;
+        r.billable = r.blocked_reason === null;
+    }
+    return sortByReceipt(rows);
+}
+
+function ringkasKandidat(rows) {
+    const ikut = rows.filter(r => r.billable);
+    return {
+        order_count: ikut.length,
+        item_count: ikut.reduce((s, r) => s + r.qty, 0),
+        gross_total: ikut.reduce((s, r) => s + r.gross_amount, 0),
+        discount_total: ikut.reduce((s, r) => s + r.discount_amount_calc, 0),
+        total_due: ikut.reduce((s, r) => s + r.net_amount, 0),
+        blocked_count: rows.filter(r => !r.billable && !r.is_cancelled).length,
+        cancelled_count: rows.filter(r => r.is_cancelled).length,
+    };
+}
+
+// GET /api/admin/partner-billing/candidates?partner_id=&from=&to=
+app.get('/api/admin/partner-billing/candidates', requireMenu('partner-billing'), async (req, res) => {
+    try {
+        const partnerId = parseInt(req.query.partner_id, 10);
+        if (!Number.isInteger(partnerId)) return res.status(400).json({ error: 'partner_id wajib diisi' });
+        const partner = await getPartnerOr404(partnerId, res);
+        if (!partner) return;
+        const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+        const rows = await fetchPartnerCandidates(
+            partner, isDate(req.query.from) ? req.query.from : null, isDate(req.query.to) ? req.query.to : null);
+        res.json({
+            partner: { id: partner.id, name: partner.name, pic_name: partner.pic_name },
+            summary: ringkasKandidat(rows),
+            orders: rows,
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Nomor tagihan: WS-TP-YYYYMMDD-NNNN, urut per hari. Dirakit di dalam transaksi
+// dan dilindungi UNIQUE(invoice_no) — kalau dua admin menerbitkan bersamaan,
+// yang kalah mengulang sekali, bukan menimpa nomor yang sama.
+async function nextInvoiceNo(client) {
+    const d = new Date();
+    const tgl = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const prefix = `WS-TP-${tgl}-`;
+    const r = await client.query(
+        `SELECT COUNT(*)::int AS n FROM partner_invoices WHERE invoice_no LIKE $1`, [prefix + '%']);
+    return prefix + String(r.rows[0].n + 1).padStart(4, '0');
+}
+
+// POST /api/admin/partner-billing/invoices — terbitkan tagihan.
+// Body: { partner_id, from, to, order_ids: [], notes }
+//
+// SEMUA ANGKA DIHITUNG ULANG DI SERVER dari database. Klien hanya mengirim
+// daftar nomor order; nilai apa pun yang dikirim browser diabaikan — kalau
+// tidak, siapa pun yang bisa membuka dashboard bisa menerbitkan tagihan
+// dengan angka karangan.
+app.post('/api/admin/partner-billing/invoices', requireMenu('partner-billing', 'edit'), async (req, res) => {
+    try {
+        const partnerId = parseInt(req.body.partner_id, 10);
+        if (!Number.isInteger(partnerId)) return res.status(400).json({ error: 'partner_id wajib diisi' });
+        const partner = await getPartnerOr404(partnerId, res);
+        if (!partner) return;
+
+        const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+        const from = isDate(req.body.from) ? req.body.from : null;
+        const to   = isDate(req.body.to)   ? req.body.to   : null;
+
+        const pilihan = Array.isArray(req.body.order_ids) ? req.body.order_ids.map(Number) : null;
+        if (!pilihan || pilihan.length === 0)
+            return res.status(400).json({ error: 'Pilih minimal 1 order untuk ditagih' });
+
+        const kandidat = await fetchPartnerCandidates(partner, from, to);
+        const byId = new Map(kandidat.map(r => [Number(r.id), r]));
+
+        // Tiap order yang dipilih diperiksa ulang di sini, bukan dipercaya dari
+        // layar. Satu order bermasalah membatalkan seluruh penerbitan — tagihan
+        // separuh jadi lebih buruk daripada tidak ada tagihan sama sekali.
+        const dipilih = [];
+        for (const oid of pilihan) {
+            const r = byId.get(oid);
+            if (!r) return res.status(400).json({ error: `Order ${oid} bukan order Collaboration Event milik ${partner.name} pada rentang tanggal ini.` });
+            if (!r.billable) return res.status(400).json({ error: `${r.order_code}: ${r.blocked_reason}.` });
+            dipilih.push(r);
+        }
+
+        // Order batal ikut DISALIN ke tagihan (nilai 0) supaya nomor kwitansinya
+        // tetap terbaca di lembar tagihan — tapi tidak ikut dipilih dan tidak
+        // menahan apa pun. Hanya yang ada di rentang yang sama.
+        const batal = kandidat.filter(r => r.is_cancelled);
+
+        const ringkas = {
+            order_count: dipilih.length,
+            item_count: dipilih.reduce((s, r) => s + r.qty, 0),
+            gross_total: dipilih.reduce((s, r) => s + r.gross_amount, 0),
+            discount_total: dipilih.reduce((s, r) => s + r.discount_amount_calc, 0),
+            total_due: dipilih.reduce((s, r) => s + r.net_amount, 0),
+        };
+        if (ringkas.total_due <= 0)
+            return res.status(400).json({ error: 'Total tagihan Rp 0 — tidak ada yang perlu ditagihkan.' });
+
+        const notes = String(req.body.notes || '').trim().slice(0, 1000);
+        const actor = req.user?.username || 'admin';
+
+        const hasil = await withTransaction(async (client) => {
+            const invoiceNo = await nextInvoiceNo(client);
+            const inv = await client.query(
+                `INSERT INTO partner_invoices
+                   (invoice_no, partner_id, partner_name_snapshot, period_start, period_end, status,
+                    gross_total, discount_total, total_due, order_count, item_count, notes,
+                    issued_at, created_by)
+                 VALUES ($1,$2,$3,$4,$5,'issued',$6,$7,$8,$9,$10,$11,NOW(),$12) RETURNING id, invoice_no`,
+                [invoiceNo, partner.id, partner.name, from, to,
+                 ringkas.gross_total, ringkas.discount_total, ringkas.total_due,
+                 ringkas.order_count, ringkas.item_count, notes, actor]
+            );
+            const invoiceId = inv.rows[0].id;
+
+            for (const r of [...dipilih, ...batal]) {
+                await client.query(
+                    `INSERT INTO partner_invoice_orders
+                       (invoice_id, order_id, receipt_no, order_code, order_date, customer_name,
+                        items_json, gross_amount, discount_amount, net_amount, is_cancelled, is_active)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)`,
+                    [invoiceId, r.id, r.receipt_no, r.order_code, r.order_date, r.customer_name,
+                     JSON.stringify(r.items || []), r.gross_amount, r.discount_amount_calc,
+                     r.net_amount, r.is_cancelled]
+                );
+            }
+            return inv.rows[0];
+        });
+
+        res.json({ message: `Tagihan ${hasil.invoice_no} diterbitkan`, invoice_id: hasil.id, invoice_no: hasil.invoice_no, ...ringkas });
+    } catch (err) {
+        // Indeks uniq_active_order_per_invoice — order sudah masuk tagihan aktif
+        // lain (mis. admin lain menerbitkan duluan beberapa detik sebelumnya).
+        if (err && err.code === '23505' && String(err.constraint || '').includes('uniq_active_order_per_invoice'))
+            return res.status(409).json({ error: 'Ada order yang barusan masuk tagihan lain. Muat ulang daftarnya, lalu terbitkan lagi.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/admin/partner-billing/invoices?partner_id=
+app.get('/api/admin/partner-billing/invoices', requireMenu('partner-billing'), async (req, res) => {
+    try {
+        const params = [];
+        let where = '1=1';
+        const partnerId = parseInt(req.query.partner_id, 10);
+        if (Number.isInteger(partnerId)) { params.push(partnerId); where += ` AND pi.partner_id = $${params.length}`; }
+        const rows = await dbAll(
+            `SELECT pi.*, ep.name AS partner_name_now
+               FROM partner_invoices pi
+               LEFT JOIN event_partners ep ON ep.id = pi.partner_id
+              WHERE ${where}
+              ORDER BY pi.created_at DESC
+              LIMIT 200`, params);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/partner-billing/invoices/:id — isi tagihan (salinan beku).
+app.get('/api/admin/partner-billing/invoices/:id', requireMenu('partner-billing'), async (req, res) => {
+    try {
+        const inv = await dbGet('SELECT * FROM partner_invoices WHERE id = $1', [req.params.id]);
+        if (!inv) return res.status(404).json({ error: 'Tagihan tidak ditemukan' });
+        const rows = await dbAll(
+            `SELECT * FROM partner_invoice_orders WHERE invoice_id = $1`, [inv.id]);
+        for (const r of rows) { try { r.items = JSON.parse(r.items_json || '[]'); } catch { r.items = []; } }
+        inv.orders = sortByReceipt(rows);
+        const partner = await dbGet('SELECT * FROM event_partners WHERE id = $1', [inv.partner_id]);
+        inv.partner = partner || null;
+        res.json(inv);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/admin/partner-billing/invoices/:id/void — batalkan tagihan.
+// TIDAK menghapus: nomornya tetap tercatat supaya jejaknya terbaca. Baris isinya
+// di-nonaktifkan sehingga ordernya bebas masuk tagihan baru.
+app.put('/api/admin/partner-billing/invoices/:id/void', requireMenu('partner-billing', 'edit'), async (req, res) => {
+    try {
+        const inv = await dbGet('SELECT * FROM partner_invoices WHERE id = $1', [req.params.id]);
+        if (!inv) return res.status(404).json({ error: 'Tagihan tidak ditemukan' });
+        if (inv.status === 'void') return res.status(400).json({ error: 'Tagihan ini sudah dibatalkan' });
+        if (inv.status === 'paid') return res.status(400).json({ error: 'Tagihan sudah lunas — tidak bisa dibatalkan. Kalau memang salah, catat penyesuaiannya di luar sistem.' });
+        const alasan = String(req.body.reason || '').trim().slice(0, 500);
+        if (!alasan) return res.status(400).json({ error: 'Isi alasan pembatalan' });
+
+        await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE partner_invoices SET status = 'void', void_reason = $1, voided_at = NOW(), updated_at = NOW() WHERE id = $2`,
+                [alasan, inv.id]);
+            // is_active = FALSE melepas indeks unik → ordernya bisa ditagih ulang.
+            await client.query(
+                `UPDATE partner_invoice_orders SET is_active = FALSE WHERE invoice_id = $1`, [inv.id]);
+        });
+        res.json({ message: `Tagihan ${inv.invoice_no} dibatalkan — ordernya bisa ditagih ulang` });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── PARTNER COLLABORATION EVENT ──────────────────────────────────────────────
 // Daftar PT/instansi yang sedang kerja sama. Dipakai di Kasir: saat sumber order
 // = Collaboration Event, admin cukup mengetik sebagian nama PT dan memilih dari

@@ -1459,6 +1459,12 @@
             <p class="text-[11px] text-white/30">Rentang tanggal memakai tanggal invoice — sama dengan tanggal yang tertulis di nota pembeli. Kosongkan untuk melihat semua order partner ini.</p>
         </div>
 
+        <div class="flex gap-2 flex-wrap">
+            <button id="pb-tab-kwitansi" onclick="pbShowTab('kwitansi')" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-white/10 border border-white/15 text-white">1 · Nomor Kwitansi</button>
+            <button id="pb-tab-buat" onclick="pbShowTab('buat')" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-white/5 border border-white/8 text-white/40 hover:text-white/70">2 · Buat Tagihan</button>
+            <button id="pb-tab-daftar" onclick="pbShowTab('daftar')" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-white/5 border border-white/8 text-white/40 hover:text-white/70">3 · Tagihan Terbit</button>
+        </div>
+
         <div id="pb-summary" class="hidden bg-darkcard border border-darkborder rounded-2xl p-4"></div>
         <div id="pb-body" class="text-sm text-white/40 py-10 text-center">Pilih partner untuk mulai.</div>
     </div>
@@ -14283,6 +14289,21 @@ async function kasirCartSubmit() {
 
 let pbOrders = [];          // hasil terakhir dari server
 let pbPartnerLoaded = false;
+let pbTab = 'kwitansi';     // kwitansi | buat | daftar
+let pbCandidates = [];      // kandidat tagihan (tab 2)
+
+function pbShowTab(t) {
+    pbTab = t;
+    ['kwitansi', 'buat', 'daftar'].forEach(k => {
+        const b = document.getElementById('pb-tab-' + k);
+        if (!b) return;
+        const aktif = k === t;
+        b.className = 'px-4 py-2 rounded-xl text-xs font-bold transition ' + (aktif
+            ? 'bg-white/10 border border-white/15 text-white'
+            : 'bg-white/5 border border-white/8 text-white/40 hover:text-white/70');
+    });
+    pbLoad();
+}
 
 async function pbInit() {
     if (!pbPartnerLoaded) {
@@ -14314,17 +14335,311 @@ async function pbLoad() {
     const from = document.getElementById('pb-from')?.value || '';
     const to   = document.getElementById('pb-to')?.value || '';
     if (body) body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center"><i class="fa-solid fa-spinner spin"></i> Memuat…</p>';
+    const qs = new URLSearchParams({ partner_id: partnerId });
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
     try {
-        const qs = new URLSearchParams({ partner_id: partnerId });
-        if (from) qs.set('from', from);
-        if (to) qs.set('to', to);
-        const data = await apiFetch('/api/admin/partner-billing/receipts?' + qs.toString());
-        pbOrders = data.orders || [];
-        pbRender(data);
+        if (pbTab === 'kwitansi') {
+            const data = await apiFetch('/api/admin/partner-billing/receipts?' + qs.toString());
+            pbOrders = data.orders || [];
+            pbRender(data);
+        } else if (pbTab === 'buat') {
+            const data = await apiFetch('/api/admin/partner-billing/candidates?' + qs.toString());
+            pbCandidates = data.orders || [];
+            pbRenderBuat(data);
+        } else {
+            const rows = await apiFetch('/api/admin/partner-billing/invoices?partner_id=' + partnerId);
+            if (summary) summary.classList.add('hidden');
+            pbRenderDaftar(rows || []);
+        }
     } catch (e) {
         if (body) body.innerHTML = `<p class="text-sm text-red-400/80 py-10 text-center">Gagal memuat: ${esc(e.message)}</p>`;
     }
 }
+
+const pbRp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+
+// ── Tab 2: penyusun tagihan ───────────────────────────────────────────────
+function pbRenderBuat(data) {
+    const summary = document.getElementById('pb-summary');
+    const body = document.getElementById('pb-body');
+    const sm = data.summary || {};
+
+    if (summary) {
+        summary.classList.remove('hidden');
+        summary.innerHTML = `
+            <div class="flex flex-wrap items-end justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-5">
+                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Order ditagih</p><p class="text-lg font-bold" id="pb-sum-order">${sm.order_count || 0}</p></div>
+                    <div><p class="text-[10px] uppercase tracking-wider text-white/35">Potong barang</p><p class="text-lg font-bold" id="pb-sum-item">${sm.item_count || 0}</p></div>
+                    ${sm.cancelled_count ? `<div><p class="text-[10px] uppercase tracking-wider text-white/35">Dibatalkan</p><p class="text-lg font-bold text-white/30">${sm.cancelled_count}</p></div>` : ''}
+                    ${sm.blocked_count ? `<div><p class="text-[10px] uppercase tracking-wider text-white/35">Belum bisa</p><p class="text-lg font-bold text-amber-300">${sm.blocked_count}</p></div>` : ''}
+                </div>
+                <div class="text-right space-y-0.5">
+                    <p class="text-xs text-white/40">Kotor <span class="font-mono" id="pb-sum-gross">${pbRp(sm.gross_total)}</span></p>
+                    <p class="text-xs text-white/40">Potongan <span class="font-mono" id="pb-sum-disc">− ${pbRp(sm.discount_total)}</span></p>
+                    <p class="text-base font-bold">Ditagih <span class="font-mono text-emerald-300" id="pb-sum-net">${pbRp(sm.total_due)}</span></p>
+                </div>
+            </div>
+            <p class="text-[11px] text-white/30 mt-2">Ongkir tidak ditagihkan ke partner — ditanggung Wearscrubs.</p>`;
+    }
+
+    if (!body) return;
+    if (!pbCandidates.length) {
+        body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center">Tidak ada order untuk partner &amp; rentang tanggal ini.</p>';
+        return;
+    }
+
+    const rows = pbCandidates.map(o => {
+        const bisa = o.billable;
+        const rincian = (o.items || []).map(i =>
+            `${i.nama}${i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : ''} ${i.color || ''} ${i.size || ''}`.trim()).join(', ');
+        return `
+        <tr class="border-b border-white/5 ${bisa ? '' : 'opacity-45'}">
+            <td class="px-3 py-2">
+                <input type="checkbox" class="pb-pick w-4 h-4 accent-emerald-500" data-order-id="${o.id}"
+                       ${bisa ? 'checked' : 'disabled'} onchange="pbRecalc()" />
+            </td>
+            <td class="px-3 py-2 font-mono text-[12px] font-bold whitespace-nowrap">${esc(o.receipt_no || '—')}</td>
+            <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${o.order_date ? new Date(o.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'}</td>
+            <td class="px-3 py-2 text-sm">${esc(o.customer_name || '-')}</td>
+            <td class="px-3 py-2 text-[11px] text-white/40 max-w-[260px] truncate" title="${esc(rincian)}">${esc(rincian || '-')}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono">${o.qty || 0}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono">${bisa ? pbRp(o.gross_amount) : '—'}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50">${bisa && o.discount_amount_calc ? '− ' + pbRp(o.discount_amount_calc) : '—'}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono font-bold">
+                ${bisa ? pbRp(o.net_amount) : `<span class="text-[10px] font-normal ${o.is_cancelled ? 'text-red-400/80' : 'text-amber-300/80'}">${esc(o.blocked_reason)}</span>`}
+            </td>
+        </tr>`;
+    }).join('');
+
+    const adaBlokir = pbCandidates.some(o => !o.billable && !o.is_cancelled);
+    body.innerHTML = `
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            ${adaBlokir ? `<div class="px-4 py-2.5 bg-amber-500/10 border-b border-amber-400/20 text-[11px] text-amber-200/90">
+                Ada order yang belum bisa ditagih (lihat alasannya di kolom paling kanan). Order itu tidak ikut terhitung.
+            </div>` : ''}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-white/5">
+                        <tr class="text-[10px] uppercase tracking-wider text-white/40">
+                            <th class="px-3 py-2.5 w-9"></th>
+                            <th class="px-3 py-2.5 text-left">No. Kwitansi</th>
+                            <th class="px-3 py-2.5 text-left">Tgl</th>
+                            <th class="px-3 py-2.5 text-left">Pembeli</th>
+                            <th class="px-3 py-2.5 text-left">Barang</th>
+                            <th class="px-3 py-2.5 text-right">Qty</th>
+                            <th class="px-3 py-2.5 text-right">Kotor</th>
+                            <th class="px-3 py-2.5 text-right">Potongan</th>
+                            <th class="px-3 py-2.5 text-right">Ditagih</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <div class="p-3 border-t border-white/5 space-y-3">
+                <div>
+                    <label class="text-[11px] text-white/60 mb-1 block">Catatan di lembar tagihan <span class="text-white/30">(opsional)</span></label>
+                    <input type="text" id="pb-notes" maxlength="200" placeholder="Mis. Termin pembayaran 14 hari" class="w-full !py-2 !text-sm" />
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <p class="text-[11px] text-white/30">Angka dihitung ulang di server saat diterbitkan — yang tampil di sini pratinjau.</p>
+                    <button onclick="pbIssue(this)" class="edit-action text-xs px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-invoice-dollar"></i> Terbitkan Tagihan
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    markViewOnly('partner-billing');
+}
+
+// Total ikut berubah saat centang dicabut — admin harus melihat akibat pilihannya
+// sebelum menerbitkan, bukan sesudah.
+function pbRecalc() {
+    const dipilih = new Set([...document.querySelectorAll('.pb-pick:checked')].map(el => Number(el.dataset.orderId)));
+    const ikut = pbCandidates.filter(o => o.billable && dipilih.has(Number(o.id)));
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('pb-sum-order', ikut.length);
+    set('pb-sum-item', ikut.reduce((s, o) => s + (o.qty || 0), 0));
+    set('pb-sum-gross', pbRp(ikut.reduce((s, o) => s + o.gross_amount, 0)));
+    set('pb-sum-disc', '− ' + pbRp(ikut.reduce((s, o) => s + o.discount_amount_calc, 0)));
+    set('pb-sum-net', pbRp(ikut.reduce((s, o) => s + o.net_amount, 0)));
+}
+
+async function pbIssue(btn) {
+    const partnerId = document.getElementById('pb-partner')?.value;
+    if (!partnerId) return;
+    const ids = [...document.querySelectorAll('.pb-pick:checked')].map(el => Number(el.dataset.orderId));
+    if (!ids.length) { toast('Pilih minimal 1 order', true); return; }
+    const ikut = pbCandidates.filter(o => ids.includes(Number(o.id)));
+    const total = ikut.reduce((s, o) => s + o.net_amount, 0);
+    if (!confirm(`Terbitkan tagihan untuk ${ids.length} order senilai ${pbRp(total)}?
+
+Setelah terbit, isinya dikunci. Order di dalamnya tidak bisa masuk tagihan lain kecuali tagihan ini dibatalkan.`)) return;
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner spin"></i> Menerbitkan…'; }
+    try {
+        const data = await apiFetch('/api/admin/partner-billing/invoices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                partner_id: Number(partnerId),
+                from: document.getElementById('pb-from')?.value || null,
+                to: document.getElementById('pb-to')?.value || null,
+                order_ids: ids,
+                notes: (document.getElementById('pb-notes')?.value || '').trim(),
+            }),
+        });
+        toast('✓ ' + data.message);
+        pbShowTab('daftar');
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-file-invoice-dollar"></i> Terbitkan Tagihan'; }
+    }
+}
+
+// ── Tab 3: daftar tagihan yang sudah terbit ───────────────────────────────
+const PB_STATUS = {
+    draft:  ['Draft',       'bg-white/10 text-white/60 border-white/15'],
+    issued: ['Terbit',      'bg-sky-500/15 text-sky-300 border-sky-400/30'],
+    paid:   ['Lunas',       'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'],
+    void:   ['Dibatalkan',  'bg-red-500/10 text-red-400/80 border-red-500/20'],
+};
+
+function pbRenderDaftar(rows) {
+    const body = document.getElementById('pb-body');
+    if (!body) return;
+    if (!rows.length) {
+        body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center">Belum ada tagihan untuk partner ini.</p>';
+        return;
+    }
+    body.innerHTML = `
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-white/5">
+                        <tr class="text-[10px] uppercase tracking-wider text-white/40">
+                            <th class="px-3 py-2.5 text-left">No. Tagihan</th>
+                            <th class="px-3 py-2.5 text-left">Periode</th>
+                            <th class="px-3 py-2.5 text-right">Order</th>
+                            <th class="px-3 py-2.5 text-right">Total</th>
+                            <th class="px-3 py-2.5 text-left">Status</th>
+                            <th class="px-3 py-2.5 text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows.map(inv => {
+                        const [lbl, cls] = PB_STATUS[inv.status] || ['?', 'bg-white/10 text-white/60 border-white/15'];
+                        const per = (inv.period_start || inv.period_end)
+                            ? `${inv.period_start ? new Date(inv.period_start).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '…'} – ${inv.period_end ? new Date(inv.period_end).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '…'}`
+                            : 'semua';
+                        return `
+                        <tr class="border-b border-white/5 ${inv.status === 'void' ? 'opacity-50' : ''}">
+                            <td class="px-3 py-2 font-mono text-[12px] font-bold">${esc(inv.invoice_no)}</td>
+                            <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${esc(per)}</td>
+                            <td class="px-3 py-2 text-right text-[12px] font-mono">${inv.order_count}</td>
+                            <td class="px-3 py-2 text-right text-[12px] font-mono font-bold">${pbRp(inv.total_due)}</td>
+                            <td class="px-3 py-2"><span class="text-[10px] px-2 py-0.5 rounded-full border font-bold ${cls}">${lbl}</span></td>
+                            <td class="px-3 py-2 text-right whitespace-nowrap">
+                                <button onclick="pbOpenInvoice(${inv.id})" class="text-[11px] px-2.5 py-1 rounded-lg bg-white/8 hover:bg-white/12 text-white/70 font-bold">Lihat</button>
+                                ${inv.status === 'issued' ? `<button onclick="pbVoid(${inv.id}, '${escAttr(inv.invoice_no)}')" class="edit-action text-[11px] px-2.5 py-1 rounded-lg bg-red-600/15 hover:bg-red-600/30 text-red-400 font-bold ml-1">Batalkan</button>` : ''}
+                            </td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>
+            </div>
+        </div>`;
+    markViewOnly('partner-billing');
+}
+
+async function pbVoid(id, no) {
+    const alasan = prompt(`Batalkan tagihan ${no}?
+
+Order di dalamnya akan bebas dan bisa ditagih ulang. Nomor tagihan tetap tercatat.
+
+Alasan pembatalan:`);
+    if (alasan === null) return;
+    if (!alasan.trim()) { toast('Alasan wajib diisi', true); return; }
+    try {
+        const data = await apiFetch(`/api/admin/partner-billing/invoices/${id}/void`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: alasan.trim() }),
+        });
+        toast('✓ ' + data.message);
+        pbLoad();
+    } catch (e) { toast('Gagal: ' + e.message, true); }
+}
+
+async function pbOpenInvoice(id) {
+    try {
+        const inv = await apiFetch('/api/admin/partner-billing/invoices/' + id);
+        pbShowInvoiceModal(inv);
+    } catch (e) { toast('Gagal memuat tagihan: ' + e.message, true); }
+}
+
+function pbShowInvoiceModal(inv) {
+    document.getElementById('pb-invoice-modal')?.remove();
+    const baris = (inv.orders || []).map(r => {
+        const rincian = (r.items || []).map(i =>
+            `${i.nama}${i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : ''} ${i.color || ''} ${i.size || ''}`.trim()).join('<br>');
+        return `
+        <tr class="border-b border-white/5 ${r.is_cancelled ? 'opacity-45' : ''}">
+            <td class="px-3 py-2 font-mono text-[12px] font-bold align-top">${esc(r.receipt_no || '—')}</td>
+            <td class="px-3 py-2 text-[11px] text-white/50 align-top whitespace-nowrap">${r.order_date ? new Date(r.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'}</td>
+            <td class="px-3 py-2 text-sm align-top">${esc(r.customer_name || '-')}</td>
+            <td class="px-3 py-2 text-[11px] text-white/50 align-top">${r.is_cancelled ? '<i class="text-red-400/80">Dibatalkan — tidak ditagihkan</i>' : rincian}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono align-top">${pbRp(r.gross_amount)}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50 align-top">${r.discount_amount ? '− ' + pbRp(r.discount_amount) : '—'}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono font-bold align-top">${pbRp(r.net_amount)}</td>
+        </tr>`;
+    }).join('');
+
+    const m = document.createElement('div');
+    m.id = 'pb-invoice-modal';
+    m.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[1200] flex items-start justify-center p-4 overflow-y-auto';
+    m.innerHTML = `
+        <div class="bg-[#1c1c1c] border border-white/10 rounded-2xl w-full max-w-4xl my-8">
+            <div class="px-5 py-4 border-b border-white/8 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-file-invoice-dollar text-emerald-400"></i> ${esc(inv.invoice_no)}</p>
+                    <p class="text-[11px] text-white/40 mt-0.5">${esc(inv.partner_name_snapshot)} · ${inv.order_count} order · ${inv.item_count} pcs</p>
+                </div>
+                <button onclick="document.getElementById('pb-invoice-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                ${inv.status === 'void' ? `<div class="bg-red-500/10 border border-red-500/25 rounded-xl p-3 text-sm text-red-300/90"><b>Tagihan dibatalkan.</b> ${esc(inv.void_reason || '')}</div>` : ''}
+                ${inv.notes ? `<div class="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/70">${esc(inv.notes)}</div>` : ''}
+                <div class="overflow-x-auto border border-white/8 rounded-xl">
+                    <table class="w-full">
+                        <thead class="bg-white/5">
+                            <tr class="text-[10px] uppercase tracking-wider text-white/40">
+                                <th class="px-3 py-2.5 text-left">No. Kwitansi</th>
+                                <th class="px-3 py-2.5 text-left">Tgl</th>
+                                <th class="px-3 py-2.5 text-left">Pembeli</th>
+                                <th class="px-3 py-2.5 text-left">Barang</th>
+                                <th class="px-3 py-2.5 text-right">Kotor</th>
+                                <th class="px-3 py-2.5 text-right">Potongan</th>
+                                <th class="px-3 py-2.5 text-right">Jumlah</th>
+                            </tr>
+                        </thead>
+                        <tbody>${baris}</tbody>
+                    </table>
+                </div>
+                <div class="flex justify-end">
+                    <div class="space-y-1 text-right">
+                        <p class="text-xs text-white/40">Kotor <span class="font-mono ml-3">${pbRp(inv.gross_total)}</span></p>
+                        <p class="text-xs text-white/40">Potongan <span class="font-mono ml-3">− ${pbRp(inv.discount_total)}</span></p>
+                        <p class="text-lg font-bold">Total Tagihan <span class="font-mono text-emerald-300 ml-3">${pbRp(inv.total_due)}</span></p>
+                        <p class="text-[10px] text-white/25">Ongkir tidak ditagihkan ke partner</p>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(m);
+    m.addEventListener('click', (e) => { if (e.target === m) m.remove(); });
+}
+
+
 
 function pbRender(data) {
     const summary = document.getElementById('pb-summary');
