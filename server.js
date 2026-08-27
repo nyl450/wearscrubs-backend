@@ -953,6 +953,20 @@ async function initDB() {
     await createIdx(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_order_per_invoice
         ON partner_invoice_orders(order_id) WHERE is_active`);
 
+    // ── RLS untuk tabel partner ───────────────────────────────────────────────
+    // Pola yang sama dengan 14 tabel lain: RLS ON TANPA policy. Backend memakai
+    // role `postgres` (BYPASSRLS) jadi tidak terpengaruh sama sekali; yang
+    // terkunci adalah anon/authenticated — siapa pun yang memegang anon key
+    // Supabase tidak bisa membaca apa pun dari sini.
+    // Isinya data pihak eksternal (nama PT, PIC, telepon, alamat) dan angka
+    // tagihan, jadi ini bukan tabel yang boleh terbuka.
+    // Dijalankan tiap boot: ENABLE ROW LEVEL SECURITY bersifat idempotent, dan
+    // ini menjaga database BARU (mis. kalau project di-restore/di-clone) tidak
+    // lahir tanpa RLS seperti yang sempat terjadi.
+    for (const t of ['event_partners', 'partner_invoices', 'partner_invoice_orders']) {
+        await dbRun(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});
+    }
+
     // ── Seed default admin ────────────────────────────────────────────────────
     // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
     // Dev: fall back to 'admin123' only when explicitly not in production.
