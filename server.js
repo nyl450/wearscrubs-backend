@@ -2125,7 +2125,129 @@ app.get('/api/admin/partner-billing/invoices/:id', requireMenu('partner-billing'
             s + (r.items || []).reduce((x, i) => x + Number(i.bordir_total || 0), 0), 0);
         const partner = await dbGet('SELECT * FROM event_partners WHERE id = $1', [inv.partner_id]);
         inv.partner = partner || null;
+        // Bukti transfer ada di bucket PRIVAT — kirim sebagai signed URL berumur
+        // pendek, jangan path mentah (tidak bisa dibuka) apalagi URL publik.
+        inv.paid_proof_url = await signedMediaUrl(inv.paid_proof_url);
         res.json(inv);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── TAGIHAN PARTNER — PELUNASAN (Tahap D) ────────────────────────────────────
+
+// Tempel satu baris ke catatan tagihan. Dirakit di JS, bukan lewat
+// COALESCE/NULLIF bertingkat di SQL: hasilnya sama, jauh lebih terbaca, dan
+// query yang polos begini bisa diuji otomatis.
+function appendInvoiceNote(notesLama, baris) {
+    const dasar = String(notesLama || '').trim();
+    if (!baris) return dasar;
+    return dasar ? dasar + '\n' + baris : baris;
+}
+
+// PUT /api/admin/partner-billing/invoices/:id/paid  (multipart: proof, opsional)
+// Menandai tagihan lunas saat uang partner benar-benar masuk. Ini yang mengubah
+// piutang jadi selesai — BUKAN payment_status ordernya, yang sejak awal sudah
+// 'paid' (artinya pembeli sudah bayar ke partner, bukan ke Wearscrubs).
+app.put('/api/admin/partner-billing/invoices/:id/paid', requireMenu('partner-billing', 'edit'), upload.single('proof'), async (req, res) => {
+    try {
+        const inv = await dbGet('SELECT * FROM partner_invoices WHERE id = $1', [req.params.id]);
+        if (!inv) return res.status(404).json({ error: 'Tagihan tidak ditemukan' });
+        if (inv.status === 'paid')  return res.status(400).json({ error: 'Tagihan ini sudah ditandai lunas' });
+        if (inv.status === 'void')  return res.status(400).json({ error: 'Tagihan sudah dibatalkan — tidak bisa ditandai lunas' });
+        if (inv.status !== 'issued') return res.status(400).json({ error: 'Hanya tagihan yang sudah terbit yang bisa ditandai lunas' });
+
+        // Tanggal bayar boleh diisi mundur — uang sering masuk beberapa hari
+        // sebelum admin sempat mencatatnya, dan umur piutang dihitung dari sini.
+        // Tanggal di MASA DEPAN ditolak: itu selalu salah ketik, dan akan membuat
+        // laporan piutang menunjukkan pelunasan yang belum terjadi.
+        const raw = String((req.body && req.body.paid_at) || '').trim();
+        let paidAt = null;
+        if (raw) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(raw))
+                return res.status(400).json({ error: 'Format tanggal bayar tidak valid' });
+            const d = new Date(raw + 'T00:00:00');
+            if (isNaN(d.getTime())) return res.status(400).json({ error: 'Tanggal bayar tidak valid' });
+            const besok = new Date(); besok.setHours(23, 59, 59, 999);
+            if (d.getTime() > besok.getTime())
+                return res.status(400).json({ error: 'Tanggal bayar tidak boleh di masa depan' });
+            paidAt = raw;
+        }
+
+        // Bukti transfer OPSIONAL — sama seperti bukti bayar order: kadang uang
+        // masuk lewat cara yang tidak menghasilkan bukti gambar. Catatannya tetap
+        // tersimpan. Masuk bucket PRIVAT, dibaca lewat signed URL berumur pendek.
+        const proofUrl = req.file
+            ? await uploadToSupabase(req.file.buffer, req.file.originalname, 'refunds', { optimize: true })
+            : null;
+        const catatan = String((req.body && req.body.note) || '').trim().slice(0, 500);
+
+        const notesBaru = appendInvoiceNote(inv.notes, catatan ? '[Pelunasan] ' + catatan : '');
+        await dbRun(
+            `UPDATE partner_invoices
+                SET status = 'paid',
+                    paid_at = COALESCE($1::timestamptz, NOW()),
+                    paid_proof_url = $2,
+                    notes = $3,
+                    updated_at = NOW()
+              WHERE id = $4`,
+            [paidAt, proofUrl, notesBaru, inv.id]
+        );
+        res.json({ message: `Tagihan ${inv.invoice_no} ditandai LUNAS`, proof_url: await signedMediaUrl(proofUrl) });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/admin/partner-billing/invoices/:id/unpaid — batalkan penandaan lunas.
+// Tanpa ini, salah klik "Tandai Lunas" jadi jalan buntu: tagihan lunas tidak bisa
+// dibatalkan (void ditolak untuk status paid) dan tidak bisa dikoreksi. Wajib
+// pakai alasan supaya jejaknya terbaca.
+app.put('/api/admin/partner-billing/invoices/:id/unpaid', requireMenu('partner-billing', 'edit'), async (req, res) => {
+    try {
+        const inv = await dbGet('SELECT * FROM partner_invoices WHERE id = $1', [req.params.id]);
+        if (!inv) return res.status(404).json({ error: 'Tagihan tidak ditemukan' });
+        if (inv.status !== 'paid') return res.status(400).json({ error: 'Tagihan ini tidak berstatus lunas' });
+        const alasan = String((req.body && req.body.reason) || '').trim().slice(0, 500);
+        if (!alasan) return res.status(400).json({ error: 'Isi alasan pembatalan status lunas' });
+        const actor = req.user?.username || 'admin';
+        const notesBaru = appendInvoiceNote(inv.notes, `[Status lunas dibatalkan oleh ${actor}] ${alasan}`);
+        await dbRun(
+            `UPDATE partner_invoices
+                SET status = 'issued', paid_at = NULL, paid_proof_url = NULL,
+                    notes = $1, updated_at = NOW()
+              WHERE id = $2`,
+            [notesBaru, inv.id]
+        );
+        res.json({ message: `Status lunas ${inv.invoice_no} dibatalkan — kembali ke Terbit` });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/partner-billing/outstanding — rekap piutang berjalan.
+// Yang dijawab: berapa uang partner yang belum masuk, dan sudah berapa lama.
+app.get('/api/admin/partner-billing/outstanding', requireMenu('partner-billing'), async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT pi.id, pi.invoice_no, pi.partner_id, pi.partner_name_snapshot, pi.total_due,
+                    pi.issued_at, pi.status
+               FROM partner_invoices pi
+              WHERE pi.status = 'issued'
+              ORDER BY pi.issued_at ASC`);
+        // Umur dihitung di JS, bukan lewat DATE_PART di SQL — hasilnya sama dan
+        // query polos begini bisa diuji otomatis (pelajaran yang sama dengan
+        // string_agg di endpoint kandidat).
+        const HARI = 24 * 60 * 60 * 1000;
+        const sekarang = Date.now();
+        for (const r of rows) {
+            const t = r.issued_at ? new Date(r.issued_at).getTime() : sekarang;
+            r.umur_hari = Math.max(0, Math.floor((sekarang - t) / HARI));
+        }
+        const total = rows.reduce((s, r) => s + Number(r.total_due || 0), 0);
+        res.json({
+            count: rows.length,
+            total_outstanding: total,
+            // Umur tagihan tertua = angka yang paling cepat memberi tahu ada yang
+            // tertinggal. Nol tagihan → null, bukan 0, supaya tidak terbaca
+            // "baru saja terbit".
+            oldest_days: rows.length ? Math.max(...rows.map(r => Number(r.umur_hari || 0))) : null,
+            invoices: rows,
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

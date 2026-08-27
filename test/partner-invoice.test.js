@@ -192,6 +192,81 @@ async function run() {
     check('902 di dalam rentang diterima', r.status === 200, r);
     check('hanya 1 order ditagih', r.body.order_count === 1, r.body);
 
+    // 11 — PELUNASAN (Tahap D)
+    seed();
+    group('11. Tandai lunas');
+    r = await issue({ partner_id: 1, order_ids: [901, 902] });
+    const invD = r.body.invoice_id;
+    // Bukti transfer opsional -> kirim urlencoded (multer melewatkan non-multipart).
+    const tandaiLunas = async (id, fields, token) => {
+        const opts = { method: 'PUT', headers: { 'Authorization': 'Bearer ' + (token === undefined ? TOKEN : token) } };
+        if (fields) {
+            opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            opts.body = new URLSearchParams(fields).toString();
+        }
+        const res = await fetch(`${BASE}/api/admin/partner-billing/invoices/${id}/paid`, opts);
+        const t = await res.text(); let b; try { b = JSON.parse(t); } catch { b = t; }
+        return { status: res.status, body: b };
+    };
+
+    r = await tandaiLunas(invD, { paid_at: '2026-08-20', note: 'transfer BCA' });
+    check('diterima', r.status === 200, r);
+    let row = one(`SELECT status, paid_at, notes FROM partner_invoices WHERE id=${invD}`);
+    check('status jadi paid', row.status === 'paid', row.status);
+    // Toleransi 36 jam supaya tidak rapuh terhadap zona waktu server (timestamptz
+    // dari '2026-08-20' bisa jadi 19 Agu 17:00Z di server UTC+7). Yang diuji
+    // tetap bermakna: tanggalnya MUNDUR ke 20 Agu, bukan diisi hari ini.
+    check('tanggal bayar tersimpan mundur ke 20 Agu (bukan hari ini)',
+        Math.abs(new Date(row.paid_at) - new Date('2026-08-20T00:00:00Z')) <= 36 * 3600 * 1000,
+        row.paid_at);
+    check('catatan pelunasan masuk', /transfer BCA/.test(row.notes || ''), row.notes);
+
+    group('12. Tagihan lunas tidak bisa diproses ulang');
+    r = await tandaiLunas(invD, { paid_at: '2026-08-21' });
+    check('lunas dua kali ditolak', r.status === 400, r);
+    r = await req('PUT', `/api/admin/partner-billing/invoices/${invD}/void`, { reason: 'coba batalkan' });
+    check('tagihan lunas tidak bisa dibatalkan', r.status === 400, r);
+    check('statusnya tidak berubah', one(`SELECT status FROM partner_invoices WHERE id=${invD}`).status === 'paid');
+
+    group('13. Batalkan status lunas (jalan keluar kalau salah klik)');
+    r = await req('PUT', `/api/admin/partner-billing/invoices/${invD}/unpaid`, { reason: '' });
+    check('tanpa alasan ditolak', r.status === 400, r);
+    r = await req('PUT', `/api/admin/partner-billing/invoices/${invD}/unpaid`, { reason: 'salah klik' });
+    check('diterima', r.status === 200, r);
+    row = one(`SELECT status, paid_at, notes FROM partner_invoices WHERE id=${invD}`);
+    check('kembali ke issued', row.status === 'issued', row.status);
+    check('tanggal bayar dibersihkan', row.paid_at === null, row.paid_at);
+    check('jejak alasan tersimpan', /salah klik/.test(row.notes || ''), row.notes);
+
+    group('14. Tanggal bayar di masa depan ditolak');
+    const besok = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    r = await tandaiLunas(invD, { paid_at: besok });
+    check('ditolak 400', r.status === 400, r);
+    check('alasannya menyebut masa depan', /masa depan/i.test(r.body.error || ''), r.body);
+    check('status tetap issued', one(`SELECT status FROM partner_invoices WHERE id=${invD}`).status === 'issued');
+    r = await tandaiLunas(invD, { paid_at: 'kemarin-sore' });
+    check('format tanggal ngawur ditolak', r.status === 400, r);
+
+    group('15. Rekap piutang berjalan');
+    r = await req('GET', '/api/admin/partner-billing/outstanding');
+    check('1 tagihan menggantung', r.body.count === 1, r.body);
+    check('nilai piutang 563.500', r.body.total_outstanding === 563500, r.body);
+    check('umur tagihan terhitung', typeof r.body.oldest_days === 'number', r.body.oldest_days);
+    await tandaiLunas(invD, {});
+    r = await req('GET', '/api/admin/partner-billing/outstanding');
+    check('setelah lunas piutang jadi 0', r.body.count === 0 && r.body.total_outstanding === 0, r.body);
+    check('umur jadi null (bukan 0) saat tidak ada piutang', r.body.oldest_days === null, r.body.oldest_days);
+    check('tanpa tanggal -> paid_at diisi sekarang',
+        one(`SELECT paid_at FROM partner_invoices WHERE id=${invD}`).paid_at !== null);
+
+    group('16. Pelunasan butuh izin');
+    r = await tandaiLunas(invD, { paid_at: '2026-08-20' }, TOKEN_STAFF);
+    check('staff tanpa menu ditolak', r.status === 403, r.status);
+    r = await req('PUT', `/api/admin/partner-billing/invoices/${invD}/unpaid`, { reason: 'x' }, TOKEN_STAFF);
+    check('batal-lunas juga ditolak', r.status === 403, r.status);
+    r = await req('GET', '/api/admin/partner-billing/outstanding', null, null);
+    check('piutang tanpa token ditolak', r.status === 401 || r.status === 403, r.status);
+
     // 10 — izin
     seed();
     group('10. Butuh izin menu partner-billing');
