@@ -3025,11 +3025,16 @@ app.get('/api/inventory', async (req, res) => {
             rows = await dbAll(
                 `SELECT i.* FROM inventory i
                  JOIN products p ON i.product_id = p.id
-                 WHERE p.category = $1 ORDER BY i.product_id, i.color, i.variant_type, i.size`,
+                 WHERE p.category = $1 AND p.is_active = TRUE
+                 ORDER BY i.product_id, i.color, i.variant_type, i.size`,
                 [category]
             );
         } else {
-            rows = await dbAll('SELECT * FROM inventory ORDER BY product_id, color, variant_type, size');
+            rows = await dbAll(
+                `SELECT i.* FROM inventory i
+                 JOIN products p ON p.id = i.product_id
+                 WHERE p.is_active = TRUE
+                 ORDER BY i.product_id, i.color, i.variant_type, i.size`);
         }
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3042,6 +3047,7 @@ app.get('/api/inventory/all', requireAuth(), async (req, res) => {
             `SELECT i.*, p.name AS product_name, p.sku, p.category
              FROM inventory i
              JOIN products p ON p.id = i.product_id
+             WHERE p.is_active = TRUE
              ORDER BY p.name, i.color, i.variant_type,
                CASE i.size WHEN 'S' THEN 1 WHEN 'M' THEN 2 WHEN 'L' THEN 3 WHEN 'XL' THEN 4 WHEN 'XXL' THEN 5 ELSE 6 END`,
             []
@@ -3466,7 +3472,10 @@ const pendingOrders = await dbGet("SELECT COUNT(*) as count FROM orders WHERE pa
                FROM orders o ${CASH_JOIN}
               WHERE o.payment_status = 'paid' AND o.order_status <> 'cancelled'
                 AND o.order_source = 'collaboration_event' AND pinv.id IS NULL`);
-        const lowStock = await dbGet("SELECT COUNT(*) as count FROM inventory WHERE stock < 5 AND stock >= 0");
+        const lowStock = await dbGet(
+            `SELECT COUNT(*) as count FROM inventory i
+               JOIN products p ON p.id = i.product_id
+              WHERE i.stock < 5 AND i.stock >= 0 AND p.is_active = TRUE`);
         const byCategory = await dbAll("SELECT category, COUNT(*) as count FROM products WHERE is_active = TRUE GROUP BY category");
 
         const monthlyOrders = await dbAll(`
