@@ -1122,8 +1122,10 @@
               <option value="5-exc">Diskon 5% (produk saja)</option>
               <option value="30-inc">Consignment 30% (produk + bordir)</option>
               <option value="30-exc">Consignment 30% (produk saja)</option>
+              <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
+              <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
             </select>
-            <p class="text-[10px] text-white/30 leading-relaxed">Diskon ini dipakai untuk baris produk yang <b>tidak</b> punya diskonnya sendiri. Kalau satu baris sudah dipilih diskon, diskon ini tidak ditambah lagi (tidak dobel). "Tanpa bordir" = harga bordir tidak ikut didiskon.</p>
+            <p class="text-[10px] text-white/30 leading-relaxed">Diskon ini dipakai untuk baris produk yang <b>tidak</b> punya diskonnya sendiri. Kalau satu baris sudah dipilih diskon, diskon ini tidak ditambah lagi (tidak dobel). "Tanpa bordir" = harga bordir tidak ikut didiskon. <b>Promo 10% lalu Consignment 30%</b> dipakai saat event: pembeli dapat promo 10% dulu, komisi partner 30% dihitung dari harga setelah promo (bukan 40% dari harga kotor).</p>
             <!-- Preview diskon -->
             <div id="wa-discount-preview" class="hidden px-4 py-2.5 rounded-xl bg-green-500/8 border border-green-500/15 flex items-center justify-between">
               <span id="wa-discount-label-text" class="text-xs font-medium text-green-400"></span>
@@ -11252,6 +11254,8 @@ function waAddItem() {
                     <option value="5-exc">Diskon 5% (produk saja)</option>
                     <option value="30-inc">Consignment 30% (produk + bordir)</option>
                     <option value="30-exc">Consignment 30% (produk saja)</option>
+                    <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
+                    <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
                 </select>
             </div>
         </div>`;
@@ -11665,25 +11669,52 @@ function waTogglePO(idx) {
 
 let waSelectedDiscount = 0; // legacy leftover (write-only) — cart pakai diskon token-based per-grup
 
-// ── Diskon token: "" | "5-inc" | "5-exc" | "30-inc" | "30-exc" ──────────────
+// ── Diskon token: "<persen>-<inc|exc>" ──────────────────────────────────────
+// contoh: "" | "5-inc" | "5-exc" | "10-inc" | "30-inc" | "30-exc" | "10x30-inc"
 // inc = bordir ikut didiskon; exc = bordir TIDAK didiskon (cuma harga produk).
+//
+// Bagian persen boleh BERANTAI dengan "x": "10x30" = promo 10% dulu, lalu
+// consignment 30% dari SISANYA - bukan 40% dari harga kotor. Ini urutan yang
+// dipakai saat collaboration event: pembeli dapat promo lebih dulu, partner
+// baru ambil komisi dari uang yang benar-benar dibayar pembeli.
+//   kotor 220.000 -> promo 10% = 22.000 -> sisa 198.000
+//                 -> consignment 30% dari 198.000 = 59.400
+//                 -> total potongan 81.400, Wearscrubs terima 138.600
+// JANGAN disederhanakan jadi (10+30)% dari kotor - itu 88.000, kurang tagih 6.600.
+const DISC_PROMO_PCT = 10;              // persen promo pelanggan (bukan komisi partner)
+const DISC_PROMO_MIN_BELANJA = 200000;  // syarat minimum subtotal aksesoris
 function parseDiscToken(token) {
-    if (!token) return { pct: 0, incBordir: true };
+    if (!token) return { pcts: [], incBordir: true };
     const [p, mode] = String(token).split('-');
-    return { pct: parseInt(p) || 0, incBordir: mode !== 'exc' };
+    const pcts = String(p).split('x').map(n => parseInt(n) || 0).filter(n => n > 0);
+    return { pcts, incBordir: mode !== 'exc' };
+}
+function discPctLabel(pct) {
+    if (pct === 30) return 'Consignment 30%';
+    if (pct === DISC_PROMO_PCT) return 'Promo ' + pct + '%';
+    return 'Diskon ' + pct + '%';
 }
 function discTokenLabel(token) {
-    const { pct, incBordir } = parseDiscToken(token);
-    if (!pct) return '';
-    const base = pct === 30 ? 'Consignment 30%' : 'Diskon ' + pct + '%';
-    return base + (incBordir ? ' (produk + bordir)' : ' (produk saja)');
+    const { pcts, incBordir } = parseDiscToken(token);
+    if (!pcts.length) return '';
+    return pcts.map(discPctLabel).join(' + ') + (incBordir ? ' (produk + bordir)' : ' (produk saja)');
+}
+// Token ini memuat promo pelanggan? (dipakai untuk cek syarat minimum belanja)
+function discTokenHasPromo(token) {
+    return parseDiscToken(token).pcts.includes(DISC_PROMO_PCT);
 }
 // Hitung nominal diskon dari subtotal harga produk & subtotal bordir terpisah.
+// Persen berantai dihitung BERURUTAN atas sisa, bukan dijumlah dulu.
 function discAmountFor(token, baseSubtotal, bordirSubtotal) {
-    const { pct, incBordir } = parseDiscToken(token);
-    if (!pct) return 0;
-    const dbase = baseSubtotal + (incBordir ? bordirSubtotal : 0);
-    return Math.round(dbase * pct / 100);
+    const { pcts, incBordir } = parseDiscToken(token);
+    if (!pcts.length) return 0;
+    let sisa = baseSubtotal + (incBordir ? bordirSubtotal : 0);
+    let total = 0;
+    for (const pct of pcts) {
+        const d = Math.round(sisa * pct / 100);
+        total += d; sisa -= d;
+    }
+    return total;
 }
 
 // SATU sumber resolusi harga satuan katalog — dipakai single & bulk cart.
@@ -13139,6 +13170,8 @@ function bulkAddPanel() {
                 <option value="5-exc">Diskon 5% (produk saja)</option>
                 <option value="30-inc">Consignment 30% (produk + bordir)</option>
                 <option value="30-exc">Consignment 30% (produk saja)</option>
+                <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
+                <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
             </select>
         </div>
 
@@ -13909,6 +13942,9 @@ function _kasirCollectSingleItems() {
     const container = document.getElementById('wa-items-container');
     const items = [], embroideryDetails = [], posErrors = [];
     let productSubtotal = 0, discountAmount = 0;
+    // Syarat promo dinilai dari subtotal kategori aksesoris saja (keputusan James),
+    // bukan dari total belanja - beli scrub 500rb + aksesoris 150rb tidak memenuhi.
+    let accessorySubtotal = 0, promoUsed = false;
     const usedTokens = new Set();
     const formToken = document.getElementById('wa-form-discount')?.value || '';
 
@@ -13950,10 +13986,12 @@ function _kasirCollectSingleItems() {
             // menganggap harga 0 saat submit). Kalau tidak di-gate, cart preview
             // & Grand Total salah menampilkan harga padahal admin tandai [Bonus].
             if (!isBonusCP) productSubtotal += cpBaseSub + cpBordirSub;
+            if (!isBonusCP && cpCat === 'aksesoris') accessorySubtotal += cpBaseSub + cpBordirSub;
             if (!isBonusCP) {
                 const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
                 const d = discAmountFor(tok, cpBaseSub, cpBordirSub);
                 if (d > 0) { discountAmount += d; usedTokens.add(tok); }
+                if (discTokenHasPromo(tok)) promoUsed = true;
             }
             if (bordirNamaCP || bordirLogoCP) {
                 const il = `${cpName} (${cpColor}, ${cpSize})`;
@@ -14017,10 +14055,12 @@ function _kasirCollectSingleItems() {
         // Bonus items = gratis; jangan masuk ke productSubtotal (backend juga
         // menganggap harga 0 saat submit — lihat is_bonus gate di server.js).
         if (!isBonus) productSubtotal += baseSub + bordirSub;
+        if (!isBonus && waItemCat(idx) === 'aksesoris') accessorySubtotal += baseSub + bordirSub;
         if (!isBonus) {
             const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
             const d = discAmountFor(tok, baseSub, bordirSub);
             if (d > 0) { discountAmount += d; usedTokens.add(tok); }
+            if (discTokenHasPromo(tok)) promoUsed = true;
         }
         items.push({ product_id: parseInt(productId), color: finalColor, variant_type: variantEl?.value || 'null',
             size: finalSize, quantity: qtyVal, bordir_nama: bordirNama, bordir_logo: bordirLogo,
@@ -14058,7 +14098,7 @@ function _kasirCollectSingleItems() {
         }
     }
     const discountLabel = usedTokens.size === 1 ? discTokenLabel([...usedTokens][0]) : (discountAmount > 0 ? 'Diskon per produk' : '');
-    return { ok: posErrors.length === 0 && items.length > 0, items, embroideryDetails, productSubtotal, discountAmount, discountLabel, errors: posErrors };
+    return { ok: posErrors.length === 0 && items.length > 0, items, embroideryDetails, productSubtotal, discountAmount, discountLabel, accessorySubtotal, promoUsed, errors: posErrors };
 }
 
 function kasirAddToCartSingle() {
@@ -14078,7 +14118,8 @@ function kasirAddToCartSingle() {
     const groupLabel = `${firstProdName}${extraLabel} · ${totalPcs} pcs${discAmt > 0 ? ` (${result.discountLabel || 'Diskon'})` : ''}`;
 
     kasirCartPush({ mode: 'single', groupLabel, items: result.items, embroideryDetails: result.embroideryDetails,
-        productSubtotal: result.productSubtotal, discountLabel: result.discountLabel, discountAmount: discAmt });
+        productSubtotal: result.productSubtotal, discountLabel: result.discountLabel, discountAmount: discAmt,
+        accessorySubtotal: result.accessorySubtotal || 0, promoUsed: !!result.promoUsed });
 
     // Reset items section (customer data & shipping tetap)
     const container = document.getElementById('wa-items-container');
@@ -14182,10 +14223,13 @@ function kasirAddToCartBulk() {
         if (!rowErr && panelItems.length > 0) {
             const discAmt = discAmountFor(panelDiscToken, panelBaseSub, panelBordirSub);
             const discLbl = discTokenLabel(panelDiscToken);
+            const panelCat = panel._state.selectedProduct.category || '';
             validGroups.push({ mode: 'bulk',
                 groupLabel: `${productName} ${finalColor} ${variant} · ${panelItems.length} pcs${discAmt > 0 ? ` (${discLbl})` : ''}`,
                 items: panelItems, embroideryDetails: panelEmb,
-                productSubtotal: panelSubtotal, discountLabel: discLbl, discountAmount: discAmt });
+                productSubtotal: panelSubtotal, discountLabel: discLbl, discountAmount: discAmt,
+                accessorySubtotal: panelCat === 'aksesoris' ? panelSubtotal : 0,
+                promoUsed: discTokenHasPromo(panelDiscToken) });
         }
     }
 
@@ -14262,6 +14306,19 @@ async function kasirCartSubmit() {
     }
     if (orderSource === 'collaboration_event' && !billingTo) {
         alert('Collaboration Event: isi dulu "Ditagihkan Ke / Bill To".'); return;
+    }
+    // Promo dipilih manual oleh admin, jadi syarat minimum belanja hanya DIINGATKAN -
+    // syarat event bisa berubah di lapangan dan admin yang memutuskan. Bukan penghalang.
+    const promoDipakai = window.kasirCart.some(g => g.promoUsed);
+    const accSubtotal  = window.kasirCart.reduce((s, g) => s + (g.accessorySubtotal || 0), 0);
+    if (promoDipakai && accSubtotal < DISC_PROMO_MIN_BELANJA) {
+        const fmtRp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+        const lanjut = confirm(
+            'Promo ' + DISC_PROMO_PCT + '% dipakai, tapi belanja aksesoris di keranjang baru '
+            + fmtRp(accSubtotal) + ' - syaratnya minimal ' + fmtRp(DISC_PROMO_MIN_BELANJA) + '.'
+            + '\n\n'
+            + 'Lanjut simpan pesanan dengan promo ini?');
+        if (!lanjut) return;
     }
     const allItems = [], allEmb = [];
     let totalDiscountAmount = 0;
