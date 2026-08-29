@@ -5143,7 +5143,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             customer_name, customer_phone, customer_address,
             shipping_city, shipping_courier, shipping_weight_kg,
             shipping_cost, payment_method,
-            order_source, billing_to, receipt_no, notes, invoice_notes
+            order_source, billing_to, receipt_no, notes, invoice_notes, invoice_date
         } = req.body;
 
         const setClauses = [];
@@ -5259,6 +5259,37 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
         if (invoice_notes !== undefined) {
             const trimmed = String(invoice_notes).trim().slice(0, 500);
             setClauses.push(`invoice_notes = $${idx++}`); params.push(trimmed || null);
+        }
+        // invoice_date: tanggal yang tampil di invoice. Salah ketik saat input di
+        // Kasir sebelumnya cuma bisa dibetulkan lewat SQL langsung.
+        // Hak akses SAMA PERSIS dengan saat order dibuat (POST /api/orders) — kalau
+        // di sini lebih longgar, staff yang tidak boleh mem-backdate saat membuat
+        // order bisa mem-backdate-nya semenit kemudian lewat Edit.
+        // ⚠️ Untuk collaboration_event tanggal ini juga menentukan order masuk
+        // periode tagihan partner yang mana (PARTNER_ORDER_DATE).
+        if (invoice_date !== undefined) {
+            const raw = String(invoice_date || '').trim();
+            // Kosong = hapus override, invoice kembali memakai created_at.
+            let target = null;
+            if (raw) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(raw))
+                    return res.status(400).json({ error: 'Tanggal order tidak valid (format YYYY-MM-DD)' });
+                const d = new Date(raw + 'T00:00:00Z');
+                if (isNaN(d.getTime()))
+                    return res.status(400).json({ error: 'Tanggal order tidak valid' });
+                target = d.toISOString();
+            }
+            const sekarang = order.invoice_date ? new Date(order.invoice_date).toISOString() : null;
+            // Izin diperiksa HANYA kalau nilainya benar-benar berubah. Modal Edit
+            // selalu mengirim field ini, jadi kalau dicek tanpa syarat, staff yang
+            // tidak berhak mem-backdate akan tertolak untuk SEMUA perubahan lain.
+            if (target !== sekarang) {
+                const bolehUbahTanggal = !!req.user &&
+                    (req.user.role === 'admin' || hasMenu(req.user, 'manual-order', 'edit'));
+                if (!bolehUbahTanggal)
+                    return res.status(403).json({ error: 'Tidak berhak mengubah tanggal order' });
+                setClauses.push(`invoice_date = $${idx++}`); params.push(target);
+            }
         }
 
         if (setClauses.length === 0)
