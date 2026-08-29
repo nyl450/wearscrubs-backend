@@ -1890,6 +1890,53 @@ function sortByReceipt(rows) {
     });
 }
 
+// ─── POTONGAN BERANTAI (cermin dari dashboard.html) ───────────────────────────
+// Diskon Kasir disimpan sebagai SATU nominal + label yang menyebut tahapannya,
+// mis. "Promo 10% + Consignment 30% (produk + bordir)". Backend perlu bisa
+// membaca-balik label itu untuk fitur "centang Consignment" di penyusun tagihan.
+//
+// ⚠️ Rumusnya HARUS identik dengan `discAmountFor` di dashboard.html: tiap tahap
+// dihitung dari SISA, bukan persennya dijumlah dulu. Kalau dua sisi ini melenceng,
+// mencentang lalu membatalkan centang tidak akan mengembalikan angka semula.
+const DISC_CONSIGNMENT_PCT = 30;
+function discPctsDariLabel(label) {
+    const inti = String(label || '').replace(/\s*\((?:produk|product)[^)]*\)\s*$/i, '').trim();
+    if (!inti) return [];
+    const out = [];
+    for (const bagian of inti.split('+')) {
+        const m = bagian.match(/(\d+(?:[.,]\d+)?)\s*%/);
+        if (!m) return null;                      // label tak terbaca → jangan tebak
+        out.push(parseFloat(m[1].replace(',', '.')));
+    }
+    return out;
+}
+function discNamaPct(pct) {
+    if (pct === DISC_CONSIGNMENT_PCT) return 'Consignment 30%';
+    if (pct === 10) return 'Promo 10%';
+    return 'Diskon ' + pct + '%';
+}
+function discLabelDariPcts(pcts, incBordir) {
+    if (!pcts.length) return null;
+    return pcts.map(discNamaPct).join(' + ') + (incBordir ? ' (produk + bordir)' : ' (produk saja)');
+}
+function hitungPotonganBerantai(base, pcts) {
+    let sisa = base, total = 0;
+    for (const pct of pcts) { const d = Math.round(sisa * pct / 100); total += d; sisa -= d; }
+    return total;
+}
+// Apakah nominal potongan yang tersimpan memang hasil dari label-nya? Order yang
+// pernah dikoreksi manual lewat SQL bisa saja tidak cocok — untuk yang begitu
+// centang Consignment DIMATIKAN, karena menghitung ulang akan menimpa angka yang
+// sengaja dibuat berbeda.
+function potonganCocokLabel(label, discount, gross, bordir) {
+    const pcts = discPctsDariLabel(label);
+    if (pcts === null) return { pcts: null, cocok: false, incBordir: true };
+    const incBordir = !/\(\s*produk saja\s*\)/i.test(String(label || ''));
+    const base = incBordir ? gross : gross - bordir;
+    const harap = hitungPotonganBerantai(base, pcts);
+    return { pcts, incBordir, base, cocok: harap === Number(discount || 0) };
+}
+
 // Ambil order kandidat + hitung uangnya. Dipakai bersama oleh layar penyusun
 // (pratinjau) dan penerbitan (perhitungan final) — SATU sumber, supaya angka
 // yang dilihat admin dan angka yang tersimpan mustahil berbeda.
@@ -1961,6 +2008,16 @@ async function fetchPartnerCandidates(partner, from, to) {
         // Ongkir sengaja TIDAK masuk hitungan sama sekali.
         r.net_amount = cancelled ? 0 : Math.max(0, gross - disc);
         r.is_cancelled = cancelled;
+        // Status potongan Consignment — untuk centang di layar penyusun. Lupa
+        // memasukkannya saat input di Kasir sudah terjadi berkali-kali dan selama
+        // ini hanya bisa dibetulkan lewat SQL langsung.
+        const cek = potonganCocokLabel(r.discount_label, disc, gross, r.bordir_amount || 0);
+        r.consignment_applied = !!(cek.pcts && cek.pcts.includes(DISC_CONSIGNMENT_PCT));
+        r.consignment_locked_reason =
+            cancelled ? 'Order dibatalkan'
+            : r.billed_on ? `Sudah masuk tagihan ${r.billed_on} — batalkan tagihannya dulu`
+            : !cek.cocok ? 'Potongan order ini tidak cocok dengan labelnya (pernah dikoreksi manual)'
+            : null;
         // Alasan sebuah order tidak bisa ikut ditagih. null = bisa ikut.
         r.blocked_reason =
             cancelled ? 'Order dibatalkan'
@@ -2000,6 +2057,92 @@ app.get('/api/admin/partner-billing/candidates', requireMenu('partner-billing'),
             partner: { id: partner.id, name: partner.name, pic_name: partner.pic_name },
             summary: ringkasKandidat(rows),
             orders: rows,
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/admin/partner-billing/orders/:id/consignment   body: { apply: true|false }
+//
+// Membetulkan order collab yang LUPA diberi potongan Consignment saat input di
+// Kasir. Sudah terjadi berkali-kali dan sebelumnya hanya bisa dibereskan lewat
+// SQL langsung — sekarang tinggal dicentang di layar penyusun tagihan.
+//
+// Yang diperbaiki adalah ORDER-nya, bukan cuma lembar tagihan. Kalau hanya
+// tagihannya yang dipotong, `orders.total_amount` tetap kelebihan dan laporan
+// omzet ikut salah. Sekali dibetulkan di sini, invoice pelanggan, laporan, dan
+// tagihan partner semuanya membaca angka yang sama.
+//
+// Bisa DIBATALKAN (apply=false) selama tagihannya belum terbit: potongan dihitung
+// ulang dari label, bukan dari selisih yang disimpan, jadi mencentang lalu
+// membatalkan centang mengembalikan angka semula persis.
+app.put('/api/admin/partner-billing/orders/:id/consignment', requireMenu('partner-billing', 'edit'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.order_source !== 'collaboration_event')
+            return res.status(400).json({ error: 'Potongan Consignment hanya untuk order Collaboration Event' });
+        if (order.order_status === 'cancelled')
+            return res.status(400).json({ error: 'Order sudah dibatalkan' });
+
+        // Tagihan adalah snapshot terkunci. Kalau ordernya diubah setelah tagihan
+        // terbit, angka yang sudah dikirim ke partner tidak ikut berubah dan
+        // keduanya diam-diam berbeda.
+        const aktif = await dbGet(
+            `SELECT pinv.invoice_no FROM partner_invoice_orders pio
+               JOIN partner_invoices pinv ON pinv.id = pio.invoice_id
+              WHERE pio.order_id = $1 AND pio.is_active`, [order.id]);
+        if (aktif) return res.status(409).json({
+            error: `Order ini sudah masuk tagihan ${aktif.invoice_no}. Batalkan tagihan itu dulu kalau angkanya memang perlu dibetulkan.` });
+
+        // Sumber kotor SAMA dengan penyusun tagihan: harga item (sudah termasuk
+        // bordir), bonus & barang uji-coba yang dikembalikan tidak dihitung.
+        const items = await dbAll(
+            `SELECT quantity, price, bordir_nama, bordir_nama_price, bordir_logo, bordir_logo_price
+               FROM order_items WHERE order_id = $1 AND is_bonus = FALSE AND is_test_returned = FALSE`,
+            [order.id]);
+        const gross = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 0), 0);
+        const bordir = items.reduce((s, i) => s +
+            ((i.bordir_nama ? Number(i.bordir_nama_price || 0) : 0) +
+             (i.bordir_logo ? Number(i.bordir_logo_price || 0) : 0)) * Number(i.quantity || 0), 0);
+        if (gross <= 0) return res.status(400).json({ error: 'Order ini tidak punya nilai yang bisa dipotong' });
+
+        const lama = Number(order.discount_amount || 0);
+        const cek = potonganCocokLabel(order.discount_label, lama, gross, bordir);
+        if (!cek.cocok) return res.status(409).json({
+            error: 'Potongan order ini tidak cocok dengan labelnya (kemungkinan pernah dikoreksi manual). Betulkan lewat Edit Pesanan, jangan lewat centang ini.' });
+
+        const apply = req.body.apply === true || req.body.apply === 'true';
+        const sudah = cek.pcts.includes(DISC_CONSIGNMENT_PCT);
+        if (apply && sudah)  return res.status(409).json({ error: 'Order ini sudah punya potongan Consignment' });
+        if (!apply && !sudah) return res.status(409).json({ error: 'Order ini memang belum punya potongan Consignment' });
+
+        // Consignment selalu jadi tahap TERAKHIR: promo pelanggan lebih dulu,
+        // komisi partner dihitung dari harga yang benar-benar dibayar pembeli.
+        const pctsBaru = apply
+            ? [...cek.pcts, DISC_CONSIGNMENT_PCT]
+            : cek.pcts.filter(p => p !== DISC_CONSIGNMENT_PCT);
+        const baru = hitungPotonganBerantai(cek.base, pctsBaru);
+        const labelBaru = discLabelDariPcts(pctsBaru, cek.incBordir);
+        const totalBaru = Number(order.total_amount || 0) - (baru - lama);
+        if (totalBaru < 0) return res.status(400).json({ error: 'Potongan melebihi total order' });
+
+        const actor = req.user?.username || 'admin';
+        const catatan = apply
+            ? `Potongan Consignment 30% ditambahkan lewat penyusun tagihan. Potongan ${lama} -> ${baru}, total ${order.total_amount} -> ${totalBaru}.`
+            : `Potongan Consignment 30% dibatalkan lewat penyusun tagihan. Potongan ${lama} -> ${baru}, total ${order.total_amount} -> ${totalBaru}.`;
+        await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE orders SET discount_amount = $1, discount_label = $2, total_amount = $3,
+                                   updated_at = NOW() WHERE id = $4`,
+                [baru, labelBaru, totalBaru, order.id]);
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
+                 VALUES ($1,'edit',NULL,$2,$3)`, [order.id, catatan, actor]);
+        });
+
+        res.json({
+            message: apply ? 'Potongan Consignment ditambahkan' : 'Potongan Consignment dibatalkan',
+            discount_amount: baru, discount_label: labelBaru, total_amount: totalBaru,
         });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

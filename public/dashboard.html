@@ -14624,8 +14624,14 @@ function pbRenderBuat(data) {
             <td class="px-3 py-2 text-sm">${esc(o.customer_name || '-')}</td>
             <td class="px-3 py-2 text-[11px] text-white/40 max-w-[260px] truncate" title="${esc(rincian)}">${esc(rincian || '-')}</td>
             <td class="px-3 py-2 text-right text-[12px] font-mono">${o.qty || 0}</td>
-            <td class="px-3 py-2 text-right text-[12px] font-mono">${bisa ? pbRp(pv.harga) : '—'}${bisa && pv.promo ? `<div class="text-[9px] font-sans text-amber-300/80 whitespace-nowrap">(disc promo ${pv.promo.pct}%)</div>` : ''}</td>
-            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50">${bisa && pv.potongan ? '− ' + pbRp(pv.potongan) : '—'}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono">${o.is_cancelled ? '—' : pbRp(pv.harga)}${!o.is_cancelled && pv.promo ? `<div class="text-[9px] font-sans text-amber-300/80 whitespace-nowrap">(disc promo ${pv.promo.pct}%)</div>` : ''}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50">
+                <div>${o.is_cancelled ? '—' : (pv.potongan ? '− ' + pbRp(pv.potongan) : '—')}</div>
+                <label class="edit-action mt-1 inline-flex items-center gap-1 text-[10px] font-sans ${o.consignment_locked_reason ? 'text-white/25' : 'text-amber-300/80 cursor-pointer hover:text-amber-200'}" title="${esc(o.consignment_locked_reason || 'Centang kalau potongan Consignment 30% lupa dimasukkan saat input di Kasir')}">
+                    <input type="checkbox" class="w-3 h-3 accent-amber-500" ${o.consignment_applied ? 'checked' : ''} ${o.consignment_locked_reason ? 'disabled' : ''} onchange="pbToggleConsignment(${Number(o.id)}, this)" />
+                    <span>Consignment</span>
+                </label>
+            </td>
             <td class="px-3 py-2 text-right text-[12px] font-mono font-bold">
                 ${bisa ? pbRp(o.net_amount) : `<span class="text-[10px] font-normal ${o.is_cancelled ? 'text-red-400/80' : 'text-amber-300/80'}">${esc(o.blocked_reason)}</span>`}
             </td>
@@ -14673,6 +14679,39 @@ function pbRenderBuat(data) {
     // Ringkasan di kepala dihitung ulang dari baris yang tampil, bukan dari
     // ringkasan server — supaya kolomnya konsisten saat ada promo pelanggan.
     pbRecalc();
+}
+
+// Centang Consignment: membetulkan ORDER-nya, bukan cuma lembar tagihan. Lupa
+// memasukkan potongan saat input di Kasir sudah terjadi berkali-kali dan selama
+// ini hanya bisa dibereskan lewat SQL langsung.
+//
+// Sengaja BISA dibatalkan selama tagihannya belum terbit — salah klik tidak boleh
+// berujung minta tolong SQL lagi. Angkanya dihitung ulang dari label di server,
+// bukan dari selisih, jadi centang lalu batal mengembalikan nilai semula persis.
+async function pbToggleConsignment(orderId, el) {
+    const nyalakan = el.checked;
+    const o = (pbCandidates || []).find(x => Number(x.id) === Number(orderId));
+    const nama = o ? (o.customer_name || o.order_code || 'order ini') : 'order ini';
+    const setuju = confirm(nyalakan
+        ? `Tambahkan potongan Consignment 30% ke order ${nama}?
+
+Angka ordernya ikut dibetulkan — invoice pelanggan dan laporan omzet menyesuaikan, bukan cuma lembar tagihan.`
+        : `Batalkan potongan Consignment 30% pada order ${nama}?`);
+    if (!setuju) { el.checked = !nyalakan; return; }
+    el.disabled = true;
+    try {
+        await apiFetch(`/api/admin/partner-billing/orders/${orderId}/consignment`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apply: nyalakan }),
+        });
+        toast(nyalakan ? '✓ Potongan Consignment ditambahkan' : '✓ Potongan Consignment dibatalkan');
+        await pbLoad();   // muat ulang: baris, ringkasan, dan status centang ikut segar
+    } catch (e) {
+        el.checked = !nyalakan;
+        el.disabled = false;
+        toast('Gagal: ' + e.message, true);
+    }
 }
 
 // Total ikut berubah saat centang dicabut — admin harus melihat akibat pilihannya
