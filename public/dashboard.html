@@ -11717,6 +11717,54 @@ function discAmountFor(token, baseSubtotal, bordirSubtotal) {
     return total;
 }
 
+// ── Rincian potongan berantai UNTUK DITAMPILKAN ─────────────────────────────
+// Order yang kena "Promo 10% + Consignment 30%" hanya menyimpan SATU angka
+// potongan di DB. Invoice & lembar tagihan perlu memecahnya lagi per tahap
+// supaya pembaca bisa mengikuti hitungannya (10% dari subtotal, lalu 30% dari
+// sisanya) - bukan 37% yang muncul entah dari mana.
+//
+// Nominalnya dihitung ulang berurutan dari `base`, TAPI tahap terakhir dipaksa
+// = total - tahap sebelumnya. Tanpa itu, pembulatan per baris saat order dibuat
+// bisa meleset satu-dua rupiah dari hitung-sekali di sini dan baris-barisnya
+// tidak menjumlah ke angka yang tersimpan.
+//
+// Return null = jangan tebak-tebak: pemanggil wajib jatuh ke tampilan lama
+// (satu baris potongan). Itu yang terjadi untuk semua order lama dan untuk
+// order berdiskon campuran yang labelnya "Diskon per produk".
+function discLabelIncludesBordir(label) {
+    return !/\(\s*produk saja\s*\)/i.test(String(label || ''));
+}
+function splitDiscountStages(label, base, totalDiscount) {
+    // Buang keterangan cakupan di ujung ("(produk + bordir)") DULU - isinya ada
+    // tanda "+" juga dan akan mengacaukan pemisahan tahap.
+    const inti = String(label || '').replace(/\s*\((?:produk|product)[^)]*\)\s*$/i, '').trim();
+    const bagian = inti.split('+').map(x => x.trim()).filter(Boolean);
+    if (bagian.length < 2 || !(totalDiscount > 0) || !(base > 0)) return null;
+    const pcts = bagian.map(x => {
+        const m = x.match(/(\d+(?:[.,]\d+)?)\s*%/);
+        return m ? parseFloat(m[1].replace(',', '.')) : null;
+    });
+    if (pcts.some(x => x === null)) return null;
+    let sisa = base, dipakai = 0;
+    const stages = bagian.map((nama, i) => {
+        const amt = (i === bagian.length - 1)
+            ? totalDiscount - dipakai
+            : Math.round(sisa * pcts[i] / 100);
+        dipakai += amt; sisa -= amt;
+        return { label: nama, pct: pcts[i], amount: amt };
+    });
+    // Label dan angka tersimpan tidak cocok (mis. order lama yang dikoreksi
+    // manual). Lebih baik tampil apa adanya daripada menampilkan angka karangan.
+    if (stages.some(st => st.amount < 0)) return null;
+    return stages;
+}
+// Tahap PERTAMA yang berupa promo pelanggan. Hanya yang pertama yang boleh
+// dipotong langsung dari harga jual - kalau promo ada di urutan kedua, harga
+// setelah promo bukan lagi (harga - nominal promo).
+function firstPromoStage(stages) {
+    return (stages && stages.length && /promo/i.test(stages[0].label)) ? stages[0] : null;
+}
+
 // SATU sumber resolusi harga satuan katalog — dipakai single & bulk cart.
 // Tops/gown beda harga per variant (price_by_type[variant]). Produk single-price
 // punya price_by_type = NULL → fallback ke product.price. Mirror resolusi backend
@@ -12267,12 +12315,24 @@ function generateInvoiceHTML(order, extraPhotos = [], bordirRefPhoto = null) {
         .replace(/^Diskon\s+(\d+)%$/i, '$1% Discount')
         .replace(/^Diskon per produk$/i, 'Per-item Discount')
         .replace(/^Diskon$/i, 'Discount');
+    const discStageLabelEn = (nama) => String(nama || '')
+        .replace(/^Promo\s+([\d.,]+)%$/i, 'Promo Discount $1%')
+        .replace(/^Diskon\s+([\d.,]+)%$/i, '$1% Discount');
     const grossSubtotal = productSubtotal + totalBordirNamaCost + totalBordirLogoCost;
     const subtotalRowHTML = discountAmt > 0
         ? `<tr class="totals-row"><td colspan="3" style="text-align:right;color:#888;">Subtotal (Product + Embroidery)</td><td>${fmtRp(grossSubtotal)}</td></tr>`
         : '';
+    // Potongan berantai dipecah jadi satu baris per tahap, urut sesuai cara
+    // hitungnya: Subtotal -> Promo 10% -> Consignment 30% -> Shipping -> Total.
+    const incBordir = discLabelIncludesBordir(discLblRaw);
+    const discStages = splitDiscountStages(discLblRaw, incBordir ? grossSubtotal : productSubtotal, discountAmt);
+    const discRowHTML = (teks, nominal) =>
+        `<tr class="totals-row" style="color:#16a34a;"><td colspan="3" style="text-align:right;font-weight:500;">🏷️ ${teks}</td><td style="font-weight:600;">-${fmtRp(nominal)}</td></tr>`;
     const discountRowHTML = discountAmt > 0
-        ? `<tr class="totals-row" style="color:#16a34a;"><td colspan="3" style="text-align:right;font-weight:500;">🏷️ ${discountLbl}</td><td style="font-weight:600;">-${fmtRp(discountAmt)}</td></tr>`
+        ? (discStages
+            ? discStages.map(st => discRowHTML(
+                  esc(discStageLabelEn(st.label)) + (incBordir ? '' : ' (product only)'), st.amount)).join('')
+            : discRowHTML(discountLbl, discountAmt))
         : '';
     const weightKg = order.shipping_weight_kg || 0;
     const weightLabel = weightKg > 0 ? ` · ${weightKg} kg` : '';
@@ -14478,6 +14538,24 @@ async function pbLoad() {
 
 const pbRp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 
+// Tampilan satu baris tagihan: kalau ada promo pelanggan di depan rantai
+// potongan, kolom Kotor menampilkan harga SETELAH promo dan kolom Potongan
+// menyisakan Consignment saja. Dipakai layar penyusun DAN lembar cetak supaya
+// angkanya tidak mungkin berbeda antara yang dilihat admin dan yang diterima
+// partner. Jumlah akhirnya tidak berubah: kotor − potongan = ditagih.
+function pbPromoView(o) {
+    const kotor  = Number(o.gross_amount || 0);
+    const potong = Number(o.discount_amount_calc != null ? o.discount_amount_calc : o.discount_amount || 0);
+    const bordir = (o.items || []).reduce((x, i) => x + Number(i.bordir_total || 0), 0);
+    const promo  = firstPromoStage(splitDiscountStages(o.discount_label,
+        discLabelIncludesBordir(o.discount_label) ? kotor : kotor - bordir, potong));
+    return {
+        promo,
+        harga: kotor - (promo ? promo.amount : 0),
+        potongan: potong - (promo ? promo.amount : 0),
+    };
+}
+
 // ── Tab 2: penyusun tagihan ───────────────────────────────────────────────
 function pbRenderBuat(data) {
     const summary = document.getElementById('pb-summary');
@@ -14511,6 +14589,7 @@ function pbRenderBuat(data) {
 
     const rows = pbCandidates.map(o => {
         const bisa = o.billable;
+        const pv = pbPromoView(o);
         const rincian = (o.items || []).map(i => {
             const L = pbItemLabel(i);
             return L.dasar + (L.bordir ? ' ' + L.bordir : '');
@@ -14526,8 +14605,8 @@ function pbRenderBuat(data) {
             <td class="px-3 py-2 text-sm">${esc(o.customer_name || '-')}</td>
             <td class="px-3 py-2 text-[11px] text-white/40 max-w-[260px] truncate" title="${esc(rincian)}">${esc(rincian || '-')}</td>
             <td class="px-3 py-2 text-right text-[12px] font-mono">${o.qty || 0}</td>
-            <td class="px-3 py-2 text-right text-[12px] font-mono">${bisa ? pbRp(o.gross_amount) : '—'}</td>
-            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50">${bisa && o.discount_amount_calc ? '− ' + pbRp(o.discount_amount_calc) : '—'}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono">${bisa ? pbRp(pv.harga) : '—'}${bisa && pv.promo ? `<div class="text-[9px] font-sans text-amber-300/80 whitespace-nowrap">(disc promo ${pv.promo.pct}%)</div>` : ''}</td>
+            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50">${bisa && pv.potongan ? '− ' + pbRp(pv.potongan) : '—'}</td>
             <td class="px-3 py-2 text-right text-[12px] font-mono font-bold">
                 ${bisa ? pbRp(o.net_amount) : `<span class="text-[10px] font-normal ${o.is_cancelled ? 'text-red-400/80' : 'text-amber-300/80'}">${esc(o.blocked_reason)}</span>`}
             </td>
@@ -14572,6 +14651,9 @@ function pbRenderBuat(data) {
             </div>
         </div>`;
     markViewOnly('partner-billing');
+    // Ringkasan di kepala dihitung ulang dari baris yang tampil, bukan dari
+    // ringkasan server — supaya kolomnya konsisten saat ada promo pelanggan.
+    pbRecalc();
 }
 
 // Total ikut berubah saat centang dicabut — admin harus melihat akibat pilihannya
@@ -14582,8 +14664,8 @@ function pbRecalc() {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('pb-sum-order', ikut.length);
     set('pb-sum-item', ikut.reduce((s, o) => s + (o.qty || 0), 0));
-    set('pb-sum-gross', pbRp(ikut.reduce((s, o) => s + o.gross_amount, 0)));
-    set('pb-sum-disc', '− ' + pbRp(ikut.reduce((s, o) => s + o.discount_amount_calc, 0)));
+    set('pb-sum-gross', pbRp(ikut.reduce((s, o) => s + pbPromoView(o).harga, 0)));
+    set('pb-sum-disc', '− ' + pbRp(ikut.reduce((s, o) => s + pbPromoView(o).potongan, 0)));
     set('pb-sum-net', pbRp(ikut.reduce((s, o) => s + o.net_amount, 0)));
 }
 
@@ -14850,6 +14932,12 @@ function pbInvoicePrintHTML(inv) {
         ? `${tgl(inv.period_start, { day: '2-digit', month: 'short' })} – ${tgl(inv.period_end)}`
         : 'seluruh periode';
 
+    // Sebagian potongan bisa berupa PROMO PELANGGAN — harga jual barangnya memang
+    // sudah turun sebelum komisi dihitung. Kolom Harga karena itu menampilkan
+    // harga SETELAH promo (yang benar-benar dibayar pembeli) dengan keterangan di
+    // bawahnya, dan kolom Potongan menyisakan Consignment saja. Jumlahnya tidak
+    // berubah sedikit pun: harga − potongan = jumlah, sama seperti sebelumnya.
+    let adaPromo = false, sumHarga = 0, sumPotongan = 0;
     const baris = rows.map(r => {
         const items = (r.items || []).map(i => {
             const L = pbItemLabel(i);
@@ -14857,14 +14945,24 @@ function pbInvoicePrintHTML(inv) {
                 ? `<br><span style="color:#5b6a7d;font-size:9.5px;">&nbsp;&nbsp;${esc(L.bordir)}</span>`
                 : '');
         }).join('<br>');
+        const kotor  = Number(r.gross_amount || 0);
+        const potong = Number(r.discount_amount || 0);
+        const bordir = (r.items || []).reduce((x, i) => x + Number(i.bordir_total || 0), 0);
+        const stages = splitDiscountStages(r.discount_label,
+            discLabelIncludesBordir(r.discount_label) ? kotor : kotor - bordir, potong);
+        const promo  = firstPromoStage(stages);
+        const hargaTampil    = kotor - (promo ? promo.amount : 0);
+        const potonganTampil = potong - (promo ? promo.amount : 0);
+        if (promo) adaPromo = true;
+        sumHarga += hargaTampil; sumPotongan += potonganTampil;
         return `<tr>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;font-family:monospace;font-weight:700;vertical-align:top;">${esc(r.receipt_no || '—')}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;white-space:nowrap;vertical-align:top;">${tgl(r.order_date, { day: '2-digit', month: 'short' })}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;">${esc(r.customer_name || '-')}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;line-height:1.5;">${items || '-'}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;">${(r.items || []).reduce((x, i) => x + Number(i.quantity || 0), 0)}</td>
-            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;">${Number(r.gross_amount).toLocaleString('id-ID')}</td>
-            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;color:#5b6a7d;">${Number(r.discount_amount) ? '−' + Number(r.discount_amount).toLocaleString('id-ID') : '—'}</td>
+            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;">${hargaTampil.toLocaleString('id-ID')}${promo ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#7d5417;font-weight:600;white-space:nowrap;">(disc promo ${promo.pct}%)</div>` : ''}</td>
+            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;color:#5b6a7d;">${potonganTampil ? '−' + potonganTampil.toLocaleString('id-ID') : '—'}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;font-weight:700;vertical-align:top;">${Number(r.net_amount).toLocaleString('id-ID')}</td>
         </tr>`;
     }).join('');
@@ -14917,13 +15015,13 @@ function pbInvoicePrintHTML(inv) {
             </thead>
             <tbody>${baris}</tbody>
             <tfoot class="pb-foot">
-                <tr><td colspan="6" style="padding:7px 9px;text-align:right;color:#5b6a7d;">Kotor</td><td></td><td style="padding:7px 9px;text-align:right;font-family:monospace;">${Number(inv.gross_total).toLocaleString('id-ID')}</td></tr>
-                <tr><td colspan="6" style="padding:7px 9px;text-align:right;color:#5b6a7d;">Potongan Consignment</td><td></td><td style="padding:7px 9px;text-align:right;font-family:monospace;">−${Number(inv.discount_total).toLocaleString('id-ID')}</td></tr>
+                <tr><td colspan="6" style="padding:7px 9px;text-align:right;color:#5b6a7d;">${adaPromo ? 'Kotor (setelah promo pelanggan)' : 'Kotor'}</td><td></td><td style="padding:7px 9px;text-align:right;font-family:monospace;">${sumHarga.toLocaleString('id-ID')}</td></tr>
+                <tr><td colspan="6" style="padding:7px 9px;text-align:right;color:#5b6a7d;">Potongan Consignment</td><td></td><td style="padding:7px 9px;text-align:right;font-family:monospace;">−${sumPotongan.toLocaleString('id-ID')}</td></tr>
                 <tr><td colspan="6" style="padding:9px;text-align:right;font-weight:700;font-size:12px;border-top:2px solid #16202e;">Total Tagihan</td><td style="border-top:2px solid #16202e;"></td><td style="padding:9px;text-align:right;font-weight:700;font-size:13px;font-family:monospace;border-top:2px solid #16202e;">${rp(inv.total_due)}</td></tr>
             </tfoot>
         </table>
 
-        <p style="font-size:9.5px;color:#8d9aa9;padding-top:6px;margin:0;">Ongkos kirim ditanggung Wearscrubs dan tidak ditagihkan.</p>
+        <p style="font-size:9.5px;color:#8d9aa9;padding-top:6px;margin:0;">Ongkos kirim ditanggung Wearscrubs dan tidak ditagihkan.${adaPromo ? ' Baris bertanda <b>(disc promo)</b> harganya sudah dipotong promo pelanggan lebih dulu, sehingga kolom Potongan berisi Consignment saja.' : ''}</p>
         ${inv.notes ? `<div class="pb-notes" style="margin-top:12px;background:#f6f7f9;border:1px solid #dde3ea;border-radius:6px;padding:9px 11px;font-size:10.5px;">${esc(inv.notes)}</div>` : ''}
         ${inv.status === 'void' ? `<div style="margin-top:12px;border:2px solid #b3261e;color:#b3261e;border-radius:6px;padding:9px 11px;font-weight:700;">TAGIHAN DIBATALKAN — ${esc(inv.void_reason || '')}</div>` : ''}
 

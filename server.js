@@ -944,6 +944,11 @@ async function initDB() {
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+    // Label potongan ikut DIBEKUKAN. Lembar tagihan perlu tahu bagian mana dari
+    // potongan yang merupakan PROMO PELANGGAN (harga jualnya memang turun) dan
+    // mana komisi Consignment, supaya kolom Harga bisa menampilkan harga setelah
+    // promo. Tagihan lama bernilai NULL dan tetap tercetak seperti semula.
+    await dbRun(`ALTER TABLE partner_invoice_orders ADD COLUMN IF NOT EXISTS discount_label TEXT`);
     await createIdx('CREATE INDEX IF NOT EXISTS idx_pinv_ord_invoice ON partner_invoice_orders(invoice_id)');
     // ⚠️ INDEKS PALING PENTING DI FITUR INI. Satu order tidak boleh masuk dua
     // tagihan AKTIF sekaligus. Dijaga database, bukan pengecekan di kode — kalau
@@ -2085,11 +2090,12 @@ app.post('/api/admin/partner-billing/invoices', requireMenu('partner-billing', '
                 await client.query(
                     `INSERT INTO partner_invoice_orders
                        (invoice_id, order_id, receipt_no, order_code, order_date, customer_name,
-                        items_json, gross_amount, discount_amount, net_amount, is_cancelled, is_active)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)`,
+                        items_json, gross_amount, discount_amount, net_amount, discount_label,
+                        is_cancelled, is_active)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE)`,
                     [invoiceId, r.id, r.receipt_no, r.order_code, r.order_date, r.customer_name,
                      JSON.stringify(r.items || []), r.gross_amount, r.discount_amount_calc,
-                     r.net_amount, r.is_cancelled]
+                     r.net_amount, r.discount_label || null, r.is_cancelled]
                 );
             }
             return inv.rows[0];
