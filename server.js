@@ -6205,8 +6205,36 @@ app.get('/api/refunds', requireAuth(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/refunds/stats — penghitung badge sidebar + header.
+// ⚠️ WAJIB didaftarkan SEBELUM '/api/refunds/:id'. Express mencocokkan rute
+// sesuai urutan pendaftaran: kalau ':id' lebih dulu, permintaan ke /stats akan
+// tertangkap olehnya sebagai id = "stats" dan berujung error Postgres
+// `invalid input syntax for type integer`. Bug nyata 29 Agu 2026 — endpoint ini
+// TIDAK PERNAH jalan, badge refund tidak pernah muncul, dan dashboard
+// memanggilnya tiap 60 detik sehingga log Postgres penuh error.
+app.get('/api/refunds/stats', requireAuth(), async (req, res) => {
+    try {
+        const row = await dbGet(
+            `SELECT
+                COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+                COUNT(*) FILTER (WHERE status = 'transferred')::int AS transferred,
+                COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0)::int AS pending_total,
+                COALESCE(SUM(amount) FILTER (WHERE status = 'transferred'), 0)::int AS transferred_total
+             FROM refunds`,
+            []
+        );
+        res.json(row);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/refunds/:id', requireAuth(), async (req, res) => {
     try {
+        // Jaring pengaman: id non-angka dijawab 404 yang jelas, bukan diteruskan
+        // ke Postgres dan meledak jadi 500. Kalau suatu saat ada rute
+        // /api/refunds/<kata> yang lagi-lagi terdaftar belakangan, gejalanya
+        // langsung terbaca dari respons — tidak perlu menggali log database.
+        if (!/^\d+$/.test(String(req.params.id)))
+            return res.status(404).json({ error: 'Refund tidak ditemukan' });
         const row = await dbGet(
             `SELECT r.*, o.order_code, o.payment_method, o.shipping_courier
              FROM refunds r LEFT JOIN orders o ON o.id = r.order_id
@@ -6371,24 +6399,6 @@ app.post('/api/refunds', requireAuth(['admin']), async (req, res) => {
         res.json({ message: 'Refund record dibuat', id: result.rows[0].id });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-// GET /api/refunds/stats — header counters for sidebar badge
-app.get('/api/refunds/stats', requireAuth(), async (req, res) => {
-    try {
-        const row = await dbGet(
-            `SELECT
-                COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
-                COUNT(*) FILTER (WHERE status = 'transferred')::int AS transferred,
-                COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0)::int AS pending_total,
-                COALESCE(SUM(amount) FILTER (WHERE status = 'transferred'), 0)::int AS transferred_total
-             FROM refunds`,
-            []
-        );
-        res.json(row);
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EXCHANGE (TUKAR SIZE) — barang TIDAK direfund, hanya tukar ukuran.
