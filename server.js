@@ -1929,6 +1929,12 @@ function hitungPotonganBerantai(base, pcts) {
 // centang Consignment DIMATIKAN, karena menghitung ulang akan menimpa angka yang
 // sengaja dibuat berbeda.
 function potonganCocokLabel(label, discount, gross, bordir) {
+    // Potongan nol = TIDAK ADA potongan, apa pun bunyi labelnya. Jalur keranjang
+    // Kasir ikut menuliskan "Diskon per produk" walau nominalnya nol, dan label
+    // itu tidak memuat persen sama sekali. Tanpa pengecualian ini, order yang
+    // justru paling butuh dicentang (lupa potongan) malah ikut terkunci.
+    if (Number(discount || 0) === 0)
+        return { pcts: [], incBordir: true, base: gross, cocok: true };
     const pcts = discPctsDariLabel(label);
     if (pcts === null) return { pcts: null, cocok: false, incBordir: true };
     const incBordir = !/\(\s*produk saja\s*\)/i.test(String(label || ''));
@@ -4354,9 +4360,12 @@ app.post('/api/orders', async (req, res) => {
         // Clamp: diskon tidak boleh melebihi subtotal produk (cegah total_amount negatif
         // yang merusak invoice/report/refund). Konsisten dgn clamp DP di bawah.
         const discountAmount = Math.max(0, Math.min(discountAmountRaw, productTotal));
-        const discountLabel = discountAmountCustom !== null
+        // Potongan nol tidak boleh meninggalkan label. Sebelumnya jalur keranjang
+        // selalu mengisi "Diskon per produk" walau nominalnya 0 — label hantu yang
+        // membuat order terlihat seperti punya diskon padahal tidak.
+        const discountLabel = discountAmount === 0 ? null : (discountAmountCustom !== null
             ? (req.body.discount_label_custom || 'Diskon per produk') || null
-            : (safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null);
+            : (safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null));
         const total = productTotal - discountAmount + shippingCost;
 
         // DP / uang muka (admin-only). Total tetap penuh; DP hanya info pembayaran bertahap.

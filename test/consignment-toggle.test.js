@@ -54,6 +54,8 @@ const ord = (id) => one(`SELECT discount_amount, discount_label, total_amount FR
 // 913 Rani   — kotor 300.000, label bilang 30% tapi nominalnya 50.000 (koreksi manual)
 // 914 Budi   — order WhatsApp biasa, bukan event
 // 915 Heidi  — order event yang DIBATALKAN
+// 916 Maya   — kotor 60.000, potongan 0 TAPI label hantu "Diskon per produk"
+//              (jalur keranjang Kasir menuliskannya walau nominalnya nol)
 function seed() {
     none(`DELETE FROM partner_invoice_orders; DELETE FROM partner_invoices;
           DELETE FROM order_items; DELETE FROM order_photos; DELETE FROM stock_movements;
@@ -72,7 +74,8 @@ function seed() {
       (912, 'WS-EV-912', 'Suci',   '0813', '-', 168000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 72000, 'Consignment 30% (produk + bordir)', '00303'),
       (913, 'WS-EV-913', 'Rani',   '0814', '-', 250000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 50000, 'Consignment 30% (produk + bordir)', '00304'),
       (914, 'WS-WA-914', 'Budi',   '0815', '-', 300000, 'paid', 'done', 0, 'J&T', 'whatsapp',            NULL,                     NULL, '2026-08-13', 0,    NULL,                            NULL),
-      (915, 'WS-EV-915', 'Heidi',  '0816', '-', 300000, 'paid', 'cancelled', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0, NULL,                            '00305');
+      (915, 'WS-EV-915', 'Heidi',  '0816', '-', 300000, 'paid', 'cancelled', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0, NULL,                            '00305'),
+      (916, 'WS-EV-916', 'Maya',   '0817', '-',  60000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0, 'Diskon per produk',                '00306');
     INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price,
                              bordir_nama, bordir_nama_price, bordir_logo, bordir_logo_price) VALUES
       (810, 910, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
@@ -81,7 +84,8 @@ function seed() {
       (813, 912, 1, 'One Size', 'merah', 'null', 4, 60000, FALSE, NULL, FALSE, NULL),
       (814, 913, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
       (815, 914, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
-      (816, 915, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL);
+      (816, 915, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
+      (817, 916, 1, 'One Size', 'merah', 'null', 3, 20000, FALSE, NULL, FALSE, NULL);
     `);
 }
 
@@ -193,6 +197,22 @@ async function run() {
         byId['913'] && !!byId['913'].consignment_locked_reason, byId['913']);
     check('915 (batal) dikunci',
         byId['915'] && !!byId['915'].consignment_locked_reason, byId['915']);
+
+    group('10. Label hantu "Diskon per produk" dengan potongan 0 tetap bisa dicentang');
+    // Bug nyata 29 Agu: order dr maya & 3 lainnya terkunci karena labelnya tidak
+    // memuat persen sama sekali. Potongan nol = tidak ada potongan, titik.
+    seed();
+    r = await req('GET', '/api/admin/partner-billing/candidates?partner_id=1');
+    const maya = (r.body.orders || []).find(x => Number(x.id) === 916);
+    check('tidak dikunci di layar penyusun', maya && !maya.consignment_locked_reason, maya);
+    check('belum tercentang', maya && maya.consignment_applied === false, maya);
+    r = await toggle(916, true);
+    check('bisa dicentang', r.status === 200, r.body);
+    o = ord(916);
+    check('potongan jadi 30% dari 60.000', Number(o.discount_amount) === 18000, o.discount_amount);
+    check('label hantu tergantikan label sebenarnya',
+        o.discount_label === 'Consignment 30% (produk + bordir)', o.discount_label);
+    check('total jadi 42.000', Number(o.total_amount) === 42000, o.total_amount);
 
     finish();
 }
