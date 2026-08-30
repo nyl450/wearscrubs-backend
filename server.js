@@ -5245,19 +5245,64 @@ app.put('/api/orders/:id/status', requireMenu('orders','edit'), async (req, res)
         const valid = ['waiting_payment', 'confirmed', 'packed', 'shipped', 'done', 'cancelled', 'bordir'];
         if (!valid.includes(order_status)) return res.status(400).json({ error: 'Status tidak valid' });
 
-        const order = await dbGet('SELECT order_status FROM orders WHERE id = $1', [req.params.id]);
+        const order = await dbGet(
+            'SELECT order_status, shipping_courier, payment_status FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
 
+        // ── Pengecualian pickup: confirmed → done ────────────────────────────
+        // Order "Diambil di event / walkin" melompati Kemas & Kirim. Biasanya
+        // lompatan itu terjadi otomatis saat konfirmasi bayar, TAPI kalau kurirnya
+        // baru dibetulkan jadi pickup SESUDAH order dikonfirmasi, statusnya
+        // tertinggal di 'confirmed' dan tombol "Tandai Diambil & Selesai" buntu.
+        // Bug 30 Agu 2026 (WS-20260830-8811): admin tak sengaja memilih Free Ongkir,
+        // lalu membetulkannya lewat Edit Pesanan — ordernya jadi tidak bisa
+        // diselesaikan sama sekali. Tombolnya sudah lama ada di UI dan menyebut
+        // dirinya "fallback untuk order lama", padahal backend tidak pernah
+        // mengizinkannya, jadi tombol itu belum pernah benar-benar berfungsi.
+        const isPickupFinish = order.order_status === 'confirmed'
+            && order_status === 'done'
+            && (order.shipping_courier || '').trim() === PICKUP_COURIER;
+
         const allowed = STATUS_FORWARD[order.order_status] || [];
-        if (!allowed.includes(order_status)) {
+        if (!allowed.includes(order_status) && !isPickupFinish) {
             return res.status(400).json({
                 error: `Transisi tidak diizinkan: ${order.order_status} → ${order_status}. Allowed: ${allowed.join(', ') || '(terminal state)'}`
             });
         }
 
+        // Gate-nya disamakan PERSIS dengan jalur auto-skip di confirm-payment —
+        // kalau di sini lebih longgar, pickup lewat tombol jadi pintu belakang
+        // yang melewati penjagaan yang sama.
+        if (isPickupFinish) {
+            if (order.payment_status !== 'paid')
+                return res.status(400).json({ error: 'Pesanan belum lunas — konfirmasi pembayarannya dulu.' });
+            // PO katalog belum dipenuhi = barang fisiknya belum ada, jadi mustahil
+            // sudah diambil customer. Menahannya di 'confirmed' menjaga alur
+            // receive → fulfill FIFO → potong stok tetap jalan.
+            const po = await dbGet(
+                `SELECT COUNT(*)::int AS n FROM order_items
+                  WHERE order_id = $1 AND is_po = TRUE AND po_fulfilled = FALSE`, [req.params.id]);
+            if (po && po.n > 0)
+                return res.status(409).json({ error: 'Ada item Pre-Order menunggu stok masuk — barangnya belum ada, jadi tidak mungkin sudah diambil. Tunggu stok katalog masuk dulu.' });
+        }
+
         // Atomic: update status + (for 'done') log an audit record so the process timeline
         // can show WHO marked it done. photo_url is null (no image) — record is for audit only.
         await withTransaction(async (client) => {
+            // Item custom: pickup melompati Kemas, padahal gate `po_fulfilled`
+            // normalnya baru lepas di situ — kalau tidak diflip, barisnya nyangkut
+            // SELAMANYA di menu Pre-Order (barangnya sudah pindah tangan tapi
+            // ordernya sudah 'done', jadi tombol Tandai Siap ditolak). Sama persis
+            // dengan yang dilakukan confirm-payment. Custom tidak punya baris
+            // inventory, jadi tidak ada implikasi stok.
+            if (isPickupFinish) {
+                await client.query(
+                    `UPDATE order_items SET po_fulfilled = TRUE
+                      WHERE order_id = $1 AND po_fulfilled = FALSE
+                        AND (is_custom_size = TRUE OR is_custom_product = TRUE)`,
+                    [req.params.id]
+                );
+            }
             await client.query(
                 `UPDATE orders SET order_status = $1, updated_at = NOW() WHERE id = $2`,
                 [order_status, req.params.id]
