@@ -153,6 +153,7 @@
                 <div>
                     <p class="text-sm font-semibold text-purple-800 dark:text-purple-300">Estimasi Proses Bordir: ±1 Minggu</p>
                     <p class="text-xs text-purple-600 dark:text-purple-400 mt-0.5">Pesanan bordir akan diproses selama ±1 minggu setelah pembayaran dikonfirmasi. Bordir logo memerlukan file logo dari Anda — admin akan menghubungi via WhatsApp.</p>
+                    <p class="text-xs font-semibold text-purple-700 dark:text-purple-300 mt-2">Bordir hanya dilakukan seminggu sekali. Apabila saat order jadwal minggu tersebut sudah lewat, maka bordir akan dilakukan di minggu depan.</p>
                 </div>
             </div>
             <!-- Disclaimer: kompleksitas bordir -->
@@ -700,11 +701,27 @@ function buildBordirForm() {
     });
 
     const cls = 'w-full bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition';
-    const posOpts = (def) => `<option value="kanan" ${def==='kanan'?'selected':''}>Kanan Dada</option><option value="kiri" ${def==='kiri'?'selected':''}>Kiri Dada</option>`;
+    // Posisi bordir TIDAK lagi dipilih pembeli: nama selalu di dada kanan, logo
+    // selalu di dada kiri. Posisinya tetap DITAMPILKAN supaya pembeli tahu hasil
+    // akhirnya, dan nilainya tetap dikirim lewat input tersembunyi ber-id sama —
+    // jadi pengumpul data di bawah tidak perlu tahu bedanya.
+    // Kelas ditulis eksplisit, BUKAN `${cls}` + timpaan. Geometrinya sengaja
+    // disamakan dengan input lain (border, radius, px-4 py-2.5, text-sm) supaya
+    // tingginya sama persis dengan dropdown Warna Benang di sebelahnya. Kalau
+    // memakai `${cls}` lalu menambah bg/teks sendiri, dua kelas latar bertabrakan
+    // dan pemenangnya ditentukan urutan CSS Tailwind - bukan urutan atributnya.
+    const posKelas = 'w-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10'
+        + ' rounded-xl px-4 py-2.5 text-sm text-gray-500 dark:text-white/50'
+        + ' flex items-center gap-2 cursor-default';
+    const posTetap = (id, val) => `
+        <div class="${posKelas}">
+            <i class="fa-solid fa-lock text-[10px] opacity-60"></i>${val === 'kanan' ? 'Kanan Dada' : 'Kiri Dada'}
+        </div>
+        <input type="hidden" id="${id}" value="${val}">`;
     const bothBordirNote = (item) => item.bordir_nama && item.bordir_logo
         ? `<div class="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
                <i class="fa-solid fa-circle-info mr-1.5"></i>
-               Anda memilih bordir nama <strong>dan</strong> logo — pastikan posisi keduanya berbeda (satu kanan, satu kiri dada).
+               Bordir nama dipasang di <strong>dada kanan</strong> dan logo di <strong>dada kiri</strong>. Posisi ini sudah kami tetapkan supaya hasilnya seragam.
            </div>` : '';
 
     container.innerHTML = inputs.map(({ item, itemIdx, q, label }) => `
@@ -751,7 +768,7 @@ function buildBordirForm() {
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Posisi di Dada</label>
-                            <select id="bordir-nama-pos-${itemIdx}-${q}" class="${cls} cursor-pointer">${posOpts('kanan')}</select>
+                            ${posTetap(`bordir-nama-pos-${itemIdx}-${q}`, 'kanan')}
                         </div>
                     </div>
                 </div>
@@ -790,7 +807,7 @@ function buildBordirForm() {
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-600 dark:text-white/50 mb-1.5">Posisi di Dada</label>
-                            <select id="bordir-logo-pos-${itemIdx}-${q}" class="${cls} cursor-pointer">${posOpts(item.bordir_nama ? 'kiri' : 'kanan')}</select>
+                            ${posTetap(`bordir-logo-pos-${itemIdx}-${q}`, 'kiri')}
                         </div>
                     </div>
                 </div>
