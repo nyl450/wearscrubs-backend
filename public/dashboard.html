@@ -14612,7 +14612,9 @@ function pbRenderBuat(data) {
         const pv = pbPromoView(o);
         const rincian = (o.items || []).map(i => {
             const L = pbItemLabel(i);
-            return L.dasar + (L.bordir ? ' ' + L.bordir : '');
+            // Qty per item ikut ditulis supaya pratinjau bercerita sama dengan
+            // lembar cetaknya (di sana qty juga dirinci per barang).
+            return `${Number(i.quantity || 0)}× ${L.dasar}` + (L.bordir ? ' ' + L.bordir : '');
         }).join(' · ');
         return `
         <tr class="border-b border-white/5 ${bisa ? '' : 'opacity-45'}">
@@ -14968,7 +14970,10 @@ Alasan pembatalan:`);
 // bisa dia cocokkan dengan harga produk biasa.
 function pbItemLabel(i) {
     const v = i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : '';
-    const dasar = `${i.nama || ''}${v} · ${i.color || '-'} · ${i.size || '-'}`;
+    // Aksesoris tidak punya ukuran badan — semuanya "One Size". Menuliskannya cuma
+    // memanjangkan baris di lembar tagihan tanpa menambah informasi apa pun.
+    const uk = i.kategori === 'aksesoris' ? '' : ` · ${i.size || '-'}`;
+    const dasar = `${i.nama || ''}${v} · ${i.color || '-'}${uk}`;
     const b = [];
     if (i.bordir_nama) b.push('nama');
     if (i.bordir_logo) b.push('logo');
@@ -14998,11 +15003,23 @@ function pbInvoicePrintHTML(inv) {
     // berubah sedikit pun: harga − potongan = jumlah, sama seperti sebelumnya.
     let adaPromo = false, sumHarga = 0, sumPotongan = 0;
     const baris = rows.map(r => {
+        // Qty dirinci PER ITEM: partner perlu tahu berapa banyak TIAP produk yang
+        // ditagihkan, bukan cuma "4 pcs" untuk satu kwitansi berisi dua produk.
+        //
+        // Angkanya ditempel di DEPAN nama barangnya, bukan ditumpuk di kolom Qty
+        // sebelah. Nama produk sering membungkus jadi 2-3 baris di lebar kolom ini,
+        // dan begitu itu terjadi, tumpukan angka di kolom terpisah tidak lagi lurus
+        // dengan barangnya — partner jadi membaca qty milik produk yang salah.
+        // Menempel di depan namanya kebal terhadap pembungkusan baris.
+        // Kolom Qty tetap memuat TOTAL per kwitansi sebagai angka penyilang.
+        const totalQty = (r.items || []).reduce((x, i) => x + Number(i.quantity || 0), 0);
         const items = (r.items || []).map(i => {
             const L = pbItemLabel(i);
-            return esc(L.dasar) + (L.bordir
-                ? `<br><span style="color:#5b6a7d;font-size:9.5px;">&nbsp;&nbsp;${esc(L.bordir)}</span>`
-                : '');
+            const n = Number(i.quantity || 0);
+            return `<b style="font-family:monospace;">${n}&times;</b> ${esc(L.dasar)}`
+                 + (L.bordir
+                    ? `<br><span style="color:#5b6a7d;font-size:9.5px;">&nbsp;&nbsp;${esc(L.bordir)}</span>`
+                    : '');
         }).join('<br>');
         const kotor  = Number(r.gross_amount || 0);
         const potong = Number(r.discount_amount || 0);
@@ -15019,7 +15036,7 @@ function pbInvoicePrintHTML(inv) {
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;white-space:nowrap;vertical-align:top;">${tgl(r.order_date, { day: '2-digit', month: 'short' })}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;">${esc(r.customer_name || '-')}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;line-height:1.5;">${items || '-'}</td>
-            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;">${(r.items || []).reduce((x, i) => x + Number(i.quantity || 0), 0)}</td>
+            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;">${totalQty}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;">${hargaTampil.toLocaleString('id-ID')}${promo ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#7d5417;font-weight:600;white-space:nowrap;">(disc promo ${promo.pct}%)</div>` : ''}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;vertical-align:top;color:#5b6a7d;">${potonganTampil ? '−' + potonganTampil.toLocaleString('id-ID') : '—'}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;text-align:right;font-family:monospace;font-weight:700;vertical-align:top;">${Number(r.net_amount).toLocaleString('id-ID')}</td>
