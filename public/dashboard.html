@@ -14540,6 +14540,24 @@ function pbRenderUlang() { pbRender(pbRingkasanTerakhir || {}); }
 let pbRingkasanTerakhir = null;
 let pbKunciTerakhir = null;   // partner + rentang tanggal yang sedang ditampilkan
 
+// Tab Buat Tagihan: halaman + PILIHAN order.
+//
+// ⚠️ Pilihan disimpan di Set, BUKAN dibaca dari centang di DOM. Begitu daftarnya
+// dipotong per halaman, centang di halaman lain tidak ada di DOM — membaca dari
+// DOM berarti tagihan terbit hanya berisi order di halaman yang sedang tampil,
+// dan sisanya hilang diam-diam. Itu kurang tagih yang tidak akan ketahuan.
+let pbHalBuat = 1;
+let pbPilih = null;          // Set<order_id> yang ikut ditagih
+let pbKunciBuat = null;
+
+function pbTogglePick(id, ikut) {
+    if (!pbPilih) return;
+    if (ikut) pbPilih.add(Number(id)); else pbPilih.delete(Number(id));
+    pbRecalc();
+}
+function pbSetHalBuat(n) { pbHalBuat = n; pbRenderBuat(pbRingkasanBuat || {}); document.getElementById('pb-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+let pbRingkasanBuat = null;
+
 function pbShowTab(t) {
     pbTab = t;
     ['kwitansi', 'buat', 'daftar'].forEach(k => {
@@ -14598,8 +14616,21 @@ async function pbLoad() {
             pbOrders = data.orders || [];
             pbRender(data);
         } else if (pbTab === 'buat') {
+            const kunciB = qs.toString();
             const data = await apiFetch('/api/admin/partner-billing/candidates?' + qs.toString());
             pbCandidates = data.orders || [];
+            const bisaSemua = pbCandidates.filter(o => o.billable).map(o => Number(o.id));
+            if (!pbPilih || kunciB !== pbKunciBuat) {
+                // Partner/rentang berganti (atau pertama kali): semua yang bisa
+                // ditagih dicentang, sama seperti perilaku sebelumnya.
+                pbPilih = new Set(bisaSemua);
+                pbHalBuat = 1;
+                pbKunciBuat = kunciB;
+            } else {
+                // Muat ulang di partner yang sama (mis. setelah centang Consignment):
+                // pertahankan pilihan admin, buang yang sudah tidak bisa ditagih.
+                pbPilih = new Set(bisaSemua.filter(id => pbPilih.has(id)));
+            }
             pbRenderBuat(data);
         } else {
             // Piutang diambil global (semua partner), bukan cuma yang sedang
@@ -14640,6 +14671,7 @@ function pbPromoView(o) {
 
 // ── Tab 2: penyusun tagihan ───────────────────────────────────────────────
 function pbRenderBuat(data) {
+    pbRingkasanBuat = data;
     const summary = document.getElementById('pb-summary');
     const body = document.getElementById('pb-body');
     const sm = data.summary || {};
@@ -14669,7 +14701,12 @@ function pbRenderBuat(data) {
         return;
     }
 
-    const rows = pbCandidates.map(o => {
+    const totalHalB = Math.max(1, Math.ceil(pbCandidates.length / PB_PER_HAL));
+    if (pbHalBuat > totalHalB) pbHalBuat = totalHalB;
+    const mulaiB = (pbHalBuat - 1) * PB_PER_HAL;
+    const halamanB = pbCandidates.slice(mulaiB, mulaiB + PB_PER_HAL);
+
+    const rows = halamanB.map(o => {
         const bisa = o.billable;
         const pv = pbPromoView(o);
         const rincian = (o.items || []).map(i => {
@@ -14682,7 +14719,8 @@ function pbRenderBuat(data) {
         <tr class="border-b border-white/5 ${bisa ? '' : 'opacity-45'}">
             <td class="px-3 py-2">
                 <input type="checkbox" class="pb-pick w-4 h-4 accent-emerald-500" data-order-id="${o.id}"
-                       ${bisa ? 'checked' : 'disabled'} onchange="pbRecalc()" />
+                       ${bisa && pbPilih && pbPilih.has(Number(o.id)) ? 'checked' : ''} ${bisa ? '' : 'disabled'}
+                       onchange="pbTogglePick(${Number(o.id)}, this.checked)" />
             </td>
             <td class="px-3 py-2 font-mono text-[12px] font-bold whitespace-nowrap">${esc(o.receipt_no || '—')}</td>
             <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${o.order_date ? new Date(o.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'}</td>
@@ -14704,8 +14742,25 @@ function pbRenderBuat(data) {
     }).join('');
 
     const adaBlokir = pbCandidates.some(o => !o.billable && !o.is_cancelled);
+    const dariB = pbCandidates.length ? mulaiB + 1 : 0;
+    const sampaiB = Math.min(mulaiB + PB_PER_HAL, pbCandidates.length);
+    const tblB = (label, ke, aktif) => `<button ${aktif ? `onclick="pbSetHalBuat(${ke})"` : 'disabled'}
+        class="text-[11px] px-2.5 py-1.5 rounded-lg border ${aktif
+            ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white/70'
+            : 'border-white/5 text-white/20 cursor-not-allowed'}">${label}</button>`;
+    const pagerB = totalHalB <= 1 ? '' : `
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] text-white/35">Hal. ${pbHalBuat} / ${totalHalB}</span>
+            ${tblB('&laquo; Sebelumnya', pbHalBuat - 1, pbHalBuat > 1)}
+            ${tblB('Berikutnya &raquo;', pbHalBuat + 1, pbHalBuat < totalHalB)}
+        </div>`;
     body.innerHTML = `
         <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            ${totalHalB > 1 ? `<div class="px-4 py-2.5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-[11px] text-white/35">Menampilkan ${dariB}–${sampaiB} dari ${pbCandidates.length} order.
+                   <b class="text-white/55">Centang di halaman lain tetap terhitung</b> — ringkasan di atas & tagihan yang terbit mencakup semuanya.</p>
+                ${pagerB}
+            </div>` : ''}
             ${adaBlokir ? `<div class="px-4 py-2.5 bg-amber-500/10 border-b border-amber-400/20 text-[11px] text-amber-200/90">
                 Ada order yang belum bisa ditagih (lihat alasannya di kolom paling kanan). Order itu tidak ikut terhitung.
             </div>` : ''}
@@ -14734,15 +14789,19 @@ function pbRenderBuat(data) {
                 </div>
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-[11px] text-white/30">Angka dihitung ulang di server saat diterbitkan — yang tampil di sini pratinjau.</p>
-                    <button onclick="pbIssue(this)" class="edit-action text-xs px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5">
-                        <i class="fa-solid fa-file-invoice-dollar"></i> Terbitkan Tagihan
-                    </button>
+                    <div class="flex items-center gap-3">
+                        ${pagerB}
+                        <button onclick="pbIssue(this)" class="edit-action text-xs px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-invoice-dollar"></i> Terbitkan Tagihan
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>`;
     markViewOnly('partner-billing');
-    // Ringkasan di kepala dihitung ulang dari baris yang tampil, bukan dari
-    // ringkasan server — supaya kolomnya konsisten saat ada promo pelanggan.
+    // Ringkasan di kepala dihitung ulang dari PILIHAN (semua halaman), bukan dari
+    // ringkasan server — supaya angkanya konsisten saat ada promo pelanggan dan
+    // tetap utuh saat daftarnya dipotong per halaman.
     pbRecalc();
 }
 
@@ -14782,8 +14841,10 @@ Angka ordernya ikut dibetulkan — invoice pelanggan dan laporan omzet menyesuai
 // Total ikut berubah saat centang dicabut — admin harus melihat akibat pilihannya
 // sebelum menerbitkan, bukan sesudah.
 function pbRecalc() {
-    const dipilih = new Set([...document.querySelectorAll('.pb-pick:checked')].map(el => Number(el.dataset.orderId)));
-    const ikut = pbCandidates.filter(o => o.billable && dipilih.has(Number(o.id)));
+    // Sumbernya Set, BUKAN centang di DOM — lihat catatan di pbPilih. Dengan
+    // begitu ringkasan di kepala layar mencakup SEMUA halaman, bukan cuma yang
+    // sedang tampil.
+    const ikut = pbCandidates.filter(o => o.billable && pbPilih && pbPilih.has(Number(o.id)));
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('pb-sum-order', ikut.length);
     set('pb-sum-item', ikut.reduce((s, o) => s + (o.qty || 0), 0));
@@ -14795,7 +14856,8 @@ function pbRecalc() {
 async function pbIssue(btn) {
     const partnerId = document.getElementById('pb-partner')?.value;
     if (!partnerId) return;
-    const ids = [...document.querySelectorAll('.pb-pick:checked')].map(el => Number(el.dataset.orderId));
+    // Dari Set, bukan DOM: order di halaman lain WAJIB ikut tertagih.
+    const ids = pbCandidates.filter(o => o.billable && pbPilih && pbPilih.has(Number(o.id))).map(o => Number(o.id));
     if (!ids.length) { toast('Pilih minimal 1 order', true); return; }
     const ikut = pbCandidates.filter(o => ids.includes(Number(o.id)));
     const total = ikut.reduce((s, o) => s + o.net_amount, 0);
@@ -14908,6 +14970,7 @@ function pbRenderDaftar(rows) {
                                 <button onclick="pbOpenInvoice(${inv.id})" class="text-[11px] px-2.5 py-1 rounded-lg bg-white/8 hover:bg-white/12 text-white/70 font-bold">Lihat</button>
                                 ${inv.status === 'issued' ? `<button onclick="pbOpenPaid(${inv.id}, '${escAttr(inv.invoice_no)}', ${Number(inv.total_due) || 0})" class="edit-action text-[11px] px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold ml-1">Tandai Lunas</button>` : ''}
                                 ${inv.status === 'issued' ? `<button onclick="pbVoid(${inv.id}, '${escAttr(inv.invoice_no)}')" class="edit-action text-[11px] px-2.5 py-1 rounded-lg bg-red-600/15 hover:bg-red-600/30 text-red-400 font-bold ml-1">Batalkan</button>` : ''}
+                                ${inv.status === 'paid' ? `<button onclick="pbLihatBukti(${inv.id}, '${escAttr(inv.invoice_no)}')" class="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-500/12 hover:bg-emerald-500/20 text-emerald-300 font-bold ml-1" title="Lihat bukti transfer yang diunggah"><i class="fa-solid fa-receipt"></i> Bukti</button>` : ''}
                                 ${inv.status === 'paid' ? `<button onclick="pbUnpaid(${inv.id}, '${escAttr(inv.invoice_no)}')" class="edit-action text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 font-bold ml-1" title="Batalkan penandaan lunas (kalau salah klik)">Batal Lunas</button>` : ''}
                             </td>
                         </tr>`;
@@ -14916,6 +14979,24 @@ function pbRenderDaftar(rows) {
             </div>
         </div>`;
     markViewOnly('partner-billing');
+}
+
+// Bukti transfer ada di bucket PRIVAT, jadi URL-nya harus ditandatangani dulu dan
+// hanya berlaku sebentar. Karena itu diambil SAAT DIKLIK lewat endpoint detail,
+// bukan ikut dikirim di daftar — memintakan tanda tangan untuk 200 baris sekaligus
+// hanya untuk satu yang mungkin dibuka itu pemborosan, dan tautannya keburu basi.
+async function pbLihatBukti(id, no) {
+    try {
+        const inv = await apiFetch('/api/admin/partner-billing/invoices/' + id);
+        if (!inv || !inv.paid_proof_url) {
+            toast('Tagihan ini ditandai lunas tanpa lampiran bukti transfer.', true);
+            return;
+        }
+        openImageLightbox(inv.paid_proof_url, 'Bukti pembayaran ' + no,
+            'Bukti-' + String(no).replace(/[^A-Za-z0-9]+/g, '-') + '.jpg');
+    } catch (e) {
+        toast('Gagal memuat bukti: ' + e.message, true);
+    }
 }
 
 // ── Tandai lunas ──────────────────────────────────────────────────────────
