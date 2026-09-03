@@ -14484,6 +14484,62 @@ let pbPartnerLoaded = false;
 let pbTab = 'kwitansi';     // kwitansi | buat | daftar
 let pbCandidates = [];      // kandidat tagihan (tab 2)
 
+// Tab Nomor Kwitansi: urutan & halaman. Daftarnya bisa ratusan baris setelah
+// beberapa event, dan menggulung layar sepanjang itu sambil menyalin dari buku
+// fisik gampang bikin baris terlewat.
+const PB_PER_HAL = 50;
+let pbUrut = 'terbaru';     // terbaru | lama | belum | total | kwitansi
+let pbHal = 1;
+// Ada isian yang diketik tapi belum disimpan? Ganti urutan/halaman merender ulang
+// tabelnya, jadi isian yang belum tersimpan akan hilang tanpa peringatan.
+let pbAdaPerubahan = false;
+
+// Urutkan salinan, JANGAN pbOrders aslinya — 'kwitansi' berarti kembali ke urutan
+// dari server (sortByReceipt), dan itu hanya mungkin kalau aslinya utuh.
+function pbUrutkan(list) {
+    const arr = [...list];
+    const tgl = (o) => o.order_date ? new Date(o.order_date).getTime() : 0;
+    const kosong = (o) => !String(o.receipt_no || '').trim();
+    switch (pbUrut) {
+        case 'lama':    return arr.sort((a, b) => tgl(a) - tgl(b));
+        case 'total':   return arr.sort((a, b) => Number(b.total_amount || 0) - Number(a.total_amount || 0));
+        // Yang belum punya nomor naik ke atas — itu sisa pekerjaannya. Order batal
+        // dan yang sudah tertagih tidak dihitung "belum": nomornya memang tidak
+        // bisa diisi lagi, jadi menaruhnya di atas cuma jadi gangguan.
+        case 'belum':   return arr.sort((a, b) => {
+            const pa = (kosong(a) && a.order_status !== 'cancelled' && !a.billed_on) ? 0 : 1;
+            const pb = (kosong(b) && b.order_status !== 'cancelled' && !b.billed_on) ? 0 : 1;
+            return pa !== pb ? pa - pb : tgl(b) - tgl(a);
+        });
+        case 'kwitansi': return arr;                       // urutan asli dari server
+        default:         return arr.sort((a, b) => tgl(b) - tgl(a));   // terbaru
+    }
+}
+
+// Ganti urutan/halaman = render ulang tabel. Kalau ada isian yang belum disimpan,
+// tanya dulu — kehilangan 20 nomor yang baru disalin dari buku itu mahal.
+function pbBolehPindah() {
+    if (!pbAdaPerubahan) return true;
+    const ok = confirm('Ada nomor kwitansi yang diketik tapi belum disimpan.'
+        + '\n\n'
+        + 'Pindah tetap? Isian yang belum disimpan akan hilang.');
+    if (ok) pbAdaPerubahan = false;
+    return ok;
+}
+function pbSetUrut(v) {
+    if (!pbBolehPindah()) { const el = document.getElementById('pb-urut'); if (el) el.value = pbUrut; return; }
+    pbUrut = v; pbHal = 1; pbRenderUlang();
+}
+function pbSetHal(n) {
+    if (!pbBolehPindah()) return;
+    pbHal = n; pbRenderUlang();
+    document.getElementById('pb-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// Render ulang tabel saja, tanpa memanggil server lagi — datanya sudah ada.
+function pbRenderUlang() { pbRender(pbRingkasanTerakhir || {}); }
+let pbRingkasanTerakhir = null;
+let pbKunciTerakhir = null;   // partner + rentang tanggal yang sedang ditampilkan
+
 function pbShowTab(t) {
     pbTab = t;
     ['kwitansi', 'buat', 'daftar'].forEach(k => {
@@ -14532,6 +14588,12 @@ async function pbLoad() {
     if (to) qs.set('to', to);
     try {
         if (pbTab === 'kwitansi') {
+            // Halaman hanya di-reset kalau PARTNER atau RENTANG TANGGAL berganti.
+            // pbSave() memanggil pbLoad() lagi setelah menyimpan; kalau di-reset
+            // tanpa syarat, admin yang baru menyimpan di halaman 3 akan terlempar
+            // balik ke halaman 1 setiap kali.
+            const kunci = qs.toString();
+            if (kunci !== pbKunciTerakhir) { pbHal = 1; pbAdaPerubahan = false; pbKunciTerakhir = kunci; }
             const data = await apiFetch('/api/admin/partner-billing/receipts?' + qs.toString());
             pbOrders = data.orders || [];
             pbRender(data);
@@ -15046,6 +15108,19 @@ function pbInvoicePrintHTML(inv) {
     const th = 'padding:8px 9px;text-align:left;background:#eef1f5;color:#5b6a7d;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;border-bottom:1px solid #dde3ea;white-space:nowrap;';
     const partner = inv.partner || {};
 
+    // Stempel LUNAS — sama peran dengan stempel PAID di invoice pelanggan: begitu
+    // lembarnya dicetak/dikirim ulang, statusnya terbaca sekali lihat tanpa harus
+    // membuka sistem. Gaya ditulis inline (bukan kelas .invoice-paid-stamp milik
+    // invoice pelanggan) supaya lembar ini tetap berdiri sendiri dan perubahan di
+    // satu dokumen tidak diam-diam mengubah yang lain.
+    const lunas = inv.status === 'paid';
+    const tglLunas = inv.paid_at ? tgl(inv.paid_at) : '';
+    const stempelLunas = lunas ? `
+        <div style="position:absolute;top:4px;right:2px;transform:rotate(-11deg);border:3px solid #16a34a;color:#16a34a;border-radius:8px;padding:5px 14px 4px;text-align:center;opacity:.92;box-shadow:inset 0 0 0 1px rgba(22,163,74,.35);">
+            <span style="display:block;font-size:20px;font-weight:800;letter-spacing:.14em;line-height:1;">LUNAS</span>
+            <span style="display:block;font-size:8px;font-weight:600;letter-spacing:.08em;margin-top:3px;color:#15803d;">PAID${tglLunas ? ' &middot; ' + esc(tglLunas) : ''}</span>
+        </div>` : '';
+
     return `
     <div id="pb-print-area" style="width:794px;margin:0 auto;background:#fff;color:#16202e;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;line-height:1.5;padding:30px 34px;box-sizing:border-box;">
         <div class="pb-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #16202e;padding-bottom:14px;">
@@ -15057,11 +15132,13 @@ function pbInvoicePrintHTML(inv) {
                 No. Tagihan &nbsp;<b>${esc(inv.invoice_no)}</b><br>
                 Kwitansi &nbsp;<span style="background:#f7efdf;border:1px solid #e2cfa5;border-radius:4px;padding:1px 6px;color:#7d5417;"><b>${esc(rentangKwitansi)}</b></span><br>
                 Tanggal &nbsp;<b>${tgl(inv.issued_at || inv.created_at)}</b><br>
-                Periode &nbsp;<b>${esc(periode)}</b>
+                Periode &nbsp;<b>${esc(periode)}</b>${lunas
+                    ? `<br>Status &nbsp;<b style="color:#15803d;">LUNAS${tglLunas ? ' (' + esc(tglLunas) + ')' : ''}</b>` : ''}
             </div>
         </div>
 
-        <div class="pb-billed" style="display:flex;gap:34px;flex-wrap:wrap;padding:14px 0 4px;">
+        <div class="pb-billed" style="position:relative;display:flex;gap:34px;flex-wrap:wrap;padding:14px 0 4px;">
+            ${stempelLunas}
             <div>
                 <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#8d9aa9;font-family:monospace;">Ditagihkan kepada</div>
                 <div style="font-size:13px;font-weight:700;padding-top:2px;">${esc(inv.partner_name_snapshot || '-')}</div>
@@ -15201,6 +15278,7 @@ function pbShowInvoiceModal(inv) {
 
 
 function pbRender(data) {
+    pbRingkasanTerakhir = data;
     const summary = document.getElementById('pb-summary');
     const body = document.getElementById('pb-body');
     // Semua penghitung di bawah hanya soal order NON-BATAL. Order batal tidak
@@ -15235,7 +15313,15 @@ function pbRender(data) {
         return;
     }
 
-    const rows = pbOrders.map((o, i) => {
+    const urut = pbUrutkan(pbOrders);
+    const totalHal = Math.max(1, Math.ceil(urut.length / PB_PER_HAL));
+    if (pbHal > totalHal) pbHal = totalHal;
+    const mulai = (pbHal - 1) * PB_PER_HAL;
+    const halaman = urut.slice(mulai, mulai + PB_PER_HAL);
+
+    // `i` di sini adalah posisi DALAM HALAMAN, dan itu memang yang dipakai
+    // pbOnKey untuk melompat Enter antar baris yang tampil.
+    const rows = halaman.map((o, i) => {
         const batal = o.order_status === 'cancelled';
         const terkunci = !!o.billed_on;
         // Order batal & yang sudah masuk tagihan tetap DITAMPILKAN supaya nomor yang
@@ -15260,13 +15346,40 @@ function pbRender(data) {
                        value="${esc(o.receipt_no || '')}"
                        placeholder="${dis ? '—' : 'ketik nomor'}"
                        ${dis ? 'disabled' : ''}
-                       onkeydown="pbOnKey(event, ${i})" oninput="pbMarkDirty()" />
+                       onkeydown="pbOnKey(event, ${i})" oninput="pbAdaPerubahan = true; pbMarkDirty()" />
             </td>
         </tr>`;
     }).join('');
 
+    const dari = urut.length ? mulai + 1 : 0;
+    const sampai = Math.min(mulai + PB_PER_HAL, urut.length);
+    const tombolHal = (label, ke, aktif) => `<button ${aktif ? `onclick="pbSetHal(${ke})"` : 'disabled'}
+        class="text-[11px] px-2.5 py-1.5 rounded-lg border ${aktif
+            ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white/70'
+            : 'border-white/5 text-white/20 cursor-not-allowed'}">${label}</button>`;
+    const pager = totalHal <= 1 ? '' : `
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] text-white/35">Hal. ${pbHal} / ${totalHal}</span>
+            ${tombolHal('&laquo; Sebelumnya', pbHal - 1, pbHal > 1)}
+            ${tombolHal('Berikutnya &raquo;', pbHal + 1, pbHal < totalHal)}
+        </div>`;
+
     body.innerHTML = `
         <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="p-3 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <label for="pb-urut" class="text-[11px] text-white/40">Urutkan</label>
+                    <select id="pb-urut" onchange="pbSetUrut(this.value)" class="!py-1.5 !text-xs w-auto">
+                        <option value="terbaru"  ${pbUrut === 'terbaru'  ? 'selected' : ''}>Terbaru dulu</option>
+                        <option value="lama"     ${pbUrut === 'lama'     ? 'selected' : ''}>Terlama dulu</option>
+                        <option value="belum"    ${pbUrut === 'belum'    ? 'selected' : ''}>Belum ada nomor dulu</option>
+                        <option value="total"    ${pbUrut === 'total'    ? 'selected' : ''}>Total terbesar</option>
+                        <option value="kwitansi" ${pbUrut === 'kwitansi' ? 'selected' : ''}>Urutan nomor kwitansi</option>
+                    </select>
+                    <span class="text-[11px] text-white/30">Menampilkan ${dari}–${sampai} dari ${urut.length}</span>
+                </div>
+                ${pager}
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full">
                     <thead class="bg-white/5">
@@ -15283,10 +15396,13 @@ function pbRender(data) {
                 </table>
             </div>
             <div class="p-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3">
-                <p class="text-[11px] text-white/30">Enter untuk pindah ke baris berikutnya. Nomor kembar ditolak — satu lembar kwitansi hanya untuk satu order.</p>
-                <button onclick="pbSave(this)" class="edit-action text-xs px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5">
-                    <i class="fa-solid fa-floppy-disk"></i> Simpan Nomor Kwitansi
-                </button>
+                <p class="text-[11px] text-white/30">Enter untuk pindah ke baris berikutnya. Nomor kembar ditolak — satu lembar kwitansi hanya untuk satu order.${totalHal > 1 ? ' <b class="text-amber-300/70">Simpan dulu sebelum pindah halaman.</b>' : ''}</p>
+                <div class="flex items-center gap-3">
+                    ${pager}
+                    <button id="pb-save-btn" onclick="pbSave(this)" class="edit-action text-xs px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk"></i> Simpan Nomor Kwitansi
+                    </button>
+                </div>
             </div>
         </div>`;
     markViewOnly('partner-billing');
@@ -15301,7 +15417,9 @@ function pbOnKey(ev, rowIdx) {
     const pos = inputs.findIndex(el => Number(el.dataset.row) === rowIdx);
     const next = inputs[pos + 1];
     if (next) { next.focus(); next.select(); }
-    else pbSave(document.querySelector('#pb-body button'));
+    // Lewat id, BUKAN urutan DOM: sejak ada tombol pager di dalam #pb-body,
+    // `querySelector('#pb-body button')` menunjuk tombol "Sebelumnya".
+    else pbSave(document.getElementById('pb-save-btn'));
 }
 
 function pbMarkDirty() {
@@ -15345,6 +15463,7 @@ async function pbSave(btn) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ partner_id: Number(partnerId), entries }),
         });
+        pbAdaPerubahan = false;   // sudah tersimpan, aman pindah halaman/urutan
         toast('✓ ' + (data.message || 'Tersimpan'));
         await pbLoad();
     } catch (e) {
