@@ -784,6 +784,7 @@
                 <div class="inv-view-toggle">
                     <button id="inv-view-card" onclick="setInvView('card')" class="active"><i class="fa-solid fa-list mr-1"></i> Card</button>
                     <button id="inv-view-grid" onclick="setInvView('grid')"><i class="fa-solid fa-table-cells mr-1"></i> Grid</button>
+                    <button id="inv-view-riwayat" onclick="setInvView('riwayat')" title="Riwayat pergerakan stok"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Riwayat</button>
                 </div>
                 <button id="inv-bulk-btn" onclick="toggleBulkMode()"
                     class="hidden items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 hover:bg-indigo-500/20 transition">
@@ -824,7 +825,7 @@
             </div>
         </div>
         <!-- Search + filter -->
-        <div class="flex gap-2 flex-wrap">
+        <div id="inv-filter-row" class="flex gap-2 flex-wrap">
             <div class="flex items-center gap-2 flex-1 min-w-[180px] bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus-within:border-white/30 transition">
                 <i class="fa-solid fa-magnifying-glass text-white/40 text-sm shrink-0"></i>
                 <input id="inv-search" type="text" placeholder="Cari produk..." oninput="renderInventory()"
@@ -844,6 +845,26 @@
                 <i class="fa-solid fa-box-open text-3xl mb-3 block"></i>
                 Memuat data inventori...
             </div>
+        </div>
+
+        <!-- RIWAYAT PERGERAKAN STOK -->
+        <div id="inv-riwayat" class="hidden space-y-3">
+            <!-- Pertanyaan "terakhir input stok kapan" dijawab di sini, di kepala
+                 halaman — bukan disuruh cari sendiri di daftar. Sengaja TIDAK ikut
+                 filter laci di bawahnya. -->
+            <div id="inv-riw-terakhir" class="px-4 py-3 rounded-2xl bg-emerald-500/8 border border-emerald-400/20 text-sm text-emerald-200/90">
+                <i class="fa-solid fa-spinner spin"></i> Memuat…
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <div id="inv-riw-chips" class="flex flex-wrap gap-1.5"></div>
+                <div class="flex items-center gap-2 ml-auto">
+                    <input type="date" id="inv-riw-from" onchange="invRiwSetHal(1)" class="date-fluid !py-1.5 !text-xs !w-auto" title="Dari tanggal" />
+                    <span class="text-white/25 text-xs">–</span>
+                    <input type="date" id="inv-riw-to" onchange="invRiwSetHal(1)" class="date-fluid !py-1.5 !text-xs !w-auto" title="Sampai tanggal" />
+                    <button onclick="invRiwReset()" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10" title="Bersihkan semua saringan">Reset</button>
+                </div>
+            </div>
+            <div id="inv-riw-body"></div>
         </div>
     </div>
 
@@ -5504,6 +5525,7 @@ function setInvView(mode) {
     localStorage.setItem('ws_inv_view', mode);
     document.getElementById('inv-view-card').classList.toggle('active', mode === 'card');
     document.getElementById('inv-view-grid').classList.toggle('active', mode === 'grid');
+    document.getElementById('inv-view-riwayat')?.classList.toggle('active', mode === 'riwayat');
     // Bulk button only meaningful in Grid view
     const bulkBtn = document.getElementById('inv-bulk-btn');
     if (bulkBtn) {
@@ -5512,7 +5534,175 @@ function setInvView(mode) {
     }
     // Exit bulk mode when leaving Grid view
     if (mode !== 'grid' && bulkMode) setBulkMode(false);
+
+    // Riwayat punya saringannya sendiri (jenis + rentang tanggal). Pencarian
+    // produk, stok kritis, dan opname tidak berlaku di sana — disembunyikan
+    // daripada dibiarkan terpasang tapi tidak berpengaruh apa-apa.
+    const riwayat = mode === 'riwayat';
+    document.getElementById('inv-riwayat')?.classList.toggle('hidden', !riwayat);
+    document.getElementById('inventory-cards')?.classList.toggle('hidden', riwayat);
+    document.getElementById('inv-filter-row')?.classList.toggle('hidden', riwayat);
+    ['inv-critical-btn', 'inv-opname-btn'].forEach(id =>
+        document.getElementById(id)?.classList.toggle('hidden', riwayat));
+    if (riwayat) { invRiwLoad(); return; }
     renderInventory();
+}
+
+// ─── RIWAYAT PERGERAKAN STOK ─────────────────────────────────────────────────
+// Semua pergerakan sudah lama tercatat di stock_movements; sebelum ini hanya bisa
+// dilihat per-varian lewat Grid View. Layar ini membacanya sebagai SATU daftar
+// berurutan waktu. Sumber data: GET /api/inventory/movements.
+const INV_RIW_LACI = [
+    ['semua',   'Semua'],
+    ['masuk',   'Barang Masuk'],
+    ['jual',    'Penjualan'],
+    ['koreksi', 'Koreksi'],
+    ['retur',   'Retur & Batal'],
+];
+// Nama teknis movement_type -> label & warna. Ada 11 nama dan tak satu pun
+// berarti apa-apa buat admin; yang dilihat cuma labelnya.
+const INV_RIW_JENIS = {
+    receive:                  ['Barang Masuk',       'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'],
+    receive_reject:           ['Masuk (Reject)',     'bg-amber-500/15 text-amber-300 border-amber-400/30'],
+    order_out:                ['Penjualan',          'bg-rose-500/15 text-rose-300 border-rose-400/30'],
+    exchange_replacement_out: ['Tukar - Keluar',     'bg-rose-500/10 text-rose-300/80 border-rose-400/20'],
+    test_out:                 ['Pinjam - Keluar',    'bg-slate-500/15 text-slate-300 border-slate-400/30'],
+    manual_set:               ['Koreksi Manual',     'bg-sky-500/15 text-sky-300 border-sky-400/30'],
+    order_edit_adjust:        ['Koreksi Edit Order', 'bg-sky-500/10 text-sky-300/80 border-sky-400/20'],
+    reject_to_normal:         ['Reject jadi Normal', 'bg-sky-500/10 text-sky-300/80 border-sky-400/20'],
+    order_cancel_restore:     ['Order Batal',        'bg-teal-500/15 text-teal-300 border-teal-400/30'],
+    exchange_return_in:       ['Tukar - Masuk',      'bg-teal-500/10 text-teal-300/80 border-teal-400/20'],
+    test_return:              ['Pinjam - Kembali',   'bg-teal-500/10 text-teal-300/80 border-teal-400/20'],
+};
+const INV_RIW_PER_HAL = 50;
+let invRiwJenis = 'semua';
+let invRiwHal = 1;
+
+function invRiwSetJenis(j) { invRiwJenis = j; invRiwHal = 1; invRiwLoad(); }
+function invRiwSetHal(n) {
+    invRiwHal = Math.max(1, n);
+    invRiwLoad();
+    document.getElementById('inv-riwayat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function invRiwReset() {
+    invRiwJenis = 'semua'; invRiwHal = 1;
+    const f = document.getElementById('inv-riw-from'); if (f) f.value = '';
+    const t = document.getElementById('inv-riw-to');   if (t) t.value = '';
+    invRiwLoad();
+}
+
+async function invRiwLoad() {
+    const body = document.getElementById('inv-riw-body');
+    if (!body) return;
+    body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center"><i class="fa-solid fa-spinner spin"></i> Memuat riwayat...</p>';
+
+    const qs = new URLSearchParams({
+        jenis: invRiwJenis,
+        limit: String(INV_RIW_PER_HAL),
+        offset: String((invRiwHal - 1) * INV_RIW_PER_HAL),
+    });
+    const from = document.getElementById('inv-riw-from')?.value || '';
+    const to   = document.getElementById('inv-riw-to')?.value || '';
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+
+    try {
+        invRiwRender(await apiFetch('/api/inventory/movements?' + qs.toString()));
+    } catch (e) {
+        body.innerHTML = `<p class="text-sm text-red-400/80 py-10 text-center">Gagal memuat: ${esc(e.message)}</p>`;
+    }
+}
+
+function invRiwRender(data) {
+    const rows = data.rows || [];
+    const total = Number(data.total || 0);
+
+    const chips = document.getElementById('inv-riw-chips');
+    if (chips) {
+        chips.innerHTML = INV_RIW_LACI.map(([k, lbl]) => `
+            <button onclick="invRiwSetJenis('${k}')" class="text-[11px] px-3 py-1.5 rounded-lg border font-bold transition ${
+                invRiwJenis === k
+                    ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-200'
+                    : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}">${lbl}</button>`).join('');
+    }
+
+    // Jawaban atas "terakhir input stok kapan" — pertanyaan yang jadi alasan
+    // layar ini dibuat. Server sengaja menghitungnya di luar saringan, jadi tetap
+    // benar walau sedang membuka laci Penjualan.
+    const tk = data.last_receive;
+    const banner = document.getElementById('inv-riw-terakhir');
+    if (banner) {
+        banner.innerHTML = tk
+            ? `<i class="fa-solid fa-box-open mr-1.5"></i> Terakhir barang masuk <b>${esc(fmtDateShort(tk.created_at))}</b>
+               &mdash; ${esc(tk.product_name || 'produk terhapus')} ${esc(tk.color || '')}${tk.size ? ' ' + esc(tk.size) : ''}
+               <b>+${Number(tk.quantity_change || 0)}</b> pcs, oleh ${esc(tk.admin_user || '-')}.`
+            : '<i class="fa-solid fa-circle-info mr-1.5"></i> Belum pernah ada catatan barang masuk.';
+    }
+
+    const body = document.getElementById('inv-riw-body');
+    if (!body) return;
+    if (!rows.length) {
+        body.innerHTML = '<p class="text-sm text-white/40 py-10 text-center">Tidak ada pergerakan untuk saringan ini.</p>';
+        return;
+    }
+
+    const totalHal = Math.max(1, Math.ceil(total / INV_RIW_PER_HAL));
+    const mulai = (invRiwHal - 1) * INV_RIW_PER_HAL;
+    const tbl = (label, ke, aktif) => `<button ${aktif ? `onclick="invRiwSetHal(${ke})"` : 'disabled'}
+        class="text-[11px] px-2.5 py-1.5 rounded-lg border ${aktif
+            ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white/70'
+            : 'border-white/5 text-white/20 cursor-not-allowed'}">${label}</button>`;
+    const pager = totalHal <= 1 ? '' : `
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] text-white/35">Hal. ${invRiwHal} / ${totalHal}</span>
+            ${tbl('&laquo; Sebelumnya', invRiwHal - 1, invRiwHal > 1)}
+            ${tbl('Berikutnya &raquo;', invRiwHal + 1, invRiwHal < totalHal)}
+        </div>`;
+
+    body.innerHTML = `
+        <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            <div class="px-4 py-2.5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-[11px] text-white/35">Menampilkan ${mulai + 1}&ndash;${Math.min(mulai + INV_RIW_PER_HAL, total)} dari ${total} pergerakan</p>
+                ${pager}
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-white/5">
+                        <tr class="text-[10px] uppercase tracking-wider text-white/40">
+                            <th class="px-3 py-2.5 text-left">Waktu</th>
+                            <th class="px-3 py-2.5 text-left">Jenis</th>
+                            <th class="px-3 py-2.5 text-left">Barang</th>
+                            <th class="px-3 py-2.5 text-right">Perubahan</th>
+                            <th class="px-3 py-2.5 text-right">Stok Akhir</th>
+                            <th class="px-3 py-2.5 text-left">Keterangan</th>
+                            <th class="px-3 py-2.5 text-left">Oleh</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows.map(m => {
+                        const [lbl, cls] = INV_RIW_JENIS[m.movement_type] || [m.movement_type, 'bg-white/10 text-white/60 border-white/15'];
+                        const d = Number(m.quantity_change || 0);
+                        const v = m.variant_type && m.variant_type !== 'null' ? ' ' + m.variant_type : '';
+                        const ketPolos = [m.order_code, m.customer_name, m.note].filter(Boolean).join(' - ');
+                        const ket = [
+                            m.order_code ? `<span class="font-mono text-white/60">${esc(m.order_code)}</span>` : '',
+                            m.customer_name ? esc(m.customer_name) : '',
+                            m.note ? `<span class="text-white/35">${esc(m.note)}</span>` : '',
+                        ].filter(Boolean).join(' &middot; ');
+                        return `
+                        <tr class="border-b border-white/5">
+                            <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${esc(fmtDateShort(m.created_at))}</td>
+                            <td class="px-3 py-2"><span class="text-[10px] px-2 py-0.5 rounded-full border font-bold whitespace-nowrap ${cls}">${esc(lbl)}</span>${m.is_reject ? '<span class="text-[9px] text-amber-300/70 ml-1">reject</span>' : ''}</td>
+                            <td class="px-3 py-2 text-[12px]">${esc(m.product_name || 'Produk terhapus')}${esc(v)} &middot; ${esc(m.color || '-')} &middot; ${esc(m.size || '-')}</td>
+                            <td class="px-3 py-2 text-right text-[12px] font-mono font-bold ${d > 0 ? 'text-emerald-300' : d < 0 ? 'text-rose-300' : 'text-white/40'}">${d > 0 ? '+' : ''}${d}</td>
+                            <td class="px-3 py-2 text-right text-[12px] font-mono text-white/60">${m.quantity_after != null ? Number(m.quantity_after) : '-'}</td>
+                            <td class="px-3 py-2 text-[11px] text-white/50 max-w-[280px] truncate" title="${esc(ketPolos)}">${ket || '&mdash;'}</td>
+                            <td class="px-3 py-2 text-[11px] text-white/40 whitespace-nowrap">${esc(m.admin_user || '-')}</td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>
+            </div>
+            ${totalHal > 1 ? `<div class="p-3 border-t border-white/5 flex justify-end">${pager}</div>` : ''}
+        </div>`;
 }
 
 // ─── Bulk select mode ─────────────────────────────────────────────────────────

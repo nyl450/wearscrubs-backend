@@ -52,6 +52,7 @@ const RUTE = [
     '/api/refunds/stats',    // bersaing dengan /api/refunds/:id  <- bug 29 Agu
     '/api/exchanges/stats',  // bersaing dengan /api/exchanges/:id/...
     '/api/inventory/all',    // bersaing dengan /api/inventory/:product_id
+    '/api/inventory/movements',  // bersaing dengan /api/inventory/:product_id
 ];
 
 async function run() {

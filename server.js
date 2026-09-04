@@ -3316,6 +3316,89 @@ app.get('/api/inventory/variant/history', requireAuth(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── RIWAYAT PERGERAKAN STOK ──────────────────────────────────────────────────
+// Semua pergerakan barang sudah dicatat di `stock_movements` sejak awal, tapi
+// sebelumnya hanya bisa dilihat per-varian lewat Grid View. Layar ini membacanya
+// sebagai SATU daftar berurutan waktu, supaya pertanyaan "terakhir input stok
+// kapan" bisa dijawab tanpa membuka varian satu per satu.
+//
+// ⚠️ WAJIB terdaftar SEBELUM '/api/inventory/:product_id' — kalau tidak, request
+// ke /movements tertangkap sebagai product_id = "movements". Lihat
+// [[debug-express-route-order]] dan test/route-order.test.js.
+
+// Kelompok jenis pergerakan. Nama teknisnya ada 11 dan tidak berarti apa-apa buat
+// admin; dikelompokkan jadi 4 laci yang sesuai cara orang gudang berpikir.
+const GERAK_KELOMPOK = {
+    masuk:   ['receive', 'receive_reject'],
+    jual:    ['order_out', 'exchange_replacement_out', 'test_out'],
+    koreksi: ['manual_set', 'order_edit_adjust', 'reject_to_normal'],
+    retur:   ['order_cancel_restore', 'exchange_return_in', 'test_return'],
+};
+
+// GET /api/inventory/movements?jenis=&from=&to=&limit=&offset=
+app.get('/api/inventory/movements', requireMenu('inventory'), async (req, res) => {
+    try {
+        const params = [];
+        const where = [];
+
+        const jenis = String(req.query.jenis || '').trim();
+        if (jenis && jenis !== 'semua') {
+            const tipe = GERAK_KELOMPOK[jenis];
+            if (!tipe) return res.status(400).json({ error: 'Jenis pergerakan tidak dikenal' });
+            // Placeholder satuan, bukan ANY(...::text[]) — pg-mem tidak mendukung
+            // bentuk array itu, dan endpoint yang tak bisa diuji sama saja dengan
+            // endpoint yang tak terjaga.
+            const ph = tipe.map(t => { params.push(t); return '$' + params.length; });
+            where.push(`m.movement_type IN (${ph.join(',')})`);
+        }
+        const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+        // Batas atas inklusif sampai akhir hari — created_at bertipe timestamp, jadi
+        // `<= '2026-08-31'` akan membuang seluruh pergerakan hari itu.
+        if (isDate(req.query.from)) { params.push(req.query.from + ' 00:00:00'); where.push(`m.created_at >= $${params.length}`); }
+        if (isDate(req.query.to))   { params.push(req.query.to + ' 23:59:59.999'); where.push(`m.created_at <= $${params.length}`); }
+
+        const pid = parseInt(req.query.product_id, 10);
+        if (Number.isInteger(pid)) { params.push(pid); where.push(`m.product_id = $${params.length}`); }
+
+        const kondisi = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+        const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+        const hitung = await dbGet(
+            `SELECT COUNT(*)::int AS n FROM stock_movements m ${kondisi}`, params);
+
+        const rows = await dbAll(
+            `SELECT m.id, m.product_id, m.size, m.color, m.variant_type, m.movement_type,
+                    m.quantity_change, m.quantity_before, m.quantity_after, m.note,
+                    m.order_id, m.admin_user, m.created_at, m.is_reject,
+                    p.name AS product_name, p.category,
+                    o.order_code, o.customer_name
+               FROM stock_movements m
+               LEFT JOIN products p ON p.id = m.product_id
+               LEFT JOIN orders o ON o.id = m.order_id
+               ${kondisi}
+              ORDER BY m.created_at DESC, m.id DESC
+              -- limit & offset ditempel langsung: keduanya sudah lewat parseInt +
+              -- clamp di atas, jadi mustahil membawa apa pun selain bilangan bulat.
+              LIMIT ${limit} OFFSET ${offset}`, params);
+
+        // Pertanyaan yang jadi alasan layar ini dibuat, dijawab langsung di kepala
+        // halaman — bukan disuruh cari sendiri di daftar. SENGAJA tidak ikut
+        // filter: "terakhir barang masuk" harus tetap benar walau admin sedang
+        // melihat laci Penjualan.
+        const ph2 = GERAK_KELOMPOK.masuk.map((_, i) => '$' + (i + 1));
+        const terakhirMasuk = await dbGet(
+            `SELECT m.created_at, m.admin_user, m.quantity_change, m.size, m.color, m.variant_type,
+                    p.name AS product_name
+               FROM stock_movements m
+               LEFT JOIN products p ON p.id = m.product_id
+              WHERE m.movement_type IN (${ph2.join(',')})
+              ORDER BY m.created_at DESC, m.id DESC LIMIT 1`, GERAK_KELOMPOK.masuk);
+
+        res.json({ rows, total: hitung ? hitung.n : 0, limit, offset, last_receive: terakhirMasuk || null });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/inventory/:product_id', async (req, res) => {
     try {
         // GANTI: ? → $1
