@@ -5792,7 +5792,7 @@ function applyBulk() {
 // Alasan perubahan stok manual — dikirim ke /api/inventory/single|bulk, disimpan
 // di stock_movements.note format "[Reason] free-text" → history audit jelas
 // (bukan generik "Update manual stok").
-const STOCK_REASONS = ['Stock Opname Awal','Koreksi Salah Input','Penyesuaian Stok Fisik','Barang Hilang/Rusak','Lainnya'];
+const STOCK_REASONS = ['Stock Opname Awal','Koreksi Salah Input','Penyesuaian Stok Fisik','Barang Hilang/Rusak','Dibawa ke Event','Kembali dari Event','Lainnya'];
 const STOCK_REASON_DEFAULT = 'Koreksi Salah Input';
 const STOCK_EXTREME_DIFF = 20;   // |new-current| > ini → popover wajib (anti typo besar)
 let opnameMode = false;

@@ -3573,6 +3573,13 @@ const STOCK_REASONS = [
     'Koreksi Salah Input',
     'Penyesuaian Stok Fisik',
     'Barang Hilang/Rusak',
+    // Barang yang dibawa keluar untuk event/pameran. Fisiknya tidak ada di gudang,
+    // jadi stoknya memang harus turun — kalau tidak, website menjual barang yang
+    // sedang ada di koper. Dipisah dari 'Penyesuaian Stok Fisik' supaya saat pulang
+    // daftar yang harus dikembalikan bisa ditarik utuh dari layar Riwayat
+    // (saring Koreksi + rentang tanggalnya).
+    'Dibawa ke Event',
+    'Kembali dari Event',
     'Lainnya'
 ];
 function buildStockNote(reason, freeText, fallback = 'Koreksi Salah Input') {
