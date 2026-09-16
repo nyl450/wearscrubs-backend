@@ -3496,7 +3496,7 @@ app.post('/api/inventory/receive', requireMenu('inventory','edit'), async (req, 
                     const sb = stockFinal;
                     stockFinal -= need;
                     await client.query(
-                        `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                        `UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
                         [need, product_id, size, color, variant_type]
                     );
                     await client.query(`UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1`, [po.id]);
@@ -4573,7 +4573,7 @@ app.post('/api/orders', async (req, res) => {
                     }
                     const stockAfter = stockBefore - v.quantity;
                     await client.query(
-                        'UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
+                        'UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
                         [v.quantity, v.product_id, v.size, v.color, v.variant_type]
                     );
                     await client.query(
@@ -4705,6 +4705,51 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // PUT /api/orders/:id/confirm-payment  (multipart: payment_proof photo)
+// Ubah unit yang kekurangan stok pada satu varian jadi Pre-Order, di dalam
+// transaksi konfirmasi bayar. Dipanggil hanya kalau admin sudah menyetujui
+// lewat flag po_shortfall. `items` dimutasi supaya blok PO di bawahnya melihat
+// keadaan terbaru.
+//
+// Urutan baris yang dikorbankan: baris TANPA bordir dulu (baris bordir dipakai
+// invoice/Format Order lewat order_items, membelahnya mengubah tampilan), lalu
+// yang paling baru. Baris dibelah hanya bila kekurangannya lebih kecil dari
+// qty barisnya; salinan barunya memakai kolom yang sama persis (COGS dibagi
+// proporsional karena total_cogs = per-unit x qty).
+async function konversiKekuranganKePO(client, items, x) {
+    let sisa = x.kurang;
+    const kandidat = items
+        .filter(it => !it.is_po && !it.is_custom_size && !it.is_custom_product
+            && it.product_id === x.product_id && it.size === x.size && it.color === x.color && it.variant_type === x.variant_type)
+        .sort((a, b) => ((a.bordir_nama || a.bordir_logo) ? 1 : 0) - ((b.bordir_nama || b.bordir_logo) ? 1 : 0) || b.id - a.id);
+    let dijadikan = 0;
+    for (const it of kandidat) {
+        if (sisa <= 0) break;
+        if (it.quantity <= sisa) {
+            await client.query('UPDATE order_items SET is_po = TRUE, po_fulfilled = FALSE WHERE id = $1', [it.id]);
+            it.is_po = true; it.po_fulfilled = false;
+            sisa -= it.quantity; dijadikan += it.quantity;
+            continue;
+        }
+        // Belah: baris asli tetap stok, salinannya jadi PO sebanyak `sisa`.
+        const perUnitCogs = Math.round(Number(it.total_cogs || 0) / it.quantity);
+        const tetap = it.quantity - sisa;
+        await client.query('UPDATE order_items SET quantity = $1, total_cogs = $2 WHERE id = $3',
+            [tetap, perUnitCogs * tetap, it.id]);
+        const salinan = { ...it, quantity: sisa, total_cogs: perUnitCogs * sisa, is_po: true, po_fulfilled: false };
+        delete salinan.id;
+        const kolom = Object.keys(salinan);
+        const ins = await client.query(
+            `INSERT INTO order_items (${kolom.join(', ')}) VALUES (${kolom.map((_, i) => '$' + (i + 1)).join(', ')}) RETURNING id`,
+            kolom.map(c => salinan[c])
+        );
+        it.quantity = tetap; it.total_cogs = perUnitCogs * tetap;
+        items.push({ ...salinan, id: ins.rows[0].id });
+        dijadikan += sisa; sisa = 0;
+    }
+    if (sisa > 0) { const e = new Error('Gagal mengubah kekurangan jadi Pre-Order'); e.statusCode = 500; throw e; }
+    return dijadikan;
+}
+
 app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.single('payment_proof'), async (req, res) => {
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
@@ -4764,23 +4809,58 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                 }
             }
 
-            // Deduct inventory + log order_out. FOR UPDATE locks the row until COMMIT.
-            // HARD check: reject confirmation if stock insufficient (prevents silent
-            // overselling — stock isn't held at order creation, only deducted here).
-            for (const v of variantTotals.values()) {
+            // ── STOK KURANG SAAT KONFIRMASI ───────────────────────────────────
+            // Stok TIDAK ditahan saat order dibuat; baru dipotong di sini. Di antara
+            // keduanya stok bisa berkurang (order lain lunas duluan, barang dibawa ke
+            // event, koreksi). Dulu jalan buntu: 409 "Sesuaikan stok atau batalkan".
+            // Sekarang dua tahap:
+            //   1) tanpa flag  -> 409 + daftar `shortfall` (dashboard tampilkan dialog)
+            //   2) po_shortfall=1 -> unit yang kurang DIUBAH jadi Pre-Order (baris
+            //      dibelah bila perlu), stok yang ada dipotong, konfirmasi lanjut.
+            // Semua lock FOR UPDATE diambil dulu sebelum ada yang dipotong, supaya
+            // daftar kekurangan lengkap dalam sekali tolak.
+            const poShortfall = ['1', 'true', 'on'].includes(String((req.body && req.body.po_shortfall) || '').toLowerCase());
+            const stokAwal = new Map();
+            const kekurangan = [];
+            for (const [k, v] of variantTotals) {
                 const invRes = await client.query(
                     'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
                     [v.product_id, v.size, v.color, v.variant_type]
                 );
                 const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+                stokAwal.set(k, stockBefore);
                 if (stockBefore < v.quantity) {
-                    const e = new Error(`Stok tidak cukup untuk konfirmasi: ${v.color}/${v.variant_type}/${v.size} tersisa ${stockBefore}, dibutuhkan ${v.quantity}. Sesuaikan stok atau batalkan pesanan.`);
-                    e.statusCode = 409;
-                    throw e;
+                    kekurangan.push({ key: k, product_id: v.product_id, size: v.size, color: v.color, variant_type: v.variant_type,
+                                      stock: stockBefore, needed: v.quantity, kurang: v.quantity - stockBefore });
                 }
+            }
+            if (kekurangan.length && !poShortfall) {
+                const rincian = kekurangan.map(x => `${x.color}/${x.variant_type}/${x.size} tersisa ${x.stock}, dibutuhkan ${x.needed}`).join('; ');
+                const e = new Error(`Stok tidak cukup untuk konfirmasi: ${rincian}. Jadikan kekurangannya Pre-Order, sesuaikan stok, atau batalkan pesanan.`);
+                e.statusCode = 409;
+                e.payload = { shortfall: kekurangan.map(({ key, ...x }) => x), can_po: true };
+                throw e;
+            }
+            const catatanPO = [];
+            for (const x of kekurangan) {
+                const dijadikanPO = await konversiKekuranganKePO(client, items, x);
+                variantTotals.get(x.key).quantity = x.stock;   // potong hanya yang ada
+                catatanPO.push(`${x.color}/${x.variant_type}/${x.size} ${dijadikanPO} pcs`);
+            }
+            if (catatanPO.length) {
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'edit',NULL,$2,$3)`,
+                    [order.id, `Stok kurang saat konfirmasi bayar; dijadikan Pre-Order: ${catatanPO.join(', ')}`, req.user.username]
+                );
+            }
+
+            // Deduct inventory + log order_out. Lock sudah dipegang di atas.
+            for (const [k, v] of variantTotals) {
+                if (v.quantity <= 0) continue;
+                const stockBefore = stokAwal.get(k);
                 const stockAfter = stockBefore - v.quantity;
                 await client.query(
-                    `UPDATE inventory SET stock = stock - $1 WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
+                    `UPDATE inventory SET stock = stock - $1::int WHERE product_id = $2 AND size = $3 AND color = $4 AND variant_type = $5`,
                     [v.quantity, v.product_id, v.size, v.color, v.variant_type]
                 );
                 await client.query(
@@ -4817,7 +4897,7 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                     if (poBefore < it.quantity) continue;
                     const poAfter = poBefore - it.quantity;
                     await client.query(
-                        'UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
+                        'UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
                         [it.quantity, it.product_id, it.size, it.color, it.variant_type]
                     );
                     await client.query(
@@ -4922,7 +5002,7 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
         }
 
         res.json({ message: 'Pembayaran dikonfirmasi', next_status: nextStatus, photo_url: await signedMediaUrl(photoUrl) });
-    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message, ...(err.payload || {}) }); }
 });
 
 // PUT /api/orders/:id/bordir-done  (multipart: bordir_proof photo)
@@ -6655,7 +6735,7 @@ app.put('/api/exchanges/:id/approve', requireMenu('exchange','edit'), async (req
             }
             const stockAfter = stockBefore - ex.quantity;
             await client.query(
-                `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                `UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
                 [ex.quantity, ex.product_id, ex.to_size, ex.color, ex.variant_type]
             );
             await client.query(
@@ -6848,7 +6928,7 @@ app.put('/api/orders/:id/items/:itemId/size', requireMenu('orders','edit'), uplo
                     e.statusCode = 400; throw e;
                 }
                 await client.query(
-                    `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                    `UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
                     [item.quantity, item.product_id, toSize, item.color, item.variant_type]
                 );
                 await client.query(
@@ -7354,7 +7434,7 @@ app.post('/api/temp-orders', requireMenu('temp-order','edit'), async (req, res) 
                 }
                 const stockAfter = stockBefore - totalQty;
                 await client.query(
-                    `UPDATE inventory SET stock = stock - $1 WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                    `UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
                     [totalQty, pid, size, color, vtype]
                 );
                 await client.query(

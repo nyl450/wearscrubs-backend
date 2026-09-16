@@ -9256,12 +9256,26 @@ async function submitPhotoModal() {
         });
 
         const token = localStorage.getItem('ws_admin_token');
-        const res = await fetch(API + _photoModalAction.endpoint, {
+        const kirim = () => fetch(API + _photoModalAction.endpoint, {
             method: _photoModalAction.method || 'PUT',
             headers: { 'Authorization': 'Bearer ' + token },
             body: fd
         });
-        const data = await res.json();
+        let res = await kirim();
+        let data = await res.json();
+        // Stok berkurang setelah order dibuat (order lain lunas duluan, barang
+        // dibawa ke event, koreksi). Server menolak dulu dan mengirim rinciannya;
+        // admin memutuskan apakah kekurangannya dijadikan Pre-Order.
+        if (res.status === 409 && data.can_po && Array.isArray(data.shortfall) && data.shortfall.length) {
+            const baris = data.shortfall.map(x =>
+                `• ${x.color} / ${x.variant_type === 'null' ? 'reguler' : x.variant_type} / ${x.size}: stok ${x.stock}, dibutuhkan ${x.needed} → ${x.kurang} pcs jadi Pre-Order`).join('\n');
+            if (!confirm(`Stok berkurang sejak pesanan dibuat:\n\n${baris}\n\nLanjutkan konfirmasi bayar? Stok yang ada dipotong sekarang; kekurangannya menunggu barang masuk (menu Pre-Order) dan pesanan tertahan di Kemas sampai terpenuhi.`)) {
+                throw new Error('Konfirmasi dibatalkan — sesuaikan stok atau batalkan pesanan');
+            }
+            fd.append('po_shortfall', '1');
+            res = await kirim();
+            data = await res.json();
+        }
         if (!res.ok) throw new Error(data.error || 'Gagal');
 
         toast('✅ ' + (data.message || 'Berhasil'));
