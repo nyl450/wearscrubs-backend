@@ -85,6 +85,23 @@ async function run() {
     none(`UPDATE orders SET order_status = 'confirmed' WHERE id = 900`);
     check("status 'confirmed' tetap muncul", (await preOrderCodes()).includes('WS-TEST-PICKUP'), await preOrderCodes());
 
+    group('5b. Antrean mengirim penanda jenis yang lengkap (custom product BUKAN PO katalog)');
+    // Bug 17 Sep 2026 (WS-20260917-4866 Wicked Ferraniza): query /api/pre-orders
+    // tidak mengirim is_custom_product, jadi layar menampilkan custom product
+    // sebagai "PO KATALOG · otomatis saat terima stok" tanpa tombol Tandai Siap —
+    // padahal barang itu tidak pernah akan "diterima stok".
+    seed('custom');
+    none(`INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price,
+                                   is_custom_size, is_po, po_fulfilled, is_custom_product, custom_product_name)
+          VALUES (701, 900, NULL, 'S', 'Balsam Green', 'Lengan Panjang', 1, 430000, FALSE, FALSE, FALSE, TRUE, 'Masson');`);
+    const antrean = (await api('GET', '/api/pre-orders')).body;
+    const masson = antrean.find(x => x.item_id === 701);
+    check('baris custom product ada di antrean', !!masson, antrean.map(x => x.item_id));
+    check('is_custom_product = true ikut terkirim', masson && masson.is_custom_product === true, masson);
+    check('nama produk dari custom_product_name', masson && masson.product_name === 'Masson', masson);
+    const cs = antrean.find(x => x.item_id === 700);
+    check('custom size tetap is_custom_size = true, bukan custom product', cs && cs.is_custom_size === true && cs.is_custom_product === false, cs);
+
     group('6. Pickup + item biasa: stok tetap dipotong seperti biasa');
     seed('biasa');
     const stokAwal = one(`SELECT stock FROM inventory WHERE product_id=1`).stock;

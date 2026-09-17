@@ -3363,7 +3363,7 @@ app.get('/api/pre-orders', requireAuth(), async (req, res) => {
     try {
         const rows = await dbAll(
             `SELECT oi.id AS item_id, oi.order_id, oi.product_id, oi.size, oi.color, oi.variant_type,
-                    oi.quantity, oi.is_po, oi.is_custom_size, oi.po_fulfilled, oi.price,
+                    oi.quantity, oi.is_po, oi.is_custom_size, oi.is_custom_product, oi.po_fulfilled, oi.price,
                     o.order_code, o.customer_name, o.customer_phone, o.order_source,
                     o.payment_status, o.order_status, o.created_at,
                     COALESCE(oi.custom_product_name, p.name) AS product_name,
