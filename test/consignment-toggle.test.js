@@ -75,7 +75,8 @@ function seed() {
       (913, 'WS-EV-913', 'Rani',   '0814', '-', 250000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 50000, 'Consignment 30% (produk + bordir)', '00304'),
       (914, 'WS-WA-914', 'Budi',   '0815', '-', 300000, 'paid', 'done', 0, 'J&T', 'whatsapp',            NULL,                     NULL, '2026-08-13', 0,    NULL,                            NULL),
       (915, 'WS-EV-915', 'Heidi',  '0816', '-', 300000, 'paid', 'cancelled', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0, NULL,                            '00305'),
-      (916, 'WS-EV-916', 'Maya',   '0817', '-',  60000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0, 'Diskon per produk',                '00306');
+      (916, 'WS-EV-916', 'Maya',   '0817', '-',  60000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 0, 'Diskon per produk',                '00306'),
+      (917, 'WS-EV-917', 'Tia',    '0818', '-', 180000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, '2026-08-13', 20000, 'Diskon Rp 20.000 (produk + bordir)', '00307');
     INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price,
                              bordir_nama, bordir_nama_price, bordir_logo, bordir_logo_price) VALUES
       (810, 910, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
@@ -85,7 +86,8 @@ function seed() {
       (814, 913, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
       (815, 914, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
       (816, 915, 1, 'One Size', 'merah', 'null', 6, 50000, FALSE, NULL, FALSE, NULL),
-      (817, 916, 1, 'One Size', 'merah', 'null', 3, 20000, FALSE, NULL, FALSE, NULL);
+      (817, 916, 1, 'One Size', 'merah', 'null', 3, 20000, FALSE, NULL, FALSE, NULL),
+      (818, 917, 1, 'One Size', 'merah', 'null', 4, 50000, FALSE, NULL, FALSE, NULL);
     `);
 }
 
@@ -213,6 +215,27 @@ async function run() {
     check('label hantu tergantikan label sebenarnya',
         o.discount_label === 'Consignment 30% (produk + bordir)', o.discount_label);
     check('total jadi 42.000', Number(o.total_amount) === 42000, o.total_amount);
+
+    group('11. Diskon pelanggan NOMINAL (Rp 20.000): consignment dari sisanya');
+    // Kasir 17 Sep: tim memberi diskon Rp langsung (mis. 4 clicker diskon 20rb).
+    // kotor 200.000 -> Rp 20.000 -> sisa 180.000 -> 30% = 54.000 -> total potongan 74.000
+    seed();
+    sebelum = ord(917);
+    r = await req('GET', '/api/admin/partner-billing/candidates?partner_id=1');
+    const tia = (r.body.orders || []).find(x => Number(x.id) === 917);
+    check('label Rp terbaca, tidak dikunci', tia && !tia.consignment_locked_reason, tia);
+    r = await toggle(917, true);
+    check('bisa dicentang', r.status === 200, r.body);
+    o = ord(917);
+    check('potongan jadi 74.000 (20.000 + 30% dari 180.000)', Number(o.discount_amount) === 74000, o.discount_amount);
+    check('BUKAN 80.000 (30% dari kotor + 20.000)', Number(o.discount_amount) !== 80000, o.discount_amount);
+    check('label merangkai Rp lalu Consignment',
+        o.discount_label === 'Diskon Rp 20.000 + Consignment 30% (produk + bordir)', o.discount_label);
+    check('total jadi 126.000', Number(o.total_amount) === 126000, o.total_amount);
+    r = await toggle(917, false);
+    o = ord(917);
+    check('dibatalkan: kembali ke Rp 20.000 saja', Number(o.discount_amount) === 20000 && o.discount_label === 'Diskon Rp 20.000 (produk + bordir)', o);
+    check('dibatalkan: total semula', Number(o.total_amount) === Number(sebelum.total_amount), o.total_amount);
 
     finish();
 }

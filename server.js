@@ -1917,18 +1917,25 @@ function sortByReceipt(rows) {
 // dihitung dari SISA, bukan persennya dijumlah dulu. Kalau dua sisi ini melenceng,
 // mencentang lalu membatalkan centang tidak akan mengembalikan angka semula.
 const DISC_CONSIGNMENT_PCT = 30;
+// Tahap potongan = angka persen (10, 30) ATAU nominal { rp: 20000 } — Kasir
+// (17 Sep) bisa memberi diskon pelanggan nominal, ditulis "Diskon Rp 20.000".
+// Pemakai lama yang mencari persen tinggal `pcts.includes(30)`; tahap nominal
+// tidak pernah sama dengan angka.
 function discPctsDariLabel(label) {
     const inti = String(label || '').replace(/\s*\((?:produk|product)[^)]*\)\s*$/i, '').trim();
     if (!inti) return [];
     const out = [];
     for (const bagian of inti.split('+')) {
         const m = bagian.match(/(\d+(?:[.,]\d+)?)\s*%/);
-        if (!m) return null;                      // label tak terbaca → jangan tebak
-        out.push(parseFloat(m[1].replace(',', '.')));
+        if (m) { out.push(parseFloat(m[1].replace(',', '.'))); continue; }
+        const r = bagian.match(/Rp\s*([\d.]+)/i);
+        if (r) { out.push({ rp: parseInt(r[1].replace(/\./g, '')) || 0 }); continue; }
+        return null;                              // label tak terbaca → jangan tebak
     }
     return out;
 }
 function discNamaPct(pct) {
+    if (pct && pct.rp) return 'Diskon Rp ' + Number(pct.rp).toLocaleString('id-ID');
     if (pct === DISC_CONSIGNMENT_PCT) return 'Consignment 30%';
     if (pct === 10) return 'Promo 10%';
     return 'Diskon ' + pct + '%';
@@ -1939,7 +1946,10 @@ function discLabelDariPcts(pcts, incBordir) {
 }
 function hitungPotonganBerantai(base, pcts) {
     let sisa = base, total = 0;
-    for (const pct of pcts) { const d = Math.round(sisa * pct / 100); total += d; sisa -= d; }
+    for (const pct of pcts) {
+        const d = (pct && pct.rp) ? Math.min(sisa, pct.rp) : Math.round(sisa * pct / 100);
+        total += d; sisa -= d;
+    }
     return total;
 }
 // Apakah nominal potongan yang tersimpan memang hasil dari label-nya? Order yang
