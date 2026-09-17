@@ -1137,7 +1137,7 @@
               <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center"><span class="wa-section-dot"></span>Diskon (Opsional)</p>
               <span class="text-[10px] text-white/20">Untuk produk tanpa diskon sendiri</span>
             </div>
-            <select id="wa-form-discount" onchange="waUpdateTotal()" class="text-sm w-full">
+            <select id="wa-form-discount" onchange="waDiscManualToggle(this); waUpdateTotal()" class="text-sm w-full">
               <option value="">Tanpa diskon</option>
               <option value="5-inc">Diskon 5% (produk + bordir)</option>
               <option value="5-exc">Diskon 5% (produk saja)</option>
@@ -1145,7 +1145,21 @@
               <option value="30-exc">Consignment 30% (produk saja)</option>
               <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
               <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
+              <option value="__manual__">Manual… (ketik persen sendiri)</option>
             </select>
+            <div class="disc-manual hidden mt-2 grid grid-cols-[auto_1fr_auto] gap-2 items-center">
+                <div class="flex items-center gap-1">
+                    <input type="number" class="disc-manual-pct input-sm w-16" min="1" max="99" placeholder="15" oninput="waUpdateTotal()" />
+                    <span class="text-xs text-white/50">%</span>
+                </div>
+                <select class="disc-manual-mode input-sm text-xs" onchange="waUpdateTotal()">
+                    <option value="inc">produk + bordir</option>
+                    <option value="exc">produk saja</option>
+                </select>
+                <label class="flex items-center gap-1.5 text-[11px] text-white/60 cursor-pointer whitespace-nowrap">
+                    <input type="checkbox" class="disc-manual-cons accent-green-500" onchange="waUpdateTotal()" /> lalu Consignment 30%
+                </label>
+            </div>
             <p class="text-[10px] text-white/30 leading-relaxed">Diskon ini dipakai untuk baris produk yang <b>tidak</b> punya diskonnya sendiri. Kalau satu baris sudah dipilih diskon, diskon ini tidak ditambah lagi (tidak dobel). "Tanpa bordir" = harga bordir tidak ikut didiskon. <b>Promo 10% lalu Consignment 30%</b> dipakai saat event: pembeli dapat promo 10% dulu, komisi partner 30% dihitung dari harga setelah promo (bukan 40% dari harga kotor).</p>
             <!-- Preview diskon -->
             <div id="wa-discount-preview" class="hidden px-4 py-2.5 rounded-xl bg-green-500/8 border border-green-500/15 flex items-center justify-between">
@@ -11371,10 +11385,14 @@ function waAddItem() {
                     </div>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-2 items-end">
+            <div class="grid grid-cols-3 gap-2 items-end">
                 <div>
                     <label class="wa-field-label">Jumlah</label>
                     <input type="number" id="wa-qty-${idx}" value="1" min="1" oninput="waOnQtyInput(${idx})" />
+                </div>
+                <div id="wa-hk-wrap-${idx}">
+                    <label class="wa-field-label">Harga Khusus <span class="wa-optional">(Rp, opsional)</span></label>
+                    <input type="number" id="wa-harga-khusus-${idx}" min="1000" step="1000" placeholder="katalog" class="input-sm" oninput="waUpdateTotal()" />
                 </div>
                 <div>
                     <label class="wa-field-label">Bordir <span id="wa-bordir-hint-${idx}" class="hidden text-[9px] font-normal text-white/30">(hanya Atasan, Gown, Set & Cap)</span></label>
@@ -11481,7 +11499,7 @@ function waAddItem() {
             <!-- Diskon khusus baris ini (override diskon umum di bawah; tidak dobel) -->
             <div>
                 <label class="wa-field-label">Diskon Baris Ini <span class="wa-optional">(opsional, override diskon umum)</span></label>
-                <select id="wa-item-disc-${idx}" class="input-sm" onchange="waUpdateTotal()">
+                <select id="wa-item-disc-${idx}" class="input-sm" onchange="waDiscManualToggle(this); waUpdateTotal()">
                     <option value="">— Ikut diskon umum / tanpa diskon</option>
                     <option value="5-inc">Diskon 5% (produk + bordir)</option>
                     <option value="5-exc">Diskon 5% (produk saja)</option>
@@ -11489,7 +11507,21 @@ function waAddItem() {
                     <option value="30-exc">Consignment 30% (produk saja)</option>
                     <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
                     <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
+                    <option value="__manual__">Manual… (ketik persen sendiri)</option>
                 </select>
+            <div class="disc-manual hidden mt-2 grid grid-cols-[auto_1fr_auto] gap-2 items-center">
+                <div class="flex items-center gap-1">
+                    <input type="number" class="disc-manual-pct input-sm w-16" min="1" max="99" placeholder="15" oninput="waUpdateTotal()" />
+                    <span class="text-xs text-white/50">%</span>
+                </div>
+                <select class="disc-manual-mode input-sm text-xs" onchange="waUpdateTotal()">
+                    <option value="inc">produk + bordir</option>
+                    <option value="exc">produk saja</option>
+                </select>
+                <label class="flex items-center gap-1.5 text-[11px] text-white/60 cursor-pointer whitespace-nowrap">
+                    <input type="checkbox" class="disc-manual-cons accent-green-500" onchange="waUpdateTotal()" /> lalu Consignment 30%
+                </label>
+            </div>
             </div>
         </div>`;
     container.appendChild(div);
@@ -11646,7 +11678,7 @@ async function waOnProductChange(idx) {
     sizeSel.innerHTML = '<option value="">--</option>';
     delete waInventoryCache[idx];
     // Reset custom-panel inputs + visibility when the product changes (avoid stale state).
-    ['custom-color','custom-size','custom-price'].forEach(k => { const e = document.getElementById(`wa-${k}-${idx}`); if (e) e.value = ''; });
+    ['custom-color','custom-size','custom-price','harga-khusus'].forEach(k => { const e = document.getElementById(`wa-${k}-${idx}`); if (e) e.value = ''; });
     waSetCustomPanel(idx);
 
     // Custom Product mode: full off-catalog. Hide catalog cascade (color/variant/size)
@@ -11719,6 +11751,10 @@ function waSetCustomPanel(idx) {
     if (colorWrap) colorWrap.classList.toggle('hidden', !isCC);
     if (sizeWrap)  sizeWrap.classList.toggle('hidden', !isCS);
     if (panel) panel.classList.toggle('hidden', !(isCC || isCS));
+    // Item custom / custom product sudah punya kolom harga sendiri — sembunyikan
+    // Harga Khusus supaya tidak ada dua kolom harga yang saling menimpa.
+    const hkWrap = document.getElementById(`wa-hk-wrap-${idx}`);
+    if (hkWrap) hkWrap.classList.toggle('hidden', isCC || isCS || waIsCustomProduct(idx));
     if (isCC) {
         const priceEl = document.getElementById(`wa-custom-price-${idx}`);
         const base = parseInt(document.getElementById(`wa-prod-${idx}`)?.selectedOptions?.[0]?.dataset?.price || 0);
@@ -11916,6 +11952,38 @@ let waSelectedDiscount = 0; // legacy leftover (write-only) — cart pakai disko
 // JANGAN disederhanakan jadi (10+30)% dari kotor - itu 88.000, kurang tagih 6.600.
 const DISC_PROMO_PCT = 10;              // persen promo pelanggan (bukan komisi partner)
 const DISC_PROMO_MIN_BELANJA = 200000;  // syarat minimum subtotal aksesoris
+
+// Dropdown diskon punya pilihan "Manual…" yang membuka kolom persen sendiri
+// (event Bali Sept 2026: tim & istri sering memberi diskon aksesoris di luar
+// daftar). SEMUA pembaca nilai diskon lewat sini, supaya token yang dihasilkan
+// tetap mengikuti tata bahasa "<persen>[x30]-<inc|exc>" — hilir (invoice,
+// tagihan partner, centang consignment) tidak perlu tahu diskonnya diketik
+// manual. Persen di luar 1-99 = dianggap tanpa diskon.
+function waDiscTokenOf(sel) {
+    if (!sel) return '';
+    if (sel.value !== '__manual__') return sel.value || '';
+    const wrap = sel.parentElement && sel.parentElement.querySelector('.disc-manual');
+    const pct = parseInt(wrap && wrap.querySelector('.disc-manual-pct')?.value) || 0;
+    if (pct < 1 || pct > 99) return '';
+    const mode = (wrap && wrap.querySelector('.disc-manual-mode')?.value) || 'inc';
+    const cons = !!(wrap && wrap.querySelector('.disc-manual-cons')?.checked);
+    // Persen 30 + "lalu Consignment 30%" = dua tahap 30%, bukan satu. Itu
+    // memang yang diminta kalau dicentang; biarkan.
+    return (cons ? pct + 'x30' : String(pct)) + '-' + mode;
+}
+function waDiscManualToggle(sel) {
+    const wrap = sel && sel.parentElement && sel.parentElement.querySelector('.disc-manual');
+    if (wrap) wrap.classList.toggle('hidden', sel.value !== '__manual__');
+}
+// Harga khusus per baris (single mode): kosong / < 1000 = pakai harga katalog.
+function waHargaKhusus(idx) {
+    const v = parseInt(document.getElementById(`wa-harga-khusus-${idx}`)?.value);
+    return Number.isInteger(v) && v >= 1000 ? v : 0;
+}
+function bulkHargaKhusus(panel) {
+    const v = parseInt(panel.querySelector('.bulk-cell-harga-khusus')?.value);
+    return Number.isInteger(v) && v >= 1000 ? v : 0;
+}
 function parseDiscToken(token) {
     if (!token) return { pcts: [], incBordir: true };
     const [p, mode] = String(token).split('-');
@@ -12045,7 +12113,7 @@ function waVariantOptionLabel(idx, v) {
 
 function waUpdateTotal() {
     let productTotal = 0, discountAmount = 0;
-    const formToken = document.getElementById('wa-form-discount')?.value || '';
+    const formToken = waDiscTokenOf(document.getElementById('wa-form-discount'));
     const usedTokens = new Set();
     const container = document.getElementById('wa-items-container');
     container.querySelectorAll('[id^="wa-item-"]').forEach(item => {
@@ -12061,7 +12129,7 @@ function waUpdateTotal() {
             ? (parseInt(document.getElementById(`wa-cprod-price-${idx}`)?.value) || 0)
             : waIsCustomItem(idx)
                 ? (parseInt(document.getElementById(`wa-custom-price-${idx}`)?.value) || 0)
-                : waCatalogUnitPrice(idx);
+                : (waHargaKhusus(idx) || waCatalogUnitPrice(idx));
         const qty   = parseInt(document.getElementById(`wa-qty-${idx}`)?.value || 1);
         const bordirNama = document.getElementById(`wa-bordir-nama-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 0) : 0;
         const bordirLogo = document.getElementById(`wa-bordir-logo-${idx}`)?.value === 'true' ? (parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 0) : 0;
@@ -12069,7 +12137,7 @@ function waUpdateTotal() {
         const bordirSub = (bordirNama + bordirLogo) * qty;
         productTotal += baseSub + bordirSub;
         // Diskon baris: per-line token override diskon umum (tidak dobel).
-        const lineToken = document.getElementById(`wa-item-disc-${idx}`)?.value || '';
+        const lineToken = waDiscTokenOf(document.getElementById(`wa-item-disc-${idx}`));
         const effToken  = lineToken || formToken;
         const d = discAmountFor(effToken, baseSub, bordirSub);
         if (d > 0) { discountAmount += d; usedTokens.add(effToken); }
@@ -13457,7 +13525,7 @@ function bulkAddPanel() {
 
         <div class="bg-white/2 border border-white/8 rounded-lg p-3 space-y-1.5">
             <p class="text-[10px] font-mono uppercase tracking-wider text-white/40">5 · Diskon Panel</p>
-            <select class="bulk-cell-panel-discount bulk-input text-xs w-full" onchange="bulkUpdateTotal(this)">
+            <select class="bulk-cell-panel-discount bulk-input text-xs w-full" onchange="waDiscManualToggle(this); bulkUpdateTotal(this)">
                 <option value="">Tanpa diskon</option>
                 <option value="5-inc">Diskon 5% (produk + bordir)</option>
                 <option value="5-exc">Diskon 5% (produk saja)</option>
@@ -13465,7 +13533,25 @@ function bulkAddPanel() {
                 <option value="30-exc">Consignment 30% (produk saja)</option>
                 <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
                 <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
+                <option value="__manual__">Manual… (ketik persen sendiri)</option>
             </select>
+            <div class="disc-manual hidden mt-2 grid grid-cols-[auto_1fr_auto] gap-2 items-center">
+                <div class="flex items-center gap-1">
+                    <input type="number" class="disc-manual-pct bulk-input w-16" min="1" max="99" placeholder="15" oninput="bulkUpdateTotal(this)" />
+                    <span class="text-xs text-white/50">%</span>
+                </div>
+                <select class="disc-manual-mode bulk-input text-xs" onchange="bulkUpdateTotal(this)">
+                    <option value="inc">produk + bordir</option>
+                    <option value="exc">produk saja</option>
+                </select>
+                <label class="flex items-center gap-1.5 text-[11px] text-white/60 cursor-pointer whitespace-nowrap">
+                    <input type="checkbox" class="disc-manual-cons accent-green-500" onchange="bulkUpdateTotal(this)" /> lalu Consignment 30%
+                </label>
+            </div>
+            <div class="pt-1">
+                <label class="text-[10px] text-white/40">Harga Khusus per pcs (Rp) <span class="text-white/25">— kosongkan = harga katalog</span></label>
+                <input type="number" class="bulk-cell-harga-khusus bulk-input text-xs w-full mt-1" min="1000" step="1000" placeholder="mis. 40000" oninput="bulkUpdateTotal(this)" />
+            </div>
         </div>
 
         <div class="bulk-panel-subtotal hidden bg-white/2 border border-white/8 rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -13982,7 +14068,7 @@ function bulkUpdatePanelTotal(panel) {
     const isCustomColor = color === '__custom__';
     const unitPrice = isCustomColor
         ? (parseInt(panel.querySelector('.bulk-cell-custom-price')?.value) || 0)
-        : waResolveUnitPrice(panel._state.selectedProduct, variant);
+        : (bulkHargaKhusus(panel) || waResolveUnitPrice(panel._state.selectedProduct, variant));
 
     const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
     const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
@@ -13995,7 +14081,7 @@ function bulkUpdatePanelTotal(panel) {
     const grand = subProduct + subNama + subLogo;
 
     // Diskon panel langsung dihitung ke Subtotal Panel (net = grand − diskon).
-    const token = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
+    const token = waDiscTokenOf(panel.querySelector('.bulk-cell-panel-discount'));
     const discount = discAmountFor(token, subProduct, subNama + subLogo);
     const net = grand - discount;
 
@@ -14047,7 +14133,7 @@ function bulkUpdateGrandTotal() {
         const isCustomColor = color === '__custom__';
         const unitPrice = isCustomColor
             ? (parseInt(panel.querySelector('.bulk-cell-custom-price')?.value) || 0)
-            : waResolveUnitPrice(panel._state.selectedProduct, variant);
+            : (bulkHargaKhusus(panel) || waResolveUnitPrice(panel._state.selectedProduct, variant));
         const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
         const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
         const logoPrice = parseInt(panel.querySelector('.bulk-cell-logo-price')?.value) || 30000;
@@ -14059,7 +14145,7 @@ function bulkUpdateGrandTotal() {
         totalPcs += n;
         if (namaActive) { totalNama += pNama; namaPcs += n; }
         if (logoActive) { totalLogo += pLogo; logoPcs += n; }
-        const token = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
+        const token = waDiscTokenOf(panel.querySelector('.bulk-cell-panel-discount'));
         totalDiscount += discAmountFor(token, pProduct, pNama + pLogo);
     });
 
@@ -14239,7 +14325,7 @@ function _kasirCollectSingleItems() {
     // bukan dari total belanja - beli scrub 500rb + aksesoris 150rb tidak memenuhi.
     let accessorySubtotal = 0, promoUsed = false;
     const usedTokens = new Set();
-    const formToken = document.getElementById('wa-form-discount')?.value || '';
+    const formToken = waDiscTokenOf(document.getElementById('wa-form-discount'));
 
     for (const item of container.querySelectorAll('[id^="wa-item-"]')) {
         const idx = item.id.replace('wa-item-', '');
@@ -14281,7 +14367,7 @@ function _kasirCollectSingleItems() {
             if (!isBonusCP) productSubtotal += cpBaseSub + cpBordirSub;
             if (!isBonusCP && cpCat === 'aksesoris') accessorySubtotal += cpBaseSub + cpBordirSub;
             if (!isBonusCP) {
-                const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
+                const tok = waDiscTokenOf(document.getElementById(`wa-item-disc-${idx}`)) || formToken;
                 const d = discAmountFor(tok, cpBaseSub, cpBordirSub);
                 if (d > 0) { discountAmount += d; usedTokens.add(tok); }
                 if (discTokenHasPromo(tok)) promoUsed = true;
@@ -14342,6 +14428,10 @@ function _kasirCollectSingleItems() {
         const isBonus    = document.getElementById(`wa-bonus-${idx}`)?.value === 'true';
         const bNP = parseInt(document.getElementById(`wa-bordir-nama-price-${idx}`)?.value) || 20000;
         const bLP = parseInt(document.getElementById(`wa-bordir-logo-price-${idx}`)?.value) || 30000;
+        // Harga khusus (baris katalog): dikirim sebagai custom_price, backend
+        // memakainya sebagai harga dasar. Kalau kosong, harga katalog.
+        const hargaKhusus = isCustom ? 0 : waHargaKhusus(idx);
+        if (hargaKhusus) customPrice = hargaKhusus;
         const approxBase = customPrice !== null ? customPrice : waCatalogUnitPrice(idx);
         const baseSub = approxBase * qtyVal;
         const bordirSub = ((bordirNama ? bNP : 0) + (bordirLogo ? bLP : 0)) * qtyVal;
@@ -14350,7 +14440,7 @@ function _kasirCollectSingleItems() {
         if (!isBonus) productSubtotal += baseSub + bordirSub;
         if (!isBonus && waItemCat(idx) === 'aksesoris') accessorySubtotal += baseSub + bordirSub;
         if (!isBonus) {
-            const tok = document.getElementById(`wa-item-disc-${idx}`)?.value || formToken;
+            const tok = waDiscTokenOf(document.getElementById(`wa-item-disc-${idx}`)) || formToken;
             const d = discAmountFor(tok, baseSub, bordirSub);
             if (d > 0) { discountAmount += d; usedTokens.add(tok); }
             if (discTokenHasPromo(tok)) promoUsed = true;
@@ -14478,8 +14568,9 @@ function kasirAddToCartBulk() {
         const logoColor   = panel.querySelector('.bulk-cell-logo-color').value.trim() || '';
         const namaColor   = panel.querySelector('.bulk-cell-nama-color')?.value.trim() || '';
         const namaUL      = panel.querySelector('.bulk-cell-nama-underline')?.checked === true;
-        const panelDiscToken = panel.querySelector('.bulk-cell-panel-discount')?.value || '';
-        const approxBase  = isCustomColor ? customPrice : waResolveUnitPrice(panel._state.selectedProduct, variant);
+        const panelDiscToken = waDiscTokenOf(panel.querySelector('.bulk-cell-panel-discount'));
+        const hargaKhusus = isCustomColor ? 0 : bulkHargaKhusus(panel);
+        const approxBase  = isCustomColor ? customPrice : (hargaKhusus || waResolveUnitPrice(panel._state.selectedProduct, variant));
 
         const allocated = {};
         const panelItems = [], panelEmb = [];
@@ -14497,7 +14588,7 @@ function kasirAddToCartBulk() {
             panelItems.push({ product_id: panel._state.selectedProduct.id, color: finalColor, variant_type: variant,
                 size, quantity: 1, bordir_nama: namaActive, bordir_logo: logoActive,
                 bordir_nama_price: namaPrice, bordir_logo_price: logoPrice, is_bonus: false,
-                is_custom_size: isCustomColor, custom_price: isCustomColor ? customPrice : 0, is_po: isCustomColor ? false : isPO });
+                is_custom_size: isCustomColor, custom_price: isCustomColor ? customPrice : (hargaKhusus || 0), is_po: isCustomColor ? false : isPO });
             panelBaseSub   += approxBase;
             panelBordirSub += (namaActive ? namaPrice : 0) + (logoActive ? logoPrice : 0);
             panelSubtotal  += approxBase + (namaActive ? namaPrice : 0) + (logoActive ? logoPrice : 0);

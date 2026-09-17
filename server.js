@@ -4357,7 +4357,13 @@ app.post('/api/orders', async (req, res) => {
             const catalogPrice = (priceByType && item.variant_type && priceByType[item.variant_type] != null)
                 ? Number(priceByType[item.variant_type])
                 : Number(product.price);
-            const customBase = ((isCustomSize || isCustomProduct) && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price : catalogPrice;
+            // Harga khusus baris KATALOG (Kasir, admin-only): custom_price > 0 pada
+            // baris biasa menimpa harga katalog — untuk deal di event (mis. aksesoris
+            // dijual di bawah harga). 0/kosong = katalog. Gratis tetap lewat is_bonus.
+            const hargaKhusus = isAdmin && !isCustomSize && !isCustomProduct
+                && Number.isInteger(item.custom_price) && item.custom_price > 0 ? item.custom_price : null;
+            const customBase = ((isCustomSize || isCustomProduct) && Number.isInteger(item.custom_price) && item.custom_price >= 0) ? item.custom_price
+                : (hargaKhusus !== null ? hargaKhusus : catalogPrice);
             // Pre-Order (qty > stock): whole line is deferred, stock allocated later at
             // receive (FIFO, paid-only). ADMIN-ONLY. Custom takes precedence — a
             // custom (off-catalog) line is never a PO since it has no inventory to wait for.
