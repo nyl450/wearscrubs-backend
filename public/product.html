@@ -73,6 +73,7 @@
                     <a href="scrub-pants.html" data-href-id="scrub-pants.html" data-href-en="scrub-pants-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Celana Scrub" data-en="Scrub Pants">Celana Scrub</a>
                     <a href="scrub-caps.html" data-href-id="scrub-caps.html" data-href-en="scrub-caps-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Cap Scrub" data-en="Scrub Caps">Cap Scrub</a>
                         <a href="gown.html" data-href-id="gown.html" data-href-en="gown-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Gown" data-en="Gowns">Gown</a>
+                        <a href="aksesoris.html" data-href-id="gown.html" data-href-en="gown-en.html" class="px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" data-id="Gown" data-en="Gowns">Formie Aksesoris</a>
                 </div>
             </div>
             <a href="about-us.html" data-href-id="about-us.html" data-href-en="about-us-en.html" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors" data-id="Cerita Kami" data-en="Our Story">Cerita Kami</a>
@@ -141,6 +142,7 @@
             <a href="scrub-pants.html" data-href-id="scrub-pants.html" data-href-en="scrub-pants-en.html" data-id="Celana Scrub" data-en="Scrub Pants" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Celana Scrub</a>
             <a href="scrub-caps.html" data-href-id="scrub-caps.html" data-href-en="scrub-caps-en.html" data-id="Cap Scrub" data-en="Scrub Caps" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Cap Scrub</a>
             <a href="gown.html" data-href-id="gown.html" data-href-en="gown-en.html" data-id="Gown" data-en="Gowns" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Gown</a>
+            <a href="aksesoris.html" data-href-id="gown.html" data-href-en="gown-en.html" data-id="Gown" data-en="Gowns" class="mobile-nav-link flex items-center gap-3 py-3 px-3 rounded-xl text-sm font-semibold text-gray-800 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors">Formie Aksesoris</a>
 
             <!-- Lainnya -->
             <p class="text-[10px] font-bold tracking-[0.25em] uppercase text-gray-400 dark:text-white/30 mt-5 mb-1 px-3" data-id="Lainnya" data-en="More">Lainnya</p>
@@ -402,6 +404,7 @@
                         <li><a href="scrub-caps.html" class="hover:text-white transition">Cap
                                 Scrub</a></li>
                         <li><a href="gown.html" class="hover:text-white transition">Gown</a></li>
+                        <li><a href="aksesoris.html" class="hover:text-white transition">Formie Aksesoris</a></li>
                     </ul>
                 </div>
                 <div>
@@ -477,10 +480,10 @@
     let selectedType = null;
     let selectedSize = null;
 
-    const CAT_LABELS    = { tops: 'Atasan Scrub', pants: 'Celana Scrub', caps: 'Cap Scrub', gown: 'Gown Medis' };
-    const CAT_LABELS_EN = { tops: 'Scrub Tops',   pants: 'Scrub Pants',  caps: 'Scrub Caps', gown: 'Medical Gown' };
-    const CAT_PAGES     = { tops: 'scrub-top.html',    pants: 'scrub-pants.html',    caps: 'scrub-caps.html',    gown: 'gown.html' };
-    const CAT_PAGES_EN  = { tops: 'scrub-top-en.html', pants: 'scrub-pants-en.html', caps: 'scrub-caps-en.html', gown: 'gown-en.html' };
+    const CAT_LABELS    = { tops: 'Atasan Scrub', pants: 'Celana Scrub', caps: 'Cap Scrub', gown: 'Gown Medis', aksesoris: 'Formie Aksesoris' };
+    const CAT_LABELS_EN = { tops: 'Scrub Tops',   pants: 'Scrub Pants',  caps: 'Scrub Caps', gown: 'Medical Gown', aksesoris: 'Formie Accessories' };
+    const CAT_PAGES     = { tops: 'scrub-top.html',    pants: 'scrub-pants.html',    caps: 'scrub-caps.html',    gown: 'gown.html',    aksesoris: 'aksesoris.html' };
+    const CAT_PAGES_EN  = { tops: 'scrub-top-en.html', pants: 'scrub-pants-en.html', caps: 'scrub-caps-en.html', gown: 'gown-en.html', aksesoris: 'aksesoris-en.html' };
 
     // â”€â”€ Translation strings for all JS-generated UI text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const LANG_P = {
@@ -631,8 +634,8 @@
 
     function typeLabel(t) {
         const isEn = getCurrentLang() === 'en';
-        const mapId = { pendek: 'Lengan Pendek', panjang: 'Lengan Panjang', straight: 'Straight Cut', jogger: 'Jogger Style' };
-        const mapEn = { pendek: 'Short Sleeve',  panjang: 'Long Sleeve',    straight: 'Straight Cut', jogger: 'Jogger Style' };
+        const mapId = { pendek: 'Lengan Pendek', panjang: 'Lengan Panjang', straight: 'Straight Cut', jogger: 'Jogger Style', keychain: 'Keychain', clicker: 'Clicker', figur: 'Figur', mainan: 'Mainan & Pin', 'air-freshener': 'Air Freshener' };
+        const mapEn = { pendek: 'Short Sleeve',  panjang: 'Long Sleeve',    straight: 'Straight Cut', jogger: 'Jogger Style', keychain: 'Keychain', clicker: 'Clicker', figur: 'Figure', mainan: 'Toys & Pins', 'air-freshener': 'Air Freshener' };
         const map = isEn ? mapEn : mapId;
         return map[t] || t.charAt(0).toUpperCase() + t.slice(1);
     }

@@ -2187,7 +2187,7 @@
             <!-- Aksesoris: jenis + harga per jenis (pola sama dgn Atasan/Gown) -->
             <div id="aksesoris-variants-wrap" class="hidden space-y-3">
                 <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Jenis Aksesoris</label>
-                <p class="text-[10px] text-white/30">Centang jenis yang tersedia, lalu isi harga masing-masing. Ukuran otomatis "One Size".</p>
+                <p class="text-[10px] text-white/30">Centang jenis yang tersedia, lalu isi harga masing-masing. Ukuran: "One Size" untuk yang tidak berukuran, atau 35/50/70 mm untuk clicker.</p>
                 <div id="aksesoris-type-rows" class="space-y-2.5"></div>
             </div>
 
@@ -3079,8 +3079,10 @@ function doLogout() {
 
 // Aksesoris (keychain/clicker/figur/mainan) tidak punya ukuran badan → 'One Size'.
 // Tetap disimpan sebagai size supaya struktur inventory (warna + variant + size)
-// tidak perlu diubah — keputusan James 8 Agu.
-const ALL_SIZES = { tops: ['S','M','L','XL','XXL'], pants: ['S','M','L','XL','XXL'], caps: ['S','L'], gown: ['M','XL','XXL'], aksesoris: ['One Size'] };
+// tidak perlu diubah — keputusan James 8 Agu. 17 Sep: clicker punya ukuran fisik
+// (diameter 35/50/70 mm), jadi ukuran mm ditambahkan sebagai pilihan; 'One Size'
+// tetap untuk aksesoris yang memang tidak berukuran.
+const ALL_SIZES = { tops: ['S','M','L','XL','XXL'], pants: ['S','M','L','XL','XXL'], caps: ['S','L'], gown: ['M','XL','XXL'], aksesoris: ['One Size','35mm','50mm','70mm'] };
 // Palet warna khusus aksesoris — beda bahan, beda pilihan dari scrub/gown.
 const ALL_ACCESSORY_COLORS = [
     { id: 'hitam',  label: 'Hitam',  hex: '#111111' },
@@ -5485,7 +5487,7 @@ let cachedReservations = {};   // key `${pid}__${size}__${color}__${vtype}` → 
 let invShowCriticalOnly = false;
 let invViewMode = localStorage.getItem('ws_inv_view') || 'card';   // 'card' | 'grid'
 
-const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','XXXXL','All Size','One Size','Free Size'];
+const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','XXXXL','All Size','One Size','Free Size','35mm','50mm','70mm'];
 function sortSizes(arr) {
     return Array.from(arr).sort((a, b) => {
         const ai = SIZE_ORDER.indexOf(a);
@@ -15417,9 +15419,9 @@ Alasan pembatalan:`);
 // bisa dia cocokkan dengan harga produk biasa.
 function pbItemLabel(i) {
     const v = i.variant_type && i.variant_type !== 'null' ? ' ' + i.variant_type : '';
-    // Aksesoris tidak punya ukuran badan — semuanya "One Size". Menuliskannya cuma
-    // memanjangkan baris di lembar tagihan tanpa menambah informasi apa pun.
-    const uk = i.kategori === 'aksesoris' ? '' : ` · ${i.size || '-'}`;
+    // "One Size" (aksesoris tak berukuran) tidak ditulis — cuma memanjangkan baris
+    // tanpa informasi. Ukuran mm clicker (35/50/70) TETAP ditulis: itu pembeda barang.
+    const uk = (i.size === 'One Size') ? '' : ` · ${i.size || '-'}`;
     const dasar = `${i.nama || ''}${v} · ${i.color || '-'}${uk}`;
     const b = [];
     if (i.bordir_nama) b.push('nama');

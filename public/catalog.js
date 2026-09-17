@@ -9,6 +9,15 @@ var WS_API = (window.location.hostname === 'localhost' || window.location.hostna
     : 'https://wearscrubs-backend-production.up.railway.app';  // ← ganti dengan URL Railway Anda
 
 const COLOR_META = {
+    // Warna aksesoris (Formie) — id sama dengan palet dashboard
+    'hitam':        { label: 'Hitam',        hex: '#111111' },
+    'putih':        { label: 'Putih',        hex: '#f5f5f5' },
+    'merah':        { label: 'Merah',        hex: '#dc2626' },
+    'kuning':       { label: 'Kuning',       hex: '#eab308' },
+    'biru':         { label: 'Biru',         hex: '#2563eb' },
+    'hijau':        { label: 'Hijau',        hex: '#16a34a' },
+    'coklat':       { label: 'Coklat',       hex: '#78350f' },
+    'gold':         { label: 'Gold',         hex: '#c9a227' },
     // Scrub colors
     'black':        { label: 'Black',        hex: '#000000' },
     'beige':        { label: 'Beige',        hex: '#d7c5a9' },
@@ -245,7 +254,7 @@ const Catalog = {
         const typesHTML = types.length > 0 ? `
             <div class="flex flex-wrap gap-1 mb-1" id="types-${p.id}">
                 ${types.map(t => {
-                    const label = t === 'pendek' ? 'Lengan Pendek' : t === 'panjang' ? 'Lengan Panjang' : t;
+                    const label = t === 'pendek' ? 'Lengan Pendek' : t === 'panjang' ? 'Lengan Panjang' : ({ keychain: 'Keychain', clicker: 'Clicker', figur: 'Figur', mainan: 'Mainan & Pin', 'air-freshener': 'Air Freshener' }[t] || t);
                     const anyStockForType = (p.colors || []).some(c =>
                         (p.sizes || []).some(s => this.hasStock(p.id, c, s, t))
                     );
@@ -259,7 +268,7 @@ const Catalog = {
         const firstColorLabel = firstColorMeta ? firstColorMeta.label : '';
         const firstIsMotif = firstColorMeta && firstColorMeta.isMotif;
         const dotsHTML = (p.colors || []).map((c, i) => {
-            const hex = p.color_hex_map ? p.color_hex_map[c] : (COLOR_META[c] ? COLOR_META[c].hex : '#ccc');
+            const hex = (p.color_hex_map && p.color_hex_map[c]) || (COLOR_META[c] ? COLOR_META[c].hex : '#ccc');
             const anyStockForColor = types.length > 0
                 ? types.some(t => (p.sizes || []).some(s => this.hasStock(p.id, c, s, t)))
                 : (p.sizes || []).some(s => this.hasStock(p.id, c, s, 'null'));

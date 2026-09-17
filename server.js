@@ -1145,6 +1145,15 @@ async function getCogsSettings() {
 const PICKUP_COURIER = 'Diambil di event / walkin';
 
 const COLOR_HEX = {
+    // Warna aksesoris (palet dashboard ALL_ACCESSORY_COLORS). 'pink' & 'grey' sudah ada di bawah.
+    'hitam': '#111111',
+    'putih': '#f5f5f5',
+    'merah': '#dc2626',
+    'kuning': '#eab308',
+    'biru': '#2563eb',
+    'hijau': '#16a34a',
+    'coklat': '#78350f',
+    'gold': '#c9a227',
     // Scrub colors
     'black': '#000000',
     'beige': '#d7c5a9',
@@ -1171,6 +1180,15 @@ const COLOR_HEX = {
     'old-pink': '#d6b6bb'  // backward-compat alias (lihat catalog.js)
 };
 const COLOR_LABEL = {
+    // Warna aksesoris
+    'hitam': 'Hitam',
+    'putih': 'Putih',
+    'merah': 'Merah',
+    'kuning': 'Kuning',
+    'biru': 'Biru',
+    'hijau': 'Hijau',
+    'coklat': 'Coklat',
+    'gold': 'Gold',
     'black': 'Black',
     'beige': 'Beige',
     'olive': 'Olive',
