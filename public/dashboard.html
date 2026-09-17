@@ -6286,15 +6286,18 @@ function gridCellInlineEdit(td, product_id, size, color, variant_type, current) 
         input.disabled = true;
         const newVal = parseInt(input.value);
         try {
-            await apiFetch('/api/inventory/single', {
+            const hasil = await apiFetch('/api/inventory/single', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal, reason, note })
             });
             const item = cachedInventoryAll.find(r =>
                 r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
-            if (item) item.stock = newVal;
-            toast(`Stok ${size}: ${current} → ${newVal}`);
+            // Stok akhir bisa lebih kecil dari yang diketik: PO lunas yang menunggu
+            // varian ini langsung dipenuhi (potong stok) begitu stok bertambah.
+            const stokAkhir = (hasil && hasil.stock_final != null) ? hasil.stock_final : newVal;
+            if (item) item.stock = stokAkhir;
+            toast(`Stok ${size}: ${current} → ${newVal}` + ((hasil && hasil.fulfilled_pos && hasil.fulfilled_pos.length) ? ` · PO terpenuhi: ${hasil.fulfilled_pos.join(', ')} (stok kini ${stokAkhir})` : ''));
         } catch(e) {
             toast('Gagal simpan: ' + e.message, true);
         }
@@ -6394,15 +6397,18 @@ async function submitGridEditModal() {
     const btn = document.getElementById('gem-save-btn');
     btn.disabled = true; btn.textContent = 'Menyimpan...';
     try {
-        await apiFetch('/api/inventory/single', {
+        const hasil = await apiFetch('/api/inventory/single', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ product_id: ctx.product_id, size: ctx.size, color: ctx.color, variant_type: ctx.variant_type, stock: newVal, reason, note })
         });
         const item = cachedInventoryAll.find(r =>
             r.product_id == ctx.product_id && r.size === ctx.size && r.color === ctx.color && r.variant_type === ctx.variant_type);
-        if (item) item.stock = newVal;
-        toast(`Stok diperbarui: ${ctx.current} → ${newVal}`);
+        // Stok akhir bisa lebih kecil dari yang diketik: PO lunas yang menunggu
+        // varian ini langsung dipenuhi (potong stok) begitu stok bertambah.
+        const stokAkhir = (hasil && hasil.stock_final != null) ? hasil.stock_final : newVal;
+        if (item) item.stock = stokAkhir;
+        toast(`Stok diperbarui: ${ctx.current} → ${newVal}` + ((hasil && hasil.fulfilled_pos && hasil.fulfilled_pos.length) ? ` · PO terpenuhi: ${hasil.fulfilled_pos.join(', ')} (stok kini ${stokAkhir})` : ''));
         closeGridEditModal();
         renderInventory();
     } catch(e) {
@@ -6479,15 +6485,18 @@ async function invSaveOnBlur(input) {
     showStockReasonPopover({
         anchor: input, current, newVal,
         onConfirm: async (reason, note) => {
-            await apiFetch('/api/inventory/single', {
+            const hasil = await apiFetch('/api/inventory/single', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal, reason, note })
             });
             const item = cachedInventoryAll.find(r =>
                 r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
-            if (item) item.stock = newVal;
-            toast(`Stok: ${current} → ${newVal}`);
+            // Stok akhir bisa lebih kecil dari yang diketik: PO lunas yang menunggu
+            // varian ini langsung dipenuhi (potong stok) begitu stok bertambah.
+            const stokAkhir = (hasil && hasil.stock_final != null) ? hasil.stock_final : newVal;
+            if (item) item.stock = stokAkhir;
+            toast(`Stok: ${current} → ${newVal}` + ((hasil && hasil.fulfilled_pos && hasil.fulfilled_pos.length) ? ` · PO terpenuhi: ${hasil.fulfilled_pos.join(', ')} (stok kini ${stokAkhir})` : ''));
             renderInventory();
         },
         onCancel: () => { input.value = current; }

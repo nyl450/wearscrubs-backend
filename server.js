@@ -3422,6 +3422,61 @@ app.get('/api/inventory/:product_id/check', async (req, res) => {
 });
 
 // POST /api/inventory/receive — terima stok dari penjahit, support normal & reject
+// ── Alokasi Pre-Order FIFO ────────────────────────────────────────────────────
+// Dipanggil di DALAM transaksi setiap kali stok NORMAL suatu varian BERTAMBAH:
+// terima stok, edit satuan ke atas, bulk add/set ke atas. Dulu hanya di terima
+// stok, sehingga "Kembali dari Event" (bulk add) meninggalkan PO lunas
+// menggantung padahal barangnya sudah di rak (kasus 17 Sep, Minna
+// charcoal-grey/panjang/S untuk WS-WA-20260903-8151).
+//
+// Aturan (disepakati dengan James):
+//   • Hanya PO yang LUNAS & tidak dibatalkan (jangan kunci stok untuk order
+//     yang mungkin tak pernah bayar).
+//   • FIFO ketat menurut tanggal order, tertua dulu.
+//   • Utuh per baris: PO dipenuhi hanya kalau seluruh qty-nya muat; kalau tidak,
+//     BERHENTI (jangan lompat ke PO yang lebih kecil, menjaga urutan).
+// Memenuhi = potong stok sekarang + po_fulfilled=TRUE; admin mengemas manual
+// (gate Kemas lepas begitu po_fulfilled). Mengembalikan kode order yang
+// terpenuhi dan stok akhir.
+async function alokasiPreOrderFifo(client, v, stokSekarang, username) {
+    const fulfilled = [];
+    let stockFinal = stokSekarang;
+    if (stockFinal <= 0) return { fulfilled, stockFinal };
+    const poRes = await client.query(
+        `SELECT oi.id, oi.quantity, oi.order_id, o.order_code
+           FROM order_items oi JOIN orders o ON o.id = oi.order_id
+          WHERE oi.product_id=$1 AND oi.size=$2 AND oi.color=$3 AND oi.variant_type=$4
+            AND oi.is_po = TRUE AND oi.po_fulfilled = FALSE
+            AND o.payment_status = 'paid' AND o.order_status <> 'cancelled'
+          ORDER BY o.created_at ASC, oi.id ASC`,
+        [v.product_id, v.size, v.color, v.variant_type]
+    );
+    // Tidak perlu FOR UPDATE di sini: semua pemanggil sudah mengunci baris
+    // inventory varian ini (FOR UPDATE) sebelum memanggil, dan jalur lain yang
+    // menyentuh po_fulfilled (confirm-payment) juga mengunci baris yang sama
+    // lebih dulu. Baris inventory itulah titik serialisasinya.
+    for (const po of poRes.rows) {
+        const need = parseInt(po.quantity);
+        if (stockFinal < need) break;            // utuh per baris, FIFO ketat
+        const sb = stockFinal;
+        stockFinal -= need;
+        await client.query(
+            `UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+            [need, v.product_id, v.size, v.color, v.variant_type]
+        );
+        await client.query(`UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1`, [po.id]);
+        await client.query(
+            `INSERT INTO stock_movements
+             (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+             VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+            [v.product_id, v.size, v.color, v.variant_type, -need, sb, stockFinal,
+             `PO terpenuhi ${po.order_code}`, po.order_id, username]
+        );
+        fulfilled.push(po.order_code);
+    }
+    return { fulfilled, stockFinal };
+}
+
 app.post('/api/inventory/receive', requireMenu('inventory','edit'), async (req, res) => {
     try {
         const { product_id, size, color, variant_type, quantity, note, stock_type } = req.body;
@@ -3466,49 +3521,12 @@ app.post('/api/inventory/receive', requireMenu('inventory','edit'), async (req, 
                  req.user.username, isReject]
             );
 
-            // ── Pre-Order FIFO allocation ────────────────────────────────────────────
-            // When NORMAL stock arrives, auto-allocate it to waiting Pre-Orders for this
-            // exact variant. Rules (locked with James):
-            //   • Only PAID, non-cancelled PO lines are eligible (don't lock stock for
-            //     orders that may never pay).
-            //   • Strict FIFO by order date — oldest first.
-            //   • Whole-item: a PO is fulfilled only if the full qty fits; otherwise we
-            //     STOP (don't skip ahead to a smaller PO — preserves fairness/order).
-            // Fulfilling = deduct stock now ("blok") + mark po_fulfilled; admin ships
-            // manually afterward (the pack guard releases once po_fulfilled = TRUE).
-            // Reject stock never fulfills POs.
-            const fulfilledPOs = [];
-            let stockFinal = after;
+            // Alokasi Pre-Order FIFO: lihat alokasiPreOrderFifo(). Stok reject tidak
+            // pernah memenuhi PO.
+            let fulfilledPOs = [], stockFinal = after;
             if (!isReject) {
-                const poRes = await client.query(
-                    `SELECT oi.id, oi.quantity, oi.order_id, o.order_code
-                       FROM order_items oi JOIN orders o ON o.id = oi.order_id
-                      WHERE oi.product_id=$1 AND oi.size=$2 AND oi.color=$3 AND oi.variant_type=$4
-                        AND oi.is_po = TRUE AND oi.po_fulfilled = FALSE
-                        AND o.payment_status = 'paid' AND o.order_status <> 'cancelled'
-                      ORDER BY o.created_at ASC, oi.id ASC
-                      FOR UPDATE OF oi`,
-                    [product_id, size, color, variant_type]
-                );
-                for (const po of poRes.rows) {
-                    const need = parseInt(po.quantity);
-                    if (stockFinal < need) break;            // whole-item, strict FIFO
-                    const sb = stockFinal;
-                    stockFinal -= need;
-                    await client.query(
-                        `UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
-                        [need, product_id, size, color, variant_type]
-                    );
-                    await client.query(`UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1`, [po.id]);
-                    await client.query(
-                        `INSERT INTO stock_movements
-                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
-                         VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
-                        [product_id, size, color, variant_type, -need, sb, stockFinal,
-                         `PO terpenuhi ${po.order_code}`, po.order_id, req.user.username]
-                    );
-                    fulfilledPOs.push(po.order_code);
-                }
+                const alok = await alokasiPreOrderFifo(client, { product_id, size, color, variant_type }, after, req.user.username);
+                fulfilledPOs = alok.fulfilled; stockFinal = alok.stockFinal;
             }
             return { before, after, fulfilledPOs, stockFinal };
         });
@@ -3618,11 +3636,17 @@ app.put('/api/inventory/single', requireMenu('inventory','edit'), async (req, re
                     [product_id, size, color, variant_type, after - beforeVal, beforeVal, after, finalNote, req.user.username]
                 );
             }
-            return beforeVal;
+            // Stok bertambah -> PO lunas yang menunggu varian ini dipenuhi FIFO.
+            const alok = after > beforeVal
+                ? await alokasiPreOrderFifo(client, { product_id, size, color, variant_type }, after, req.user.username)
+                : { fulfilled: [], stockFinal: after };
+            return { beforeVal, ...alok };
         });
 
         invalidateCache('inventory');
-        res.json({ message: 'Stok diperbarui', before, after });
+        let msg = 'Stok diperbarui';
+        if (before.fulfilled.length) msg += ` · ${before.fulfilled.length} Pre-Order terpenuhi (siap dikirim): ${before.fulfilled.join(', ')}`;
+        res.json({ message: msg, before: before.beforeVal, after, stock_final: before.stockFinal, fulfilled_pos: before.fulfilled });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3674,14 +3698,22 @@ app.post('/api/inventory/bulk', requireMenu('inventory','edit'), async (req, res
                         [product_id, size, color, variant_type, after - before, before, after, noteFinal, req.user.username]
                     );
                 }
-                out.push({ product_id, size, color, variant_type, before, after, changed: before !== after });
+                // Stok bertambah -> PO lunas yang menunggu varian ini dipenuhi FIFO.
+                const alok = after > before
+                    ? await alokasiPreOrderFifo(client, { product_id, size, color, variant_type }, after, req.user.username)
+                    : { fulfilled: [], stockFinal: after };
+                out.push({ product_id, size, color, variant_type, before, after, changed: before !== after,
+                           stock_final: alok.stockFinal, fulfilled_pos: alok.fulfilled });
             }
             return out;
         });
 
         invalidateCache('inventory');
         const changed = results.filter(r => r.changed).length;
-        res.json({ message: `${changed} dari ${results.length} stok diperbarui`, results });
+        const terpenuhi = [...new Set(results.flatMap(r => r.fulfilled_pos))];
+        let msg = `${changed} dari ${results.length} stok diperbarui`;
+        if (terpenuhi.length) msg += ` · ${terpenuhi.length} Pre-Order terpenuhi (siap dikirim): ${terpenuhi.join(', ')}`;
+        res.json({ message: msg, results, fulfilled_pos: terpenuhi });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
