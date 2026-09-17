@@ -1042,10 +1042,19 @@
               <!-- Nomor lembar kwitansi fisik di event. Ini yang dipakai partner untuk
                    mencocokkan tagihan dengan buku mereka, jadi diisi saat order dibuat
                    supaya tidak perlu dikejar mundur setelah event bubar. -->
-              <div id="wa-receipt-no-wrap" class="hidden sm:col-span-2">
-                <label class="wa-field-label">No. Kwitansi <span class="wa-optional">(dari buku kwitansi event)</span></label>
-                <input type="text" id="wa-receipt-no" placeholder="Contoh: B-121" maxlength="40" autocomplete="off" />
-                <p class="text-[11px] text-white/30 mt-1">Nomor lembar kwitansi yang ditulis untuk pembeli ini. Dipakai partner untuk mencocokkan tagihan. Satu nomor hanya untuk satu order.</p>
+              <div id="wa-receipt-no-wrap" class="hidden sm:col-span-2 grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="wa-field-label">No. Kwitansi <span class="wa-optional">(dari buku kwitansi event)</span></label>
+                  <input type="text" id="wa-receipt-no" placeholder="Contoh: B-121" maxlength="40" autocomplete="off" />
+                  <p class="text-[11px] text-white/30 mt-1">Nomor lembar kwitansi pembeli ini. Satu nomor hanya untuk satu order.</p>
+                </div>
+                <!-- Voucher promo partner (Bali Sept 2026): ditukar 1 baju Ally lengan
+                     pendek / Dylan, boleh beberapa. Satu voucher hanya bisa ditukar SEKALI. -->
+                <div>
+                  <label class="wa-field-label">No. Voucher <span class="wa-optional">(promo partner, pisahkan koma)</span></label>
+                  <input type="text" id="wa-voucher-no" placeholder="Contoh: V-0012, V-0013" maxlength="200" autocomplete="off" />
+                  <p class="text-[11px] text-white/30 mt-1">Isi kalau pembeli menukar voucher. Boleh bersamaan dengan kwitansi. Satu voucher = satu baju (Ally lengan pendek / Dylan).</p>
+                </div>
               </div>
               <div class="sm:col-span-2">
                 <label class="wa-field-label">Catatan <span class="wa-optional">(opsional)</span></label>
@@ -2377,10 +2386,17 @@
         <input type="text" id="edit-billing-to" placeholder="Nama pihak ke-2 / partner yang ditagih" />
         <p class="text-[11px] text-amber-300/70 mt-1">Wajib diisi untuk Collaboration Event. Tampil di invoice & detail.</p>
       </div>
-      <div id="edit-receipt-no-wrap" class="hidden">
-        <label class="text-[11px] text-white/60 mb-1 block">No. Kwitansi <span class="text-white/30">(dari buku kwitansi event)</span></label>
-        <input type="text" id="edit-receipt-no" placeholder="Contoh: B-121" maxlength="40" autocomplete="off" />
-        <p class="text-[11px] text-white/30 mt-1">Dipakai partner untuk mencocokkan tagihan. Satu nomor hanya untuk satu order.</p>
+      <div id="edit-receipt-no-wrap" class="hidden grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">No. Kwitansi <span class="text-white/30">(dari buku kwitansi event)</span></label>
+          <input type="text" id="edit-receipt-no" placeholder="Contoh: B-121" maxlength="40" autocomplete="off" />
+          <p class="text-[11px] text-white/30 mt-1">Satu nomor hanya untuk satu order.</p>
+        </div>
+        <div>
+          <label class="text-[11px] text-white/60 mb-1 block">No. Voucher <span class="text-white/30">(promo partner, pisahkan koma)</span></label>
+          <input type="text" id="edit-voucher-no" placeholder="Contoh: V-0012, V-0013" maxlength="200" autocomplete="off" />
+          <p class="text-[11px] text-white/30 mt-1">Satu voucher hanya bisa ditukar sekali.</p>
+        </div>
       </div>
       <div>
         <label class="text-[11px] text-white/60 mb-1 block">Catatan Internal <span class="text-white/30">(opsional)</span></label>
@@ -8129,7 +8145,8 @@ async function viewOrder(id) {
             ${o.billing_to ? `<div class="col-span-2 bg-pink-500/10 border border-pink-400/20 rounded-xl p-3"><p class="text-pink-300/70 text-xs mb-1"><i class="fa-solid fa-handshake"></i> Ditagihkan ke (Partner) · Consignment</p><p class="font-bold">${esc(o.billing_to)}</p>
                 ${o.receipt_no
                     ? `<p class="text-xs text-white/50 mt-1.5">No. Kwitansi: <span class="font-mono font-bold text-white/80">${esc(o.receipt_no)}</span></p>`
-                    : `<p class="text-xs text-amber-300/70 mt-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Nomor kwitansi belum diisi — partner tidak bisa mencocokkan order ini</p>`}
+                    : (o.voucher_no ? '' : `<p class="text-xs text-amber-300/70 mt-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Nomor kwitansi / voucher belum diisi — partner tidak bisa mencocokkan order ini</p>`)}
+                ${o.voucher_no ? `<p class="text-xs text-white/50 mt-1">No. Voucher: <span class="font-mono font-bold text-amber-200/90">${esc(o.voucher_no)}</span></p>` : ''}
                 </div>` : ''}
             ${Number(o.additional_amount_due || 0) > 0 ? (
                 o.additional_paid_at
@@ -8408,6 +8425,7 @@ function openEditOrderModal() {
     document.getElementById('edit-order-source').value = o.order_source || 'whatsapp';
     document.getElementById('edit-billing-to').value = o.billing_to || '';
     const rcp = document.getElementById('edit-receipt-no'); if (rcp) rcp.value = o.receipt_no || '';
+    const vch = document.getElementById('edit-voucher-no'); if (vch) vch.value = o.voucher_no || '';
     document.getElementById('edit-notes').value = o.notes || '';
     const invNotesEl = document.getElementById('edit-invoice-notes');
     if (invNotesEl) invNotesEl.value = o.invoice_notes || '';
@@ -8484,6 +8502,7 @@ async function submitEditOrder() {
             order_source:        orderSource,
             billing_to:          billingTo,
             receipt_no:          (document.getElementById('edit-receipt-no')?.value || '').trim(),
+            voucher_no:          (document.getElementById('edit-voucher-no')?.value || '').trim(),
             notes:               document.getElementById('edit-notes').value.trim(),
             invoice_notes:       (document.getElementById('edit-invoice-notes')?.value || '').trim(),
             // '' = hapus override, invoice kembali ke tanggal pesanan dibuat.
@@ -12130,7 +12149,10 @@ function waOnSourceChange() {
     // No. Kwitansi hanya ada di event collab — order lain tidak punya buku kwitansi.
     const rWrap = document.getElementById('wa-receipt-no-wrap');
     if (rWrap) rWrap.classList.toggle('hidden', !isCollab);
-    if (!isCollab) { const r = document.getElementById('wa-receipt-no'); if (r) r.value = ''; }
+    if (!isCollab) {
+        const r = document.getElementById('wa-receipt-no'); if (r) r.value = '';
+        const v = document.getElementById('wa-voucher-no'); if (v) v.value = '';
+    }
 }
 
 // Label opsi variant di dropdown: nama enak dibaca + harga per variant (kalau ada),
@@ -12454,6 +12476,7 @@ function waResetForm() {
         const srcEl = document.getElementById('wa-order-source'); if (srcEl) srcEl.value = 'whatsapp';
         const billEl = document.getElementById('wa-billing-to'); if (billEl) billEl.value = '';
         const rcpEl = document.getElementById('wa-receipt-no'); if (rcpEl) rcpEl.value = '';
+        const vcEl = document.getElementById('wa-voucher-no'); if (vcEl) vcEl.value = '';
         if (typeof waOnSourceChange === 'function') waOnSourceChange();
         // Reset tanggal order → hari ini (anti customer-request lama nyangkut di order berikutnya).
         const dateEl = document.getElementById('wa-invoice-date');
@@ -14757,6 +14780,26 @@ async function kasirCartSubmit() {
             + 'Lanjut simpan pesanan dengan promo ini?');
         if (!lanjut) return;
     }
+    // Voucher hanya berlaku untuk Ally lengan pendek / Dylan. Diingatkan, bukan
+    // diblokir: kesepakatan di lapangan bisa berbeda dan admin yang memutuskan.
+    const voucherIsi = (document.getElementById('wa-voucher-no')?.value || '').trim();
+    if (voucherIsi && orderSource === 'collaboration_event') {
+        const bukanVoucher = [];
+        for (const g of window.kasirCart) for (const it of (g.items || [])) {
+            if (!it.product_id) continue;
+            const prod = (waProducts || []).find(p => p.id === Number(it.product_id));
+            const nama = String(prod?.name || '');
+            const ok = /dylan/i.test(nama) || (/ally/i.test(nama) && String(it.variant_type || '') === 'pendek');
+            if (!ok) bukanVoucher.push(`${nama || ('Produk #' + it.product_id)}${it.variant_type && it.variant_type !== 'null' ? ' ' + it.variant_type : ''}`);
+        }
+        if (bukanVoucher.length) {
+            const lanjut = confirm(
+                'Ada nomor voucher, tapi keranjang memuat produk di luar ketentuan voucher (Ally lengan pendek / Dylan):\n\n'
+                + [...new Set(bukanVoucher)].map(x => '\u2022 ' + x).join('\n')
+                + '\n\nKalau pembeli juga beli biasa (pakai kwitansi), ini wajar. Lanjut simpan?');
+            if (!lanjut) return;
+        }
+    }
     const allItems = [], allEmb = [];
     let totalDiscountAmount = 0;
     const discLabels = new Set();
@@ -14795,6 +14838,7 @@ async function kasirCartSubmit() {
                 invoice_notes: invoiceNotes,
                 order_source: orderSource, payment_method: paymentMethod, billing_to: billingTo,
                 receipt_no: (document.getElementById('wa-receipt-no')?.value || '').trim() || null,
+                voucher_no: (document.getElementById('wa-voucher-no')?.value || '').trim() || null,
                 invoice_date: invoiceDate || null, items: allItems,
                 embroidery_details: allEmb.length ? allEmb : null,
                 discount_percent: 0, discount_amount_custom: totalDiscountAmount,
@@ -14856,7 +14900,7 @@ let pbAdaPerubahan = false;
 function pbUrutkan(list) {
     const arr = [...list];
     const tgl = (o) => o.order_date ? new Date(o.order_date).getTime() : 0;
-    const kosong = (o) => !String(o.receipt_no || '').trim();
+    const kosong = (o) => !String(o.receipt_no || '').trim() && !String(o.voucher_no || '').trim();
     switch (pbUrut) {
         case 'lama':    return arr.sort((a, b) => tgl(a) - tgl(b));
         case 'total':   return arr.sort((a, b) => Number(b.total_amount || 0) - Number(a.total_amount || 0));
@@ -15079,7 +15123,7 @@ function pbRenderBuat(data) {
                        ${bisa && pbPilih && pbPilih.has(Number(o.id)) ? 'checked' : ''} ${bisa ? '' : 'disabled'}
                        onchange="pbTogglePick(${Number(o.id)}, this.checked)" />
             </td>
-            <td class="px-3 py-2 font-mono text-[12px] font-bold whitespace-nowrap">${esc(o.receipt_no || '—')}</td>
+            <td class="px-3 py-2 font-mono text-[12px] font-bold whitespace-nowrap">${esc(o.receipt_no || '—')}${o.voucher_no ? `<div class="text-[10px] font-semibold text-amber-200/80">V: ${esc(o.voucher_no)}</div>` : ''}</td>
             <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${o.order_date ? new Date(o.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'}</td>
             <td class="px-3 py-2 text-sm">${esc(o.customer_name || '-')}</td>
             <td class="px-3 py-2 text-[11px] text-white/40 max-w-[260px] truncate" title="${esc(rincian)}">${esc(rincian || '-')}</td>
@@ -15126,7 +15170,7 @@ function pbRenderBuat(data) {
                     <thead class="bg-white/5">
                         <tr class="text-[10px] uppercase tracking-wider text-white/40">
                             <th class="px-3 py-2.5 w-9"></th>
-                            <th class="px-3 py-2.5 text-left">No. Kwitansi</th>
+                            <th class="px-3 py-2.5 text-left">No. Kwitansi / Voucher</th>
                             <th class="px-3 py-2.5 text-left">Tgl</th>
                             <th class="px-3 py-2.5 text-left">Pembeli</th>
                             <th class="px-3 py-2.5 text-left">Barang</th>
@@ -15532,7 +15576,7 @@ function pbInvoicePrintHTML(inv) {
         if (promo) adaPromo = true;
         sumHarga += hargaTampil; sumPotongan += potonganTampil;
         return `<tr>
-            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;font-family:monospace;font-weight:700;vertical-align:top;">${esc(r.receipt_no || '—')}</td>
+            <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;font-family:monospace;font-weight:700;vertical-align:top;">${esc(r.receipt_no || '—')}${r.voucher_no ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;font-weight:600;color:#7d5417;white-space:nowrap;">Voucher ${esc(r.voucher_no)}</div>` : ''}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;white-space:nowrap;vertical-align:top;">${tgl(r.order_date, { day: '2-digit', month: 'short' })}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;">${esc(r.customer_name || '-')}</td>
             <td style="padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;line-height:1.5;">${items || '-'}</td>
@@ -15594,7 +15638,7 @@ function pbInvoicePrintHTML(inv) {
         <table class="pb-table" style="width:100%;border-collapse:collapse;font-size:10.5px;margin-top:12px;">
             <thead>
                 <tr>
-                    <th style="${th}">No. Kwitansi</th>
+                    <th style="${th}">No. Kwitansi / Voucher</th>
                     <th style="${th}">Tgl</th>
                     <th style="${th}">Pembeli</th>
                     <th style="${th}">Barang</th>
@@ -15785,6 +15829,13 @@ function pbRender(data) {
                        placeholder="${dis ? '—' : 'ketik nomor'}"
                        ${dis ? 'disabled' : ''}
                        onkeydown="pbOnKey(event, ${i})" oninput="pbAdaPerubahan = true; pbMarkDirty()" />
+                <input type="text" maxlength="200" autocomplete="off"
+                       class="pb-voucher w-full !py-1 !text-[11px] font-mono mt-1 text-amber-200/90"
+                       data-order-id="${o.id}"
+                       value="${esc(o.voucher_no || '')}"
+                       placeholder="${dis ? '' : 'no. voucher (opsional)'}"
+                       ${dis ? 'disabled' : ''}
+                       oninput="pbAdaPerubahan = true; pbMarkDirty()" />
             </td>
         </tr>`;
     }).join('');
@@ -15827,7 +15878,7 @@ function pbRender(data) {
                             <th class="px-3 py-2.5 text-left">Pembeli</th>
                             <th class="px-3 py-2.5 text-left">Barang</th>
                             <th class="px-3 py-2.5 text-right">Total</th>
-                            <th class="px-3 py-2.5 text-left w-[170px]">No. Kwitansi</th>
+                            <th class="px-3 py-2.5 text-left w-[190px]">No. Kwitansi / Voucher</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -15881,7 +15932,11 @@ async function pbSave(btn) {
     const partnerId = document.getElementById('pb-partner')?.value;
     if (!partnerId) return;
     const inputs = [...document.querySelectorAll('.pb-receipt')].filter(el => !el.disabled);
-    const entries = inputs.map(el => ({ order_id: Number(el.dataset.orderId), receipt_no: el.value.trim() }));
+    const voucherOf = (oid) => {
+        const el = document.querySelector(`.pb-voucher[data-order-id="${oid}"]`);
+        return el ? el.value.trim() : undefined;   // undefined = jangan sentuh nilai lama
+    };
+    const entries = inputs.map(el => ({ order_id: Number(el.dataset.orderId), receipt_no: el.value.trim(), voucher_no: voucherOf(el.dataset.orderId) }));
     if (entries.length === 0) return;
 
     // Kembar di layar ditolak sebelum dikirim — pesannya lebih spesifik daripada

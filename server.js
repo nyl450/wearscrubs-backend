@@ -871,6 +871,13 @@ async function initDB() {
     // receipt_no — nomor lembar kwitansi fisik. Melekat ke ORDER (satu order =
     // satu lembar), bukan ke tagihan: satu tagihan memuat puluhan nomor berbeda.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_no TEXT DEFAULT NULL`);
+    // voucher_no — nomor voucher promo partner (event Bali Sept 2026: pembeli produk
+    // partner dapat voucher bernomor, ditukar 1 baju Wearscrubs, boleh kelipatan).
+    // Satu order bisa memuat BEBERAPA nomor ("V001, V002"), dan bisa berdampingan
+    // dengan receipt_no (pembeli menukar voucher sekaligus beli biasa). Disimpan
+    // sebagai teks ternormalisasi (dipisah ", "); keunikan per partner dijaga di
+    // JS (cekVoucherBentrok) karena satu kolom memuat banyak nomor.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS voucher_no TEXT DEFAULT NULL`);
     // partner_id — menggantikan `billing_to` yang selama ini teks bebas. Kolom
     // lama SENGAJA dibiarkan: order Agustus menyimpan namanya di sana, dan
     // riwayat kerja sama yang sudah selesai masih perlu terbaca.
@@ -933,6 +940,7 @@ async function initDB() {
         invoice_id INTEGER NOT NULL REFERENCES partner_invoices(id) ON DELETE CASCADE,
         order_id INTEGER NOT NULL REFERENCES orders(id),
         receipt_no TEXT,
+        voucher_no TEXT,
         order_code TEXT NOT NULL,
         order_date DATE,
         customer_name TEXT,
@@ -949,6 +957,7 @@ async function initDB() {
     // mana komisi Consignment, supaya kolom Harga bisa menampilkan harga setelah
     // promo. Tagihan lama bernilai NULL dan tetap tercetak seperti semula.
     await dbRun(`ALTER TABLE partner_invoice_orders ADD COLUMN IF NOT EXISTS discount_label TEXT`);
+    await dbRun(`ALTER TABLE partner_invoice_orders ADD COLUMN IF NOT EXISTS voucher_no TEXT DEFAULT NULL`).catch(() => {});
     await createIdx('CREATE INDEX IF NOT EXISTS idx_pinv_ord_invoice ON partner_invoice_orders(invoice_id)');
     // ⚠️ INDEKS PALING PENTING DI FITUR INI. Satu order tidak boleh masuk dua
     // tagihan AKTIF sekaligus. Dijaga database, bukan pengecekan di kode — kalau
@@ -1112,6 +1121,44 @@ function sanitizeCourier(s) {
 function sanitizeReceiptNo(s) {
     const v = String(s == null ? '' : s).replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
     return v || null;
+}
+// Nomor voucher: boleh beberapa dalam satu order. Dipecah di koma / titik koma /
+// baris baru, dibersihkan seperti nomor kwitansi, kembar dalam satu order dibuang,
+// disimpan "V001, V002". Kosong -> null.
+function sanitizeVoucherNo(s) {
+    const out = [], seen = new Set();
+    for (const raw of String(s == null ? '' : s).split(/[,;\n]+/)) {
+        const v = raw.replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
+        if (!v) continue;
+        const k = v.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k); out.push(v);
+        if (out.length >= 20) break;
+    }
+    return out.length ? out.join(', ') : null;
+}
+function daftarVoucher(s) {
+    return String(s || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+}
+// Satu voucher hanya boleh ditukar SEKALI: nomor yang sama pada dua order aktif
+// partner yang sama = ditukar dua kali. Mengembalikan { voucher, order_code }
+// bentrokan pertama, atau null. `abaikanIds` = order yang sedang disimpan.
+async function cekVoucherBentrok(partnerId, partnerName, nomorList, abaikanIds) {
+    const cari = new Set(nomorList.map(x => x.toLowerCase()));
+    if (!cari.size) return null;
+    const rows = await dbAll(
+        `SELECT o.id, o.order_code, o.voucher_no FROM orders o
+          WHERE ${PARTNER_MATCH} AND o.order_status <> 'cancelled'
+            AND o.voucher_no IS NOT NULL AND btrim(o.voucher_no) <> ''`,
+        [partnerId, partnerName]
+    );
+    const abaikan = new Set((abaikanIds || []).map(Number));
+    for (const r of rows) {
+        if (abaikan.has(Number(r.id))) continue;
+        for (const v of daftarVoucher(r.voucher_no))
+            if (cari.has(v)) return { voucher: v, order_code: r.order_code };
+    }
+    return null;
 }
 // Bentrok nomor kwitansi dijaga indeks unik parsial di DB
 // (uniq_order_receipt_per_partner). Kalau yang meledak indeks itu, ubah jadi
@@ -1712,7 +1759,7 @@ app.get('/api/admin/partner-billing/receipts', requireMenu('partner-billing'), a
         if (to)   { params.push(to   + ' 23:59:59.999'); where += ` AND ${PARTNER_ORDER_DATE} <= $${params.length}`; }
 
         const rows = await dbAll(
-            `SELECT o.id, o.order_code, o.customer_name, o.receipt_no, o.order_status,
+            `SELECT o.id, o.order_code, o.customer_name, o.receipt_no, o.voucher_no, o.order_status,
                     o.total_amount, o.discount_amount, o.partner_id, o.billing_to,
                     ${PARTNER_ORDER_DATE} AS order_date,
                     pinv.invoice_no AS billed_on
@@ -1765,7 +1812,9 @@ app.get('/api/admin/partner-billing/receipts', requireMenu('partner-billing'), a
         // admin mengejar sesuatu yang tidak perlu dikejar. Batal dihitung sendiri
         // supaya tetap terlihat, bukan disembunyikan.
         const aktif = rows.filter(r => r.order_status !== 'cancelled');
-        const punyaNomor = (r) => !!(r.receipt_no && String(r.receipt_no).trim());
+        // Order penukaran voucher tidak selalu punya lembar kwitansi — nomor
+        // vouchernya sudah cukup sebagai pengenal untuk partner.
+        const punyaNomor = (r) => !!((r.receipt_no && String(r.receipt_no).trim()) || (r.voucher_no && String(r.voucher_no).trim()));
         const filled = aktif.filter(punyaNomor).length;
         res.json({
             partner: { id: partner.id, name: partner.name, pic_name: partner.pic_name },
@@ -1779,7 +1828,9 @@ app.get('/api/admin/partner-billing/receipts', requireMenu('partner-billing'), a
 });
 
 // PUT /api/admin/partner-billing/receipts — simpan banyak nomor kwitansi sekaligus.
-// Body: { partner_id, entries: [{ order_id, receipt_no }] }
+// Body: { partner_id, entries: [{ order_id, receipt_no, voucher_no? }] }
+// voucher_no opsional per baris: kalau tidak dikirim (undefined), nilai lama
+// dibiarkan; string kosong = dihapus.
 //
 // Semua-atau-tidak sama sekali: satu baris bermasalah membatalkan seluruh
 // simpanan. Kalau separuh tersimpan, admin tidak punya cara tahu mana yang masuk
@@ -1811,7 +1862,20 @@ app.put('/api/admin/partner-billing/receipts', requireMenu('partner-billing', 'e
                     return res.status(400).json({ error: `Nomor kwitansi "${no}" dipakai lebih dari sekali dalam kiriman ini.` });
                 seen.set(key, oid);
             }
-            cleaned.push({ order_id: oid, receipt_no: no });
+            const adaVoucher = e && e.voucher_no !== undefined;
+            const vno = adaVoucher ? sanitizeVoucherNo(e.voucher_no) : undefined;
+            cleaned.push({ order_id: oid, receipt_no: no, voucher_no: vno });
+        }
+        // Voucher kembar di dalam kiriman ini sendiri (lintas baris).
+        {
+            const lihat = new Map();
+            for (const c of cleaned) {
+                for (const v of daftarVoucher(c.voucher_no)) {
+                    if (lihat.has(v) && lihat.get(v) !== c.order_id)
+                        return res.status(400).json({ error: `Voucher "${v}" dipakai lebih dari satu order dalam kiriman ini. Satu voucher hanya bisa ditukar sekali.` });
+                    lihat.set(v, c.order_id);
+                }
+            }
         }
 
         // Tiap order WAJIB milik partner ini dan bersumber collaboration_event —
@@ -1861,12 +1925,26 @@ app.put('/api/admin/partner-billing/receipts', requireMenu('partner-billing', 'e
             }
         }
 
+        // Voucher bentrok dengan order yang SUDAH tersimpan (di luar kiriman ini).
+        const semuaVoucher = cleaned.flatMap(c => daftarVoucher(c.voucher_no));
+        if (semuaVoucher.length) {
+            const b = await cekVoucherBentrok(partnerId, partner.name, semuaVoucher, cleaned.map(c => c.order_id));
+            if (b) return res.status(409).json({ error: `Voucher "${b.voucher}" sudah ditukar di order ${b.order_code}. Satu voucher hanya bisa ditukar sekali.` });
+        }
+
         await withTransaction(async (client) => {
             for (const c of cleaned) {
-                await client.query(
-                    'UPDATE orders SET receipt_no = $1, updated_at = NOW() WHERE id = $2',
-                    [c.receipt_no, c.order_id]
-                );
+                if (c.voucher_no === undefined) {
+                    await client.query(
+                        'UPDATE orders SET receipt_no = $1, updated_at = NOW() WHERE id = $2',
+                        [c.receipt_no, c.order_id]
+                    );
+                } else {
+                    await client.query(
+                        'UPDATE orders SET receipt_no = $1, voucher_no = $2, updated_at = NOW() WHERE id = $3',
+                        [c.receipt_no, c.voucher_no, c.order_id]
+                    );
+                }
             }
         });
 
@@ -1981,7 +2059,7 @@ async function fetchPartnerCandidates(partner, from, to) {
     if (to)   { params.push(to + ' 23:59:59.999'); where += ` AND ${PARTNER_ORDER_DATE} <= $${params.length}`; }
 
     const rows = await dbAll(
-        `SELECT o.id, o.order_code, o.customer_name, o.receipt_no, o.order_status,
+        `SELECT o.id, o.order_code, o.customer_name, o.receipt_no, o.voucher_no, o.order_status,
                 o.discount_amount, o.discount_label, o.shipping_cost, o.total_amount,
                 ${PARTNER_ORDER_DATE} AS order_date,
                 pinv.id AS billed_invoice_id, pinv.invoice_no AS billed_on, pinv.status AS billed_status
@@ -2056,7 +2134,7 @@ async function fetchPartnerCandidates(partner, from, to) {
         r.blocked_reason =
             cancelled ? 'Order dibatalkan'
             : r.billed_on ? `Sudah masuk tagihan ${r.billed_on}`
-            : (!r.receipt_no || !String(r.receipt_no).trim()) ? 'Nomor kwitansi belum diisi'
+            : (!(r.receipt_no && String(r.receipt_no).trim()) && !(r.voucher_no && String(r.voucher_no).trim())) ? 'Nomor kwitansi / voucher belum diisi'
             : null;
         r.billable = r.blocked_reason === null;
     }
@@ -2268,11 +2346,11 @@ app.post('/api/admin/partner-billing/invoices', requireMenu('partner-billing', '
                     `INSERT INTO partner_invoice_orders
                        (invoice_id, order_id, receipt_no, order_code, order_date, customer_name,
                         items_json, gross_amount, discount_amount, net_amount, discount_label,
-                        is_cancelled, is_active)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE)`,
+                        is_cancelled, is_active, voucher_no)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE,$13)`,
                     [invoiceId, r.id, r.receipt_no, r.order_code, r.order_date, r.customer_name,
                      JSON.stringify(r.items || []), r.gross_amount, r.discount_amount_calc,
-                     r.net_amount, r.discount_label || null, r.is_cancelled]
+                     r.net_amount, r.discount_label || null, r.is_cancelled, r.voucher_no || null]
                 );
             }
             return inv.rows[0];
@@ -4234,6 +4312,7 @@ app.post('/api/orders', async (req, res) => {
             discount_percent,// 0, 5, atau 30 — hanya untuk WA order
             billing_to,      // nama partner yang ditagih (collaboration_event), admin-only
             receipt_no,      // nomor lembar kwitansi fisik di event (collaboration_event), admin-only
+            voucher_no,      // nomor voucher promo partner, boleh beberapa (collaboration_event), admin-only
             invoice_date,    // override tanggal invoice (admin-only, opsional)
             invoice_notes    // catatan customer-facing di PDF invoice (admin-only, opsional)
         } = req.body;
@@ -4466,6 +4545,13 @@ app.post('/api/orders', async (req, res) => {
         const safeReceiptNo = (isAdmin && safeOrderSource === 'collaboration_event')
             ? sanitizeReceiptNo(receipt_no)
             : null;
+        const safeVoucherNo = (isAdmin && safeOrderSource === 'collaboration_event')
+            ? sanitizeVoucherNo(voucher_no)
+            : null;
+        if (safeVoucherNo && (safePartnerId || safeBillingTo)) {
+            const b = await cekVoucherBentrok(safePartnerId, safeBillingTo || '', daftarVoucher(safeVoucherNo), []);
+            if (b) return res.status(409).json({ error: `Voucher "${b.voucher}" sudah ditukar di order ${b.order_code}. Satu voucher hanya bisa ditukar sekali.` });
+        }
 
         // invoice_date: admin override utk tanggal yg tampil di invoice (customer request,
         // mis. backdated). YYYY-MM-DD dari client. Public callers DI-IGNORE (anti-tamper
@@ -4564,8 +4650,8 @@ app.post('/api/orders', async (req, res) => {
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
                   payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount, invoice_notes,
-                  partner_id, receipt_no)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id`,
+                  partner_id, receipt_no, voucher_no)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING id`,
                 [orderCode, customer_name, customer_phone, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
@@ -4583,7 +4669,7 @@ app.post('/api/orders', async (req, res) => {
                  safeDpAmount,
                  safeInvoiceNotes,
                  safePartnerId,
-                 safeReceiptNo]
+                 safeReceiptNo, safeVoucherNo]
             );
             const newOrderId = orderResult.rows[0].id;
 
@@ -5576,7 +5662,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             customer_name, customer_phone, customer_address,
             shipping_city, shipping_courier, shipping_weight_kg,
             shipping_cost, payment_method,
-            order_source, billing_to, receipt_no, notes, invoice_notes, invoice_date
+            order_source, billing_to, receipt_no, voucher_no, notes, invoice_notes, invoice_date
         } = req.body;
 
         const setClauses = [];
@@ -5682,6 +5768,24 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             setClauses.push(`receipt_no = $${idx++}`); params.push(sanitizeReceiptNo(receipt_no));
         } else if (sourceChangedAwayFromCollab || (receipt_no !== undefined && effectiveSource !== 'collaboration_event')) {
             setClauses.push(`receipt_no = $${idx++}`); params.push(null);
+        }
+        // voucher_no: pola sama dengan receipt_no, plus cek "satu voucher sekali".
+        if (voucher_no !== undefined && effectiveSource === 'collaboration_event') {
+            const vBaru = sanitizeVoucherNo(voucher_no);
+            if (vBaru) {
+                // Partner efektif: yang baru dikirim, kalau tidak, yang tersimpan.
+                let pid = order.partner_id, pname = order.billing_to || '';
+                if (billing_to !== undefined && String(billing_to).trim()) {
+                    pname = String(billing_to).trim().slice(0, 120);
+                    const prow = await dbGet('SELECT id FROM event_partners WHERE lower(btrim(name)) = lower(btrim($1))', [pname]);
+                    pid = prow ? prow.id : null;
+                }
+                const b = await cekVoucherBentrok(pid, pname, daftarVoucher(vBaru), [order.id]);
+                if (b) return res.status(409).json({ error: `Voucher "${b.voucher}" sudah ditukar di order ${b.order_code}. Satu voucher hanya bisa ditukar sekali.` });
+            }
+            setClauses.push(`voucher_no = $${idx++}`); params.push(vBaru);
+        } else if (sourceChangedAwayFromCollab || (voucher_no !== undefined && effectiveSource !== 'collaboration_event')) {
+            setClauses.push(`voucher_no = $${idx++}`); params.push(null);
         }
         // Notes — bebas teks, batasi panjang anti-abuse.
         if (notes !== undefined) {
