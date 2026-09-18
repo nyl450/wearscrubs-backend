@@ -4636,7 +4636,7 @@ app.post('/api/orders', async (req, res) => {
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
         // Public checkout kirim semantic value ('bank_transfer'/'qris'); admin form
         // dashboard pakai value lama (BCA/Mandiri/QRIS/Bonus-Free) — keduanya diterima.
-        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Bonus/Free','bank_transfer','qris'];
+        const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Voucher','Bonus/Free','bank_transfer','qris'];
         const safePaymentMethod = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
 
         // billing_to: nama partner yang ditagih. Admin-only & hanya relevan untuk
@@ -5027,8 +5027,10 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
         if (order.payment_status === 'paid') return res.status(400).json({ error: 'Sudah dikonfirmasi' });
 
-        // Order Bonus/Free tidak ada pembayaran nyata → bukti transfer opsional.
-        const isFreeOrder = order.payment_method === 'Bonus/Free';
+        // Order Bonus/Free tidak ada pembayaran nyata, dan order Voucher (promo
+        // partner, 17 Sep 2026) dibayar partner lewat tagihan, bukan transfer dari
+        // pembeli → bukti transfer opsional untuk keduanya.
+        const isFreeOrder = order.payment_method === 'Bonus/Free' || order.payment_method === 'Voucher';
         if (!req.file && !isFreeOrder) return res.status(400).json({ error: 'Foto bukti pembayaran wajib diupload' });
 
         // Upload to Supabase BEFORE the transaction — external call, can be slow.
@@ -5809,7 +5811,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
         }
         // Payment method — whitelist (same as POST /orders)
         if (payment_method !== undefined) {
-            const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Bonus/Free','bank_transfer','qris'];
+            const ALLOWED_PAYMENT = ['Transfer BCA / Mandiri','BCA','BRI','Mandiri','BNI','QRIS','Cash','Voucher','Bonus/Free','bank_transfer','qris'];
             const safe = ALLOWED_PAYMENT.includes(payment_method) ? payment_method : '';
             setClauses.push(`payment_method = $${idx++}`); params.push(safe);
         }
