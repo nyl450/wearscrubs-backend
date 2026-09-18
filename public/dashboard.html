@@ -1599,16 +1599,25 @@
         <div id="rtab-sales" class="report-panel space-y-3">
             <!-- Ringkasan sekalimat: jawaban langsung sebelum orang harus membaca kartu -->
             <div id="rep-summary" class="bg-cyan-500/8 border border-cyan-400/25 rounded-2xl px-4 py-3 text-sm text-cyan-50 leading-relaxed">—</div>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
                     <div class="text-[11px] font-semibold text-white/55">Penjualan Kotor</div>
                     <div id="rep-gross" class="text-lg lg:text-xl font-bold text-white mt-1">—</div>
                     <div class="text-[10px] text-white/35 mt-1">Harga barang sebelum potongan</div>
                 </div>
+                <!-- Potongan dipecah dua: diskon ke pembeli vs komisi partner.
+                     Keduanya mengurangi penjualan bersih, tapi artinya beda:
+                     diskon = harga jual diturunkan; consignment = uang memang
+                     bagian partner. -->
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
-                    <div class="text-[11px] font-semibold text-white/55">Diskon Diberikan</div>
+                    <div class="text-[11px] font-semibold text-white/55">Diskon Pelanggan</div>
                     <div id="rep-discount" class="text-lg lg:text-xl font-bold text-orange-300 mt-1">—</div>
-                    <div class="text-[10px] text-white/35 mt-1">Potongan harga ke pembeli</div>
+                    <div class="text-[10px] text-white/35 mt-1">Promo & diskon ke pembeli</div>
+                </div>
+                <div class="bg-darkcard border border-pink-400/25 rounded-2xl p-4">
+                    <div class="text-[11px] font-semibold text-pink-200/80">Consignment Partner</div>
+                    <div id="rep-consignment" class="text-lg lg:text-xl font-bold text-pink-300 mt-1">—</div>
+                    <div class="text-[10px] text-white/35 mt-1">Komisi partner event / collab</div>
                 </div>
                 <div class="bg-darkcard border border-white/10 rounded-2xl p-4">
                     <div class="text-[11px] font-semibold text-white/55">Uang Dikembalikan</div>
@@ -1618,7 +1627,7 @@
                 <div class="bg-darkcard border border-cyan-400/30 rounded-2xl p-4">
                     <div class="text-[11px] font-semibold text-cyan-200/80">Penjualan Bersih</div>
                     <div id="rep-net" class="text-lg lg:text-xl font-bold text-green-400 mt-1">—</div>
-                    <div class="text-[10px] text-white/40 mt-1">Kotor − diskon − refund</div>
+                    <div class="text-[10px] text-white/40 mt-1">Kotor − diskon − consignment − refund</div>
                 </div>
             </div>
             <!-- Uang masuk dipisah dari penjualan: penjualan event tercatat saat
@@ -1688,12 +1697,13 @@
         <!-- Tab: Sales Type -->
         <div id="rtab-type" class="report-panel hidden">
             <div class="bg-darkcard border border-white/10 rounded-2xl overflow-x-auto">
-                <table class="w-full text-sm min-w-[560px]">
+                <table class="w-full text-sm min-w-[640px]">
                     <thead class="text-white/40 text-[11px] uppercase tracking-wider"><tr>
                         <th class="text-left p-3">Channel</th>
                         <th class="text-right p-3">Order</th>
                         <th class="text-right p-3">Gross</th>
-                        <th class="text-right p-3">Discount</th>
+                        <th class="text-right p-3">Diskon</th>
+                        <th class="text-right p-3">Consignment</th>
                         <th class="text-right p-3">Refunds</th>
                         <th class="text-right p-3">Net</th>
                     </tr></thead>
@@ -3403,7 +3413,12 @@ async function loadReport() {
     try {
         const s = await apiFetch('/api/reports/sales' + qs);
         document.getElementById('rep-gross').textContent    = repRp(s.gross);
-        document.getElementById('rep-discount').textContent = s.discount ? '−' + repRp(s.discount) : repRp(0);
+        // Kalau backend belum mengirim pecahan (tidak mungkin di versi ini, tapi
+        // jangan sampai angka lama hilang), jatuh ke total diskon.
+        const dPel = s.discount_customer != null ? Number(s.discount_customer) : Number(s.discount || 0);
+        const dCon = Number(s.consignment || 0);
+        document.getElementById('rep-discount').textContent = dPel ? '−' + repRp(dPel) : repRp(0);
+        const cEl = document.getElementById('rep-consignment'); if (cEl) cEl.textContent = dCon ? '−' + repRp(dCon) : repRp(0);
         document.getElementById('rep-refunds').textContent  = s.refunds ? '−' + repRp(s.refunds) : repRp(0);
         document.getElementById('rep-net').textContent      = repRp(s.net);
         // Baris kas hanya muncul kalau memang ada bedanya — untuk periode tanpa
@@ -3477,7 +3492,8 @@ async function loadReport() {
                 <td class="p-3 font-medium">${repSourceLabel(t.source)}</td>
                 <td class="p-3 text-right text-white/70">${t.orders}</td>
                 <td class="p-3 text-right">${repRp(t.gross)}</td>
-                <td class="p-3 text-right text-orange-300">${t.discount ? '−' + repRp(t.discount) : '—'}</td>
+                <td class="p-3 text-right text-orange-300">${t.discount_customer ? '−' + repRp(t.discount_customer) : '—'}</td>
+                <td class="p-3 text-right text-pink-300">${t.consignment ? '−' + repRp(t.consignment) : '—'}</td>
                 <td class="p-3 text-right text-red-300">${t.refunds ? '−' + repRp(t.refunds) : '—'}</td>
                 <td class="p-3 text-right font-bold text-green-400">${repRp(t.net)}</td>
             </tr>`).join('');
@@ -3549,13 +3565,13 @@ async function exportReportExcel() {
         const header = [
             ['Wearscrubs — Report Penjualan'],
             [`Periode: ${from} s/d ${to}`],
-            [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Discount: Rp ${Number(salesKpi.discount||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
-            ['Logika: Subtotal = (Harga Satuan + Bordir/unit) × Qty · Disc % dipotong dari Subtotal (BORDIR IKUT consignment) · Total = Subtotal − Disc. Ongkir tidak dihitung per-baris.'],
-            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Harga Satuan','Subtotal','Disc %','Disc (Rp)','Total Sales',
+            [`Total Order Paid: ${salesKpi.orders || 0}  ·  Gross: Rp ${Number(salesKpi.gross||0).toLocaleString('id-ID')}  ·  Diskon Pelanggan: Rp ${Number(salesKpi.discount_customer||0).toLocaleString('id-ID')}  ·  Consignment Partner: Rp ${Number(salesKpi.consignment||0).toLocaleString('id-ID')}  ·  Refunds: Rp ${Number(salesKpi.refunds||0).toLocaleString('id-ID')}  ·  Net: Rp ${Number(salesKpi.net||0).toLocaleString('id-ID')}`],
+            ['Logika: Subtotal = (Harga Satuan + Bordir/unit) × Qty · Diskon & Consignment order dibagi ke tiap baris sebanding dengan subtotalnya · Total = Subtotal − Diskon − Consignment. Ongkir tidak dihitung per-baris.'],
+            ['Tanggal Bayar','Kode Order','Customer','Channel','Produk','SKU','Kategori','Variant','Warna','Ukuran','Qty','Bordir','Harga Satuan','Subtotal','Diskon (Rp)','Consignment (Rp)','Total Sales',
                 ...(showCogs ? ['Total HPP','Gross Profit','Margin %'] : [])],
         ];
 
-        let totQty=0, totBordir=0, totSubtotal=0, totDisc=0, totSales=0;
+        let totQty=0, totBordir=0, totSubtotal=0, totDisc=0, totCons=0, totSales=0;
         const dataRows = list.map(r => {
             const qty = Number(r.quantity || 0);
             const unitCombined = Number(r.unit_price || 0); // DB: base + bordir/unit
@@ -3569,11 +3585,16 @@ async function exportReportExcel() {
             const basePerUnit = Math.max(0, unitCombined - bordirPerUnit); // harga produk murni
             // Subtotal INCLUDES bordir (gross line, sebelum discount).
             const subtotal = (basePerUnit + bordirPerUnit) * qty;
-            const discPct = Number(r.discount_percent || 0);
-            const discAmt = Math.round(subtotal * discPct / 100);
+            // Potongan order dibagi ke tiap baris sebanding subtotalnya. Dulu
+            // memakai discount_percent, yang bernilai 0 untuk semua order dari
+            // keranjang Kasir (potongannya dikirim sebagai nominal) -> kolom Disc
+            // kosong padahal ordernya kena consignment.
+            const orderGross = Number(r.order_gross || 0);
+            const bagi = (nilai) => orderGross > 0 ? Math.round(Number(nilai || 0) * subtotal / orderGross) : 0;
+            const discAmt = bagi(r.order_discount_customer);
+            const consAmt = bagi(r.order_consignment);
             const bordirLineTotal = bordirPerUnit * qty;
-            // Total = Subtotal − Disc (sesuai DB & invoice flow).
-            const totalLine = subtotal - discAmt;
+            const totalLine = subtotal - discAmt - consAmt;
 
             // Bordir column: gabung type + Rp/unit dalam satu sel.
             let bordirText = '—';
@@ -3581,7 +3602,7 @@ async function exportReportExcel() {
             else if (bNama)     bordirText = `Nama - Rp ${bNamaRp.toLocaleString('id-ID')}`;
             else if (bLogo)     bordirText = `Logo - Rp ${bLogoRp.toLocaleString('id-ID')}`;
 
-            totQty += qty; totBordir += bordirLineTotal; totSubtotal += subtotal; totDisc += discAmt; totSales += totalLine;
+            totQty += qty; totBordir += bordirLineTotal; totSubtotal += subtotal; totDisc += discAmt; totCons += consAmt; totSales += totalLine;
 
             // COGS per baris (snapshot total_cogs sudah ×qty). GP = Total Sales − HPP.
             const lineCogs = showCogs ? Number(r.total_cogs || 0) : 0;
@@ -3610,8 +3631,8 @@ async function exportReportExcel() {
                 bordirText,                         // 11 — kiri Harga Satuan
                 basePerUnit,                        // 12 — Harga Satuan
                 subtotal,                           // 13 — Subtotal (includes bordir)
-                discPct,                            // 14
-                discAmt,                            // 15
+                discAmt,                            // 14 — diskon pelanggan (Rp)
+                consAmt,                            // 15 — consignment partner (Rp)
                 totalLine,                          // 16
                 ...(showCogs ? [lineCogs, lineGP, lineMargin] : []),  // 17,18,19
             ];
@@ -3620,7 +3641,7 @@ async function exportReportExcel() {
         // TOTAL row — kolom Bordir diisi total bordir Rp agregat (text "Rp X").
         const totalRow = ['TOTAL','','','','','','','','','', totQty,
             totBordir > 0 ? `Rp ${totBordir.toLocaleString('id-ID')}` : '—',
-            '', totSubtotal, '', totDisc, totSales,
+            '', totSubtotal, totDisc, totCons, totSales,
             ...(showCogs ? [totCogs, totGP, (totSales > 0 ? Math.round(totGP / totSales * 100) : 0)] : [])];
 
         const aoa = [...header, ...dataRows];
@@ -3636,7 +3657,7 @@ async function exportReportExcel() {
         // Bordir (11) lebih lebar — text panjang ("Nama+Logo - Rp 20.000+30.000")
         ws['!cols'] = [
             {wch:18},{wch:16},{wch:24},{wch:18},{wch:32},{wch:14},{wch:12},{wch:14},{wch:14},{wch:8},
-            {wch:6},{wch:26},{wch:14},{wch:14},{wch:7},{wch:14},{wch:14},
+            {wch:6},{wch:26},{wch:14},{wch:14},{wch:14},{wch:16},{wch:14},
             ...(showCogs ? [{wch:14},{wch:14},{wch:9}] : [])
         ];
 

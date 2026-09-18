@@ -2034,6 +2034,63 @@ function hitungPotonganBerantai(base, pcts) {
 // pernah dikoreksi manual lewat SQL bisa saja tidak cocok — untuk yang begitu
 // centang Consignment DIMATIKAN, karena menghitung ulang akan menimpa angka yang
 // sengaja dibuat berbeda.
+// Memecah SATU angka potongan order menjadi dua: diskon PELANGGAN (promo /
+// diskon manual, harga yang benar-benar dibayar pembeli lebih rendah) dan
+// CONSIGNMENT (komisi partner, uangnya memang bukan milik Wearscrubs sejak awal).
+// Laporan penjualan perlu keduanya terpisah (permintaan James 18 Sep 2026).
+// Tahapnya dihitung berurutan dari label (lihat hitungPotonganBerantai); tahap
+// terakhir dipaksa = sisa supaya jumlahnya persis sama dengan yang tersimpan.
+// Label tak terbaca -> seluruhnya dianggap diskon pelanggan (jangan menebak).
+function pecahPotonganOrder(label, discount, gross, bordir) {
+    const total = Number(discount || 0);
+    if (total <= 0) return { customer: 0, consignment: 0 };
+    const pcts = discPctsDariLabel(label);
+    if (!pcts || !pcts.length) return { customer: total, consignment: 0 };
+    const incBordir = !/\(\s*produk saja\s*\)/i.test(String(label || ''));
+    let sisa = incBordir ? Number(gross || 0) : Number(gross || 0) - Number(bordir || 0);
+    let customer = 0, consignment = 0, dipakai = 0;
+    pcts.forEach((pct, i) => {
+        const terakhir = i === pcts.length - 1;
+        const d = terakhir ? total - dipakai
+            : ((pct && pct.rp) ? Math.min(sisa, pct.rp) : Math.round(sisa * pct / 100));
+        if (pct === DISC_CONSIGNMENT_PCT) consignment += d; else customer += d;
+        dipakai += d; sisa -= d;
+    });
+    if (customer < 0 || consignment < 0) return { customer: total, consignment: 0 };
+    return { customer, consignment };
+}
+// Ringkasan diskon pelanggan vs consignment untuk sekumpulan order dalam
+// periode laporan. Bordir per order diambil dari order_items (tanpa sub-query
+// berkorelasi supaya tetap bisa diuji di pg-mem).
+async function ringkasPotongan(fromTs, toTs, source) {
+    const orders = await dbAll(
+        `SELECT o.id, o.order_source, o.discount_amount, o.discount_label,
+                (o.total_amount - o.shipping_cost + o.discount_amount) AS gross
+           FROM orders o
+          WHERE o.payment_status='paid' AND o.order_status<>'cancelled'
+            AND o.discount_amount > 0
+            AND o.paid_at >= $1 AND o.paid_at <= $2
+            AND ($3 = '' OR o.order_source = $3)`,
+        [fromTs, toTs, source || '']);
+    const out = { customer: 0, consignment: 0, per_source: {} , per_order: {} };
+    if (!orders.length) return out;
+    const ph = orders.map((_, i) => '$' + (i + 1)).join(',');
+    const bordirRows = await dbAll(
+        `SELECT order_id,
+                SUM(((CASE WHEN bordir_nama THEN COALESCE(bordir_nama_price, 0) ELSE 0 END)
+                   + (CASE WHEN bordir_logo THEN COALESCE(bordir_logo_price, 0) ELSE 0 END)) * quantity) AS bordir
+           FROM order_items WHERE order_id IN (${ph}) GROUP BY order_id`,
+        orders.map(o => o.id));
+    const bordirMap = new Map(bordirRows.map(b => [Number(b.order_id), Number(b.bordir || 0)]));
+    for (const o of orders) {
+        const p = pecahPotonganOrder(o.discount_label, o.discount_amount, o.gross, bordirMap.get(Number(o.id)) || 0);
+        out.customer += p.customer; out.consignment += p.consignment;
+        out.per_order[o.id] = p;
+        const ps = out.per_source[o.order_source] || (out.per_source[o.order_source] = { customer: 0, consignment: 0 });
+        ps.customer += p.customer; ps.consignment += p.consignment;
+    }
+    return out;
+}
 function potonganCocokLabel(label, discount, gross, bordir) {
     // Potongan nol = TIDAK ADA potongan, apa pun bunyi labelnya. Jalur keranjang
     // Kasir ikut menuliskan "Diskon per produk" walau nominalnya nol, dan label
@@ -4017,7 +4074,10 @@ app.get('/api/reports/sales', requireMenu('report','view'), async (req, res) => 
             [r.fromTs, r.toTs]
         );
         const gross = Number(sales.gross), discount = Number(sales.discount), refunds = Number(ref.refunds);
+        // Potongan dipecah: diskon pelanggan vs consignment partner.
+        const pot = await ringkasPotongan(r.fromTs, r.toTs, r.source);
         res.json({ from: r.from, to: r.to, source: r.source, gross, discount, refunds,
+                   discount_customer: pot.customer, consignment: pot.consignment,
                    net: gross - discount - refunds, orders: sales.orders,
                    cash_in: Math.max(0, Number(cash.masuk) - refunds),
                    receivable: Number(piutang.nilai), receivable_orders: piutang.orders });
@@ -4118,12 +4178,16 @@ app.get('/api/reports/sales-type', requireMenu('report','view'), async (req, res
             [r.fromTs, r.toTs]
         );
         const refMap = Object.fromEntries(refRows.map(x => [x.source, Number(x.refunds)]));
+        const pot = await ringkasPotongan(r.fromTs, r.toTs, '');
         const all = ['website', 'whatsapp', 'event_offline', 'offline', 'collaboration_event'];
         const byKey = Object.fromEntries(rows.map(x => [x.source, x]));
         const out = all.map(src => {
             const row = byKey[src] || { orders: 0, gross: 0, discount: 0 };
             const gross = Number(row.gross), discount = Number(row.discount), refunds = refMap[src] || 0;
-            return { source: src, orders: row.orders || 0, gross, discount, refunds, net: gross - discount - refunds };
+            const ps = pot.per_source[src] || { customer: 0, consignment: 0 };
+            return { source: src, orders: row.orders || 0, gross, discount,
+                     discount_customer: ps.customer, consignment: ps.consignment,
+                     refunds, net: gross - discount - refunds };
         });
         res.json(out);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -4141,6 +4205,10 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
                     o.customer_name,
                     o.order_source,
                     COALESCE(o.discount_percent, 0)::int AS discount_percent,
+                    o.id AS order_id,
+                    o.discount_amount::bigint AS order_discount,
+                    o.discount_label,
+                    (o.total_amount - o.shipping_cost + o.discount_amount)::bigint AS order_gross,
                     COALESCE(p.name, oi.custom_product_name) AS product_name,
                     p.sku AS sku,
                     COALESCE(p.category, oi.custom_product_category) AS category,
@@ -4172,6 +4240,15 @@ app.get('/api/reports/items-detail', requireMenu('report','view'), async (req, r
               ORDER BY o.paid_at ASC, o.order_code ASC`,
             [r.fromTs, r.toTs, r.source]
         );
+        // Potongan per order dipecah (diskon pelanggan vs consignment) supaya Excel
+        // bisa membagi per baris secara proporsional. Dulu Excel memakai
+        // discount_percent yang bernilai 0 untuk semua order dari keranjang Kasir.
+        const pot = await ringkasPotongan(r.fromTs, r.toTs, r.source);
+        rows.forEach(row => {
+            const p = pot.per_order[row.order_id] || { customer: 0, consignment: 0 };
+            row.order_discount_customer = p.customer;
+            row.order_consignment = p.consignment;
+        });
         // COGS rahasia → strip dari payload kalau bukan admin (report:view bisa dipunya staf).
         const isAdmin = req.user && req.user.role === 'admin';
         if (!isAdmin) rows.forEach(row => { delete row.unit_cogs; delete row.bordir_nama_cogs; delete row.bordir_logo_cogs; delete row.total_cogs; });

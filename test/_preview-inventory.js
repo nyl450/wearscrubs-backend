@@ -17,5 +17,20 @@ const { boot, none } = require('./_bootstrap');
       (1, 'S', 'black', 'panjang', 3, 0), (1, 'M', 'black', 'panjang', 15, 0),
       (2, 'M', 'charcoal-grey', 'straight', 6, 0), (2, 'L', 'charcoal-grey', 'straight', 1, 0);
     `);
+    for (let i = 0; i < 6; i++) { try { none(`ALTER TABLE orders DROP CONSTRAINT orders_constraint_${i}`); } catch (e) {} }
+    // Data laporan: order lunas dengan potongan campuran (untuk melihat modul Report).
+    none(`
+    INSERT INTO event_partners (id, name, is_active) VALUES (1, 'PT Arta Otto Indonesia', TRUE);
+    INSERT INTO orders (id, order_code, customer_name, customer_phone, customer_address, total_amount,
+                        payment_status, order_status, shipping_cost, shipping_courier, order_source,
+                        billing_to, partner_id, paid_at, invoice_date, discount_amount, discount_label) VALUES
+      (901, 'WS-EV-901', 'Suci', '0811', '-', 140000, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, NOW(), NOW(), 60000, 'Consignment 30% (produk + bordir)'),
+      (902, 'WS-EV-902', 'Ayu',  '0812', '-', 138600, 'paid', 'done', 0, 'J&T', 'collaboration_event', 'PT Arta Otto Indonesia', 1, NOW(), NOW(), 81400, 'Promo 10% + Consignment 30% (produk + bordir)'),
+      (701, 'WS-WA-701', 'Budi', '0813', '-', 305000, 'paid', 'done', 20000, 'J&T', 'whatsapp', NULL, NULL, NOW(), NOW(), 15000, 'Diskon 5% (produk saja)');
+    INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price, total_cogs) VALUES
+      (1, 901, 1, 'M', 'charcoal-grey', 'pendek', 1, 200000, 130000),
+      (2, 902, 1, 'M', 'charcoal-grey', 'pendek', 1, 220000, 130000),
+      (3, 701, 1, 'M', 'charcoal-grey', 'panjang', 1, 300000, 130000);
+    `);
     console.log('Pratinjau siap: http://localhost:3000/dashboard.html (admin / admin123)');
 })();
