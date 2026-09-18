@@ -6841,8 +6841,12 @@ async function openVariantHistory(product_id, size, color, variant_type, product
                             <span class="text-xs font-bold ${ml.color}">${labelText}</span>
                             <span class="text-xs font-bold ${m.quantity_change > 0 ? 'text-green-400' : 'text-red-400'}">${sign}${m.quantity_change}</span>
                         </div>
-                        <div class="text-[10px] text-white/30 mt-0.5">${m.quantity_before} → ${m.quantity_after}${noteText ? ` · ${noteText}` : ''}</div>
-                        <div class="text-[9px] text-white/20 mt-0.5">${ts}${m.admin_user ? ' · ' + m.admin_user : ''}</div>
+                        <div class="text-[10px] text-white/30 mt-0.5">${m.quantity_before} → ${m.quantity_after}${noteText ? ` · ${esc(noteText)}` : ''}</div>
+                        <div class="text-[9px] text-white/20 mt-0.5">${ts}${m.admin_user ? ' · ' + esc(m.admin_user) : ''}</div>
+                        ${m.order_ref ? `<button onclick="closeHistoryModal(); viewOrder(${Number(m.order_ref.id)})"
+                            class="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white/8 border border-white/15 text-white/80 hover:bg-white/15 transition">
+                            <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i> ${esc(m.order_ref.customer_name || '')} · ${esc(m.order_ref.order_code)}
+                        </button>` : ''}
                     </div>
                 </div>`;
             }).join('');

@@ -142,7 +142,28 @@ async function run() {
     check('panjang pakai foto panjang slot 1', fotoDari('panjang') === 'foto-panjang.webp', fotoDari('panjang'));
     check('lengan tanpa foto sendiri jatuh ke foto warna', fotoDari('jogger') === 'foto-pendek.webp', fotoDari('jogger'));
 
+    group('11c. Riwayat varian menautkan pergerakan "Terjual" ke ordernya');
+    // Permintaan 18 Sep: tombol buka detail pesanan dari riwayat. Pergerakan lama
+    // tidak punya order_id, hanya kode order di catatan -> dicocokkan lewat kode.
+    none(`DELETE FROM stock_movements; DELETE FROM order_items; DELETE FROM orders;
+          INSERT INTO orders (id, order_code, customer_name, customer_phone, customer_address, total_amount,
+                              payment_status, order_status, shipping_cost, shipping_courier, order_source) VALUES
+            (300, 'WS-WA-20260724-1420', 'Dr. Maya', '081234567890', '-', 100000, 'paid', 'done', 0, 'J&T', 'whatsapp');
+          INSERT INTO stock_movements (id, product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user, created_at) VALUES
+            (21, 2, 'S', 'maroon', 'pendek', 'order_out', -1, 5, 4, 'Order WS-WA-20260724-1420', 300,  'admin', '2026-07-24 11:18:00'),
+            (22, 2, 'S', 'maroon', 'pendek', 'order_out', -1, 4, 3, 'Order WS-WA-20260724-1420', NULL, 'admin', '2026-07-25 11:18:00'),
+            (23, 2, 'S', 'maroon', 'pendek', 'order_out', -1, 3, 2, 'Order WS-TIDAK-ADA-1',       NULL, 'admin', '2026-07-26 11:18:00'),
+            (24, 2, 'S', 'maroon', 'pendek', 'receive',    5, 2, 7, 'Terima stok baru',           NULL, 'admin', '2026-07-27 11:18:00');`);
+    r = await get('/api/inventory/variant/history?product_id=2&color=maroon&size=S&variant_type=pendek');
+    check('200', r.status === 200, r.body);
+    const mv = Object.fromEntries((r.body.movements || []).map(m => [m.id, m]));
+    check('order_id terisi -> order_ref lengkap', mv[21] && mv[21].order_ref && mv[21].order_ref.id === 300 && mv[21].order_ref.customer_name === 'Dr. Maya', mv[21] && mv[21].order_ref);
+    check('pergerakan lama (tanpa order_id) dicocokkan lewat kode di catatan', mv[22] && mv[22].order_ref && mv[22].order_ref.id === 300, mv[22] && mv[22].order_ref);
+    check('kode yang tidak ada -> tanpa tautan', mv[23] && mv[23].order_ref === null, mv[23] && mv[23].order_ref);
+    check('terima stok -> tanpa tautan', mv[24] && mv[24].order_ref === null, mv[24] && mv[24].order_ref);
+
     group('12. Saring per produk');
+    seed();
     r = await q('product_id=1');
     check('hanya produk 1', JSON.stringify(idsOf(r.body)) === JSON.stringify([5, 4, 1]), idsOf(r.body));
 

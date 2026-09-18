@@ -3495,6 +3495,28 @@ app.get('/api/inventory/variant/history', requireAuth(), async (req, res) => {
             [product_id, color, size, variant_type]
         );
 
+        // Pergerakan "Terjual" ditautkan ke ordernya supaya riwayat bisa langsung
+        // membuka detail pesanan (permintaan James 18 Sep: tidak perlu salin kode
+        // order). order_id baru diisi sejak pertengahan 2026; pergerakan lama
+        // hanya punya kode order di catatan ("Order WS-..."), jadi dicocokkan
+        // lewat kode itu sebagai cadangan.
+        const kodeDariNote = (n) => { const m = /(WS-[A-Z0-9]+(?:-[A-Z0-9]+)*)/i.exec(String(n || '')); return m ? m[1] : null; };
+        const ids = [...new Set(movements.filter(m => m.order_id).map(m => Number(m.order_id)))];
+        const kodes = [...new Set(movements.filter(m => !m.order_id).map(m => kodeDariNote(m.note)).filter(Boolean))];
+        const petaId = new Map(), petaKode = new Map();
+        if (ids.length) {
+            const rows = await dbAll(`SELECT id, order_code, customer_name FROM orders WHERE id IN (${ids.map((_, i) => '$' + (i + 1)).join(',')})`, ids);
+            rows.forEach(r => petaId.set(Number(r.id), r));
+        }
+        if (kodes.length) {
+            const rows = await dbAll(`SELECT id, order_code, customer_name FROM orders WHERE order_code IN (${kodes.map((_, i) => '$' + (i + 1)).join(',')})`, kodes);
+            rows.forEach(r => petaKode.set(r.order_code, r));
+        }
+        for (const m of movements) {
+            const o = m.order_id ? petaId.get(Number(m.order_id)) : petaKode.get(kodeDariNote(m.note));
+            m.order_ref = o ? { id: o.id, order_code: o.order_code, customer_name: o.customer_name } : null;
+        }
+
         res.json({ movements, buyers });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
