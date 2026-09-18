@@ -3313,6 +3313,20 @@ app.get('/api/inventory/all', requireAuth(), async (req, res) => {
                CASE i.size WHEN 'S' THEN 1 WHEN 'M' THEN 2 WHEN 'L' THEN 3 WHEN 'XL' THEN 4 WHEN 'XXL' THEN 5 ELSE 6 END`,
             []
         );
+        // Foto per warna untuk kartu Inventory (mode Card menampilkan gambar di
+        // samping daftar ukuran). Digabung di JS, bukan sub-query berkorelasi,
+        // supaya endpoint ini tetap bisa diuji di pg-mem. Foto slot terkecil
+        // per (produk, warna) yang dipakai; variant_type diabaikan karena foto
+        // memang per warna.
+        const fotos = await dbAll(
+            `SELECT product_id, color, photo_url, slot FROM product_variants
+              WHERE photo_url IS NOT NULL AND photo_url <> '' ORDER BY product_id, color, slot NULLS LAST, id`, []);
+        const fotoWarna = new Map();
+        for (const f of fotos) {
+            const k = f.product_id + '|' + f.color;
+            if (!fotoWarna.has(k)) fotoWarna.set(k, f.photo_url);
+        }
+        for (const r of rows) r.photo_url = fotoWarna.get(r.product_id + '|' + r.color) || null;
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -6069,7 +6069,11 @@ function renderInventory() {
         return;
     }
 
-    // group by product_id
+    // Mode Card (dirombak 18 Sep 2026, permintaan James): tiap kelompok
+    // WARNA + LENGAN jadi satu kotak sendiri dengan foto di samping, supaya
+    // "Lengan Pendek" dan "Lengan Panjang" tidak lagi satu baris memanjang yang
+    // gampang salah baca. Angka stok TIDAK bisa diketik langsung: harus lewat
+    // tombol Edit → isi angka + alasan → OK (lihat invEditStart).
     const byProduct = {};
     rows.forEach(r => {
         if (!byProduct[r.product_id]) byProduct[r.product_id] = { name: r.product_name, sku: r.sku, rows: [] };
@@ -6078,72 +6082,78 @@ function renderInventory() {
 
     let html = '';
     Object.entries(byProduct).forEach(([pid, prod]) => {
-        // group rows by color+variant_type
         const byVariant = {};
         prod.rows.forEach(r => {
             const vk = `${r.color}||${r.variant_type}`;
-            if (!byVariant[vk]) byVariant[vk] = { color: r.color, vtype: r.variant_type, sizes: [] };
+            if (!byVariant[vk]) byVariant[vk] = { color: r.color, vtype: r.variant_type, photo: r.photo_url, sizes: [] };
             byVariant[vk].sizes.push(r);
         });
 
-        let variantHtml = '';
-        Object.values(byVariant).forEach(v => {
+        let boxes = '';
+        // Urutan kotak: per warna, Lengan Pendek sebelum Lengan Panjang (urutan
+        // alfabet "panjang" < "pendek" terasa terbalik saat dibaca).
+        const urutVt = { pendek: 0, panjang: 1 };
+        Object.values(byVariant).sort((a, b) =>
+            String(a.color).localeCompare(String(b.color)) ||
+            ((urutVt[a.vtype] ?? 5) - (urutVt[b.vtype] ?? 5)) ||
+            String(a.vtype).localeCompare(String(b.vtype))
+        ).forEach(v => {
             const cm = resolveColor(v.color);
-            const vtLabel = (v.vtype && v.vtype !== 'null') ? `<span class="text-[11px] font-semibold text-white/50 ml-1.5 tracking-wide">· ${v.vtype}</span>` : '';
+            const vt = invVtypeLabel(v.vtype);
+            const foto = v.photo ? resolvePhoto(v.photo) : '';
             let sizeRows = '';
             v.sizes.forEach(r => {
                 const stock       = parseInt(r.stock);
                 const stockReject = parseInt(r.stock_reject || 0);
-                const stockClass  = stock === 0 ? 'text-red-400 font-bold' : stock < 5 ? 'text-yellow-400 font-bold' : 'text-white/80';
-                const badgeClass  = stock === 0 ? '!border-red-400/50 !text-red-400' : stock < 5 ? '!border-yellow-400/50 !text-yellow-400' : '';
+                const stockClass  = stock === 0 ? 'text-red-400' : stock < 5 ? 'text-yellow-400' : 'text-white';
                 const key         = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
                 const rejectBadge = stockReject > 0
                     ? `<button onclick="openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
-                           class="flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition"
-                           title="Stok Reject — klik untuk ubah ke Normal">
-                           <i class="fa-solid fa-triangle-exclamation text-[8px]"></i>${stockReject} reject
-                       </button>` : '';
+                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition"
+                           title="Stok Reject — klik untuk ubah ke Normal">${stockReject} reject</button>` : '';
                 const resv     = cachedReservations[key];
                 const poBadge  = resv && resv.po_qty > 0
                     ? `<button onclick="showModule('preorder')"
-                           class="flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg bg-orange-500/10 border border-orange-400/30 text-orange-300 hover:bg-orange-500/20 transition"
-                           title="${resv.po_qty} pcs Pre-Order menunggu stok — buka menu Pre-Order">
-                           <i class="fa-solid fa-clock text-[8px]"></i>${resv.po_qty} PO
-                       </button>` : '';
+                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 border border-orange-400/30 text-orange-300 hover:bg-orange-500/20 transition"
+                           title="${resv.po_qty} pcs Pre-Order menunggu stok">${resv.po_qty} PO</button>` : '';
                 sizeRows += `
-                <div class="flex items-center gap-2 py-2.5 border-t border-white/5 first:border-0 flex-wrap">
-                    <span class="text-xs font-bold text-white/50 w-8 shrink-0">${r.size}</span>
-                    <input type="number" min="0" value="${stock}" id="inv-${key}"
-                        data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}"
-                        class="!w-16 !rounded-lg !py-1.5 !px-2 text-center text-sm shrink-0 ${badgeClass}"
-                        onblur="invSaveOnBlur(this)">
-                    <span class="${stockClass} text-xs flex-1 min-w-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
-                    ${poBadge}
-                    ${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}
-                    ${rejectBadge}
-                    <div class="flex gap-1.5 shrink-0">
+                <div class="inv-size-row flex items-center gap-2 py-1.5 border-t border-white/5 first:border-0" id="invrow-${key}"
+                     data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-stock="${stock}">
+                    <span class="text-xs font-bold text-white/60 w-12 shrink-0">${esc(r.size)}</span>
+                    <span class="text-base font-bold tabular-nums w-10 text-right shrink-0 ${stockClass}">${stock}</span>
+                    <span class="text-[10px] ${stockClass} w-10 shrink-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    <div class="flex items-center gap-1 flex-1 min-w-0 flex-wrap">${poBadge}${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}${rejectBadge}</div>
+                    <div class="flex gap-1 shrink-0">
+                        <button onclick="invEditStart('${key}')"
+                            class="text-[10px] px-2.5 py-1 rounded-lg bg-white/8 border border-white/15 text-white/80 hover:bg-white/15 transition font-bold" title="Ubah stok">
+                            <i class="fa-solid fa-pen text-[9px]"></i> Edit
+                        </button>
                         <button onclick="openReceiveStock(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
-                            class="text-[10px] px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-400/20 text-green-400 hover:bg-green-500/20 transition font-bold"
-                            title="Terima Stok">
+                            class="text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-400/20 text-green-400 hover:bg-green-500/20 transition font-bold" title="Terima Stok">
                             <i class="fa-solid fa-plus"></i>
                         </button>
                         <button onclick="openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')"
-                            class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition"
-                            title="Riwayat">
+                            class="text-[10px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition" title="Riwayat">
                             <i class="fa-solid fa-clock-rotate-left"></i>
                         </button>
                     </div>
                 </div>`;
             });
 
-            variantHtml += `
-            <div class="border-t border-white/5 pt-3 mt-3 first:border-0 first:pt-0 first:mt-0">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="w-3 h-3 rounded-full border border-white/15 shrink-0" style="background:${cm.hex}"></span>
-                    <span class="text-xs font-semibold text-white/70">${cm.label}</span>
-                    ${vtLabel}
+            boxes += `
+            <div class="flex gap-3 bg-white/[0.03] border border-white/8 rounded-xl p-3">
+                <div class="w-20 h-24 rounded-lg overflow-hidden bg-darkbg border border-white/10 shrink-0 flex items-center justify-center">
+                    ${foto ? `<img src="${escAttr(foto)}" alt="" class="w-full h-full object-cover object-top" loading="lazy" onerror="this.remove()">`
+                           : `<i class="fa-solid fa-shirt text-white/15 text-2xl"></i>`}
                 </div>
-                ${sizeRows}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span class="w-3 h-3 rounded-full border border-white/15 shrink-0" style="background:${cm.hex}"></span>
+                        <span class="text-sm font-bold text-white/90">${esc(cm.label)}</span>
+                        ${vt ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-400/30 text-indigo-200 uppercase tracking-wide">${esc(vt)}</span>` : ''}
+                    </div>
+                    ${sizeRows}
+                </div>
             </div>`;
         });
 
@@ -6151,16 +6161,98 @@ function renderInventory() {
         <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
             <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
                 <div>
-                    <div class="font-bold text-sm">${prod.name}</div>
-                    <div class="text-[10px] font-mono text-white/30 mt-0.5">${prod.sku || ''}</div>
+                    <div class="font-bold text-sm">${esc(prod.name)}</div>
+                    <div class="text-[10px] font-mono text-white/30 mt-0.5">${esc(prod.sku || '')}</div>
                 </div>
                 <span class="text-[10px] text-white/30">${prod.rows.length} varian</span>
             </div>
-            <div class="px-4 py-3">${variantHtml}</div>
+            <div class="p-3 grid grid-cols-1 xl:grid-cols-2 gap-3">${boxes}</div>
         </div>`;
     });
 
     container.innerHTML = html;
+}
+
+// Label lengan/model di kartu Inventory. pendek/panjang ditulis lengkap supaya
+// tidak tertukar saat dibaca cepat.
+function invVtypeLabel(vt) {
+    if (!vt || vt === 'null') return '';
+    return ({ pendek: 'Lengan Pendek', panjang: 'Lengan Panjang', straight: 'Straight', jogger: 'Jogger' })[vt] || vt;
+}
+
+// ── Edit stok lewat tombol (mode Card) ──────────────────────────────────────
+// Dulu angkanya bisa diketik langsung di kartu dan alasan baru ditanya
+// belakangan; James sering salah ketik di baris yang salah. Sekarang baris
+// hanya membuka editor kalau tombol Edit diklik, dan hanya satu editor yang
+// terbuka pada satu waktu.
+let invEditingKey = null;
+function invEditStart(key) {
+    if (invEditingKey && invEditingKey !== key) invEditCancel(invEditingKey);
+    const row = document.getElementById('invrow-' + key);
+    if (!row || row.dataset.editing === '1') return;
+    invEditingKey = key;
+    row.dataset.editing = '1';
+    row._asli = row.innerHTML;
+    const current = parseInt(row.dataset.stock) || 0;
+    const defaultReason = currentDefaultReason();
+    row.innerHTML = `
+        <span class="text-xs font-bold text-white/60 w-12 shrink-0">${esc(row.dataset.size)}</span>
+        <div class="flex-1 min-w-0 grid gap-1.5" style="grid-template-columns: 4.5rem minmax(0,1fr);">
+            <input type="number" min="0" value="${current}" class="inv-edit-val !w-full !rounded-lg !px-2 text-center text-sm font-bold" style="height:34px;padding-top:0;padding-bottom:0;"
+                   onkeydown="if(event.key==='Enter'){invEditSave('${key}')}else if(event.key==='Escape'){invEditCancel('${key}')}">
+            <select class="inv-edit-reason !w-full !rounded-lg !px-2 text-xs" style="height:34px;padding-top:0;padding-bottom:0;" onchange="this.parentElement.querySelector('.inv-edit-note').classList.toggle('hidden', this.value !== 'Lainnya')">
+                ${STOCK_REASONS.map(r => `<option value="${escAttr(r)}" ${r === defaultReason ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+            </select>
+            <input type="text" maxlength="200" placeholder="Catatan (opsional)" class="inv-edit-note col-span-2 !w-full !rounded-lg !py-1.5 !px-2 text-xs hidden">
+        </div>
+        <div class="flex gap-1 shrink-0">
+            <button onclick="invEditSave('${key}')" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white text-black font-bold hover:bg-white/90 transition">OK</button>
+            <button onclick="invEditCancel('${key}')" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition">Batal</button>
+        </div>`;
+    const inp = row.querySelector('.inv-edit-val');
+    setTimeout(() => { inp.focus(); inp.select(); }, 20);
+}
+function invEditCancel(key) {
+    const row = document.getElementById('invrow-' + key);
+    if (row && row.dataset.editing === '1') { row.innerHTML = row._asli; delete row.dataset.editing; }
+    if (invEditingKey === key) invEditingKey = null;
+}
+async function invEditSave(key) {
+    const row = document.getElementById('invrow-' + key);
+    if (!row || row.dataset.editing !== '1') return;
+    const product_id = parseInt(row.dataset.pid), size = row.dataset.size, color = row.dataset.color, variant_type = row.dataset.vtype;
+    const current = parseInt(row.dataset.stock) || 0;
+    const newVal  = parseInt(row.querySelector('.inv-edit-val').value);
+    const reason  = row.querySelector('.inv-edit-reason').value;
+    const note    = (row.querySelector('.inv-edit-note').value || '').trim();
+    if (isNaN(newVal) || newVal < 0) return toast('Angka stok tidak valid', true);
+    if (newVal === current) return invEditCancel(key);
+    if (reason === 'Lainnya' && !note) return toast('Isi catatan untuk "Lainnya"', true);
+    // Perubahan besar / jadi nol tetap dikonfirmasi sekali lagi (anti salah ketik).
+    const diff = newVal - current;
+    if (newVal === 0 || Math.abs(diff) > STOCK_EXTREME_DIFF) {
+        if (!confirm(`Perubahan besar: ${size} ${current} → ${newVal} (${diff >= 0 ? '+' : ''}${diff}). Yakin?`)) return;
+    }
+    const btn = row.querySelector('button');
+    btn.disabled = true; btn.textContent = '…';
+    try {
+        const hasil = await apiFetch('/api/inventory/single', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal, reason, note })
+        });
+        const item = cachedInventoryAll.find(r =>
+            r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
+        // Stok akhir bisa lebih kecil dari yang diketik: PO lunas yang menunggu
+        // varian ini langsung dipenuhi (potong stok) begitu stok bertambah.
+        const stokAkhir = (hasil && hasil.stock_final != null) ? hasil.stock_final : newVal;
+        if (item) item.stock = stokAkhir;
+        invEditingKey = null;
+        toast(`Stok ${size}: ${current} → ${newVal}` + ((hasil && hasil.fulfilled_pos && hasil.fulfilled_pos.length) ? ` · PO terpenuhi: ${hasil.fulfilled_pos.join(', ')} (stok kini ${stokAkhir})` : ''));
+        renderInventory();
+    } catch (e) {
+        btn.disabled = false; btn.textContent = 'OK';
+        toast('Gagal simpan: ' + e.message, true);
+    }
 }
 
 function filterInventoryCritical() {
@@ -6502,38 +6594,8 @@ function closeReservedPopover() {
     if (pop) pop.remove();
 }
 
-async function invSaveOnBlur(input) {
-    const product_id  = parseInt(input.dataset.pid);
-    const size        = input.dataset.size;
-    const color       = input.dataset.color;
-    const variant_type = input.dataset.vtype;
-    const newVal      = parseInt(input.value);
-    const item0 = cachedInventoryAll.find(r =>
-        r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
-    const current = item0 ? parseInt(item0.stock) : 0;
-    if (isNaN(newVal) || newVal < 0) { input.value = current; return; }
-    if (newVal === current) return; // no-op, no popover
-    // Card view = anti-typo: popover SELALU muncul utk konfirmasi + pilih alasan.
-    showStockReasonPopover({
-        anchor: input, current, newVal,
-        onConfirm: async (reason, note) => {
-            const hasil = await apiFetch('/api/inventory/single', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ product_id, size, color, variant_type, stock: newVal, reason, note })
-            });
-            const item = cachedInventoryAll.find(r =>
-                r.product_id == product_id && r.size === size && r.color === color && r.variant_type === variant_type);
-            // Stok akhir bisa lebih kecil dari yang diketik: PO lunas yang menunggu
-            // varian ini langsung dipenuhi (potong stok) begitu stok bertambah.
-            const stokAkhir = (hasil && hasil.stock_final != null) ? hasil.stock_final : newVal;
-            if (item) item.stock = stokAkhir;
-            toast(`Stok: ${current} → ${newVal}` + ((hasil && hasil.fulfilled_pos && hasil.fulfilled_pos.length) ? ` · PO terpenuhi: ${hasil.fulfilled_pos.join(', ')} (stok kini ${stokAkhir})` : ''));
-            renderInventory();
-        },
-        onCancel: () => { input.value = current; }
-    });
-}
+// invSaveOnBlur (ketik langsung di kartu) dihapus 18 Sep 2026: mode Card kini
+// mengubah stok hanya lewat tombol Edit (invEditStart). Grid punya jalurnya sendiri.
 
 // ── Receive Stock Modal ────────────────────────────────────────────────────────
 let _rsmCurrentStock = 0;
