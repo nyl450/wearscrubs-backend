@@ -6109,21 +6109,21 @@ function renderInventory() {
                 const key         = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
                 const rejectBadge = stockReject > 0
                     ? `<button onclick="openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
-                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition"
+                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition whitespace-nowrap"
                            title="Stok Reject — klik untuk ubah ke Normal">${stockReject} reject</button>` : '';
                 const resv     = cachedReservations[key];
                 const poBadge  = resv && resv.po_qty > 0
                     ? `<button onclick="showModule('preorder')"
-                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 border border-orange-400/30 text-orange-300 hover:bg-orange-500/20 transition"
+                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 border border-orange-400/30 text-orange-300 hover:bg-orange-500/20 transition whitespace-nowrap"
                            title="${resv.po_qty} pcs Pre-Order menunggu stok">${resv.po_qty} PO</button>` : '';
                 sizeRows += `
-                <div class="inv-size-row flex items-center gap-2 py-1.5 border-t border-white/5 first:border-0" id="invrow-${key}"
+                <div class="inv-size-row flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 border-t border-white/5 first:border-0" id="invrow-${key}"
                      data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-stock="${stock}">
-                    <span class="text-xs font-bold text-white/60 w-12 shrink-0">${esc(r.size)}</span>
-                    <span class="text-base font-bold tabular-nums w-10 text-right shrink-0 ${stockClass}">${stock}</span>
-                    <span class="text-[10px] ${stockClass} w-10 shrink-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    <span class="text-xs font-bold text-white/60 w-9 sm:w-12 shrink-0">${esc(r.size)}</span>
+                    <span class="text-base font-bold tabular-nums w-8 sm:w-10 text-right shrink-0 ${stockClass}">${stock}</span>
+                    <span class="text-[10px] ${stockClass} w-9 shrink-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
                     <div class="flex items-center gap-1 flex-1 min-w-0 flex-wrap">${poBadge}${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}${rejectBadge}</div>
-                    <div class="flex gap-1 shrink-0">
+                    <div class="flex gap-1 shrink-0 ml-auto">
                         <button onclick="invEditStart('${key}')"
                             class="text-[10px] px-2.5 py-1 rounded-lg bg-white/8 border border-white/15 text-white/80 hover:bg-white/15 transition font-bold" title="Ubah stok">
                             <i class="fa-solid fa-pen text-[9px]"></i> Edit
@@ -6140,18 +6140,20 @@ function renderInventory() {
                 </div>`;
             });
 
+            // HP: foto kecil sejajar judul, daftar ukuran memakai lebar penuh kotak
+            // (satu ukuran = satu baris). Layar >= sm: foto di kiri sepanjang daftar.
             boxes += `
-            <div class="flex gap-3 bg-white/[0.03] border border-white/8 rounded-xl p-3">
-                <div class="w-20 h-24 rounded-lg overflow-hidden bg-darkbg border border-white/10 shrink-0 flex items-center justify-center">
+            <div class="grid grid-cols-[3rem_1fr] sm:grid-cols-[5rem_1fr] gap-x-2.5 sm:gap-x-3 bg-white/[0.03] border border-white/8 rounded-xl p-2.5 sm:p-3">
+                <div class="w-12 h-14 sm:w-20 sm:h-24 sm:row-span-2 rounded-lg overflow-hidden bg-darkbg border border-white/10 flex items-center justify-center">
                     ${foto ? `<img src="${escAttr(foto)}" alt="" class="w-full h-full object-cover object-top" loading="lazy" onerror="this.remove()">`
                            : `<i class="fa-solid fa-shirt text-white/15 text-2xl"></i>`}
                 </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span class="w-3 h-3 rounded-full border border-white/15 shrink-0" style="background:${cm.hex}"></span>
-                        <span class="text-sm font-bold text-white/90">${esc(cm.label)}</span>
-                        ${vt ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-400/30 text-indigo-200 uppercase tracking-wide">${esc(vt)}</span>` : ''}
-                    </div>
+                <div class="flex items-center gap-2 flex-wrap self-center sm:self-start min-w-0">
+                    <span class="w-3 h-3 rounded-full border border-white/15 shrink-0" style="background:${cm.hex}"></span>
+                    <span class="text-sm font-bold text-white/90">${esc(cm.label)}</span>
+                    ${vt ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-400/30 text-indigo-200 uppercase tracking-wide">${esc(vt)}</span>` : ''}
+                </div>
+                <div class="col-span-2 sm:col-span-1 sm:col-start-2 mt-1.5 min-w-0">
                     ${sizeRows}
                 </div>
             </div>`;
@@ -6161,12 +6163,12 @@ function renderInventory() {
         <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
             <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
                 <div>
-                    <div class="font-bold text-sm">${esc(prod.name)}</div>
+                    <div class="font-extrabold text-xl sm:text-2xl tracking-tight">${esc(prod.name)}</div>
                     <div class="text-[10px] font-mono text-white/30 mt-0.5">${esc(prod.sku || '')}</div>
                 </div>
                 <span class="text-[10px] text-white/30">${prod.rows.length} varian</span>
             </div>
-            <div class="p-3 grid grid-cols-1 xl:grid-cols-2 gap-3">${boxes}</div>
+            <div class="p-2.5 sm:p-3 grid grid-cols-1 xl:grid-cols-2 gap-3">${boxes}</div>
         </div>`;
     });
 
@@ -6197,15 +6199,15 @@ function invEditStart(key) {
     const defaultReason = currentDefaultReason();
     row.innerHTML = `
         <span class="text-xs font-bold text-white/60 w-12 shrink-0">${esc(row.dataset.size)}</span>
-        <div class="flex-1 min-w-0 grid gap-1.5" style="grid-template-columns: 4.5rem minmax(0,1fr);">
-            <input type="number" min="0" value="${current}" class="inv-edit-val !w-full !rounded-lg !px-2 text-center text-sm font-bold" style="height:34px;padding-top:0;padding-bottom:0;"
+        <div class="basis-full sm:basis-auto sm:flex-1 min-w-0 grid gap-1.5" style="grid-template-columns: 4.5rem minmax(0,1fr);">
+            <input type="number" min="0" value="${current}" class="inv-edit-val !w-full !rounded-lg !px-2 text-center text-sm font-bold text-white" style="height:34px;padding-top:0;padding-bottom:0;"
                    onkeydown="if(event.key==='Enter'){invEditSave('${key}')}else if(event.key==='Escape'){invEditCancel('${key}')}">
             <select class="inv-edit-reason !w-full !rounded-lg !px-2 text-xs" style="height:34px;padding-top:0;padding-bottom:0;" onchange="this.parentElement.querySelector('.inv-edit-note').classList.toggle('hidden', this.value !== 'Lainnya')">
                 ${STOCK_REASONS.map(r => `<option value="${escAttr(r)}" ${r === defaultReason ? 'selected' : ''}>${esc(r)}</option>`).join('')}
             </select>
             <input type="text" maxlength="200" placeholder="Catatan (opsional)" class="inv-edit-note col-span-2 !w-full !rounded-lg !py-1.5 !px-2 text-xs hidden">
         </div>
-        <div class="flex gap-1 shrink-0">
+        <div class="flex gap-1 shrink-0 ml-auto">
             <button onclick="invEditSave('${key}')" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white text-black font-bold hover:bg-white/90 transition">OK</button>
             <button onclick="invEditCancel('${key}')" class="text-[10px] px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition">Batal</button>
         </div>`;
