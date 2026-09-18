@@ -126,6 +126,22 @@ async function run() {
     r = await q('limit=2&offset=2');
     check('halaman kedua', JSON.stringify(idsOf(r.body)) === JSON.stringify([4, 3]), idsOf(r.body));
 
+    group('11b. /api/inventory/all: foto per warna + LENGAN, fallback ke foto warna');
+    // Bug 18 Sep: kartu Lengan Pendek dan Panjang memakai foto yang sama karena
+    // pemetaan mengabaikan variant_type.
+    none(`DELETE FROM product_variants; DELETE FROM inventory;
+          INSERT INTO product_variants (product_id, color, variant_type, photo_url, slot) VALUES
+            (2, 'black', 'pendek',  'foto-pendek.webp',  1),
+            (2, 'black', 'panjang', 'foto-panjang.webp', 1),
+            (2, 'black', 'panjang', 'foto-panjang-2.webp', 2);
+          INSERT INTO inventory (product_id, size, color, variant_type, stock) VALUES
+            (2, 'M', 'black', 'pendek', 1), (2, 'M', 'black', 'panjang', 1), (2, 'M', 'black', 'jogger', 1);`);
+    r = await get('/api/inventory/all');
+    const fotoDari = (vt) => (r.body.find(x => x.variant_type === vt) || {}).photo_url;
+    check('pendek pakai foto pendek', fotoDari('pendek') === 'foto-pendek.webp', fotoDari('pendek'));
+    check('panjang pakai foto panjang slot 1', fotoDari('panjang') === 'foto-panjang.webp', fotoDari('panjang'));
+    check('lengan tanpa foto sendiri jatuh ke foto warna', fotoDari('jogger') === 'foto-pendek.webp', fotoDari('jogger'));
+
     group('12. Saring per produk');
     r = await q('product_id=1');
     check('hanya produk 1', JSON.stringify(idsOf(r.body)) === JSON.stringify([5, 4, 1]), idsOf(r.body));
