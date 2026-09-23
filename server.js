@@ -17,6 +17,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 const { CITIES, rateForZone, rateForCity } = require('./cities');
 
 const app = express();
@@ -46,20 +47,56 @@ app.use(helmet({
 app.set('trust proxy', 1);
 
 // ─── Rate Limiting ─────────────────────────────────────────────────────────────
-const apiLimiter = rateLimit({
+// Bug 23 Sep 2026: admin yang menginput banyak pesanan berturut-turut tiba-tiba
+// kena "Failed to fetch" selama belasan menit, padahal Railway & Supabase sehat.
+// Dua sebabnya:
+//
+//   1. SATU jatah 300 permintaan / 15 menit dibagi PER IP. Kantor memakai satu
+//      IP, jadi James + istri + pengunjung website berebut jatah yang sama.
+//      Sekadar membuka dashboard sudah memakan 2 permintaan per menit (polling
+//      badge), dan satu pesanan Kasir memakan belasan (cari client, isi item,
+//      simpan, konfirmasi bayar). 20 pesanan beruntun = jatah habis.
+//   2. Balasan 429-nya TIDAK membawa header CORS (lihat urutan middleware di
+//      bawah), sehingga browser memblokirnya sebelum dibaca -> yang muncul
+//      "Failed to fetch", bukan pesan "Terlalu banyak request". Itu sebabnya
+//      gejalanya terbaca seperti server mati.
+//
+// Sekarang: permintaan yang membawa token login dihitung PER ADMIN dengan jatah
+// besar (kerja normal tidak mungkin menyentuhnya); permintaan tanpa token tetap
+// dibatasi ketat per IP sebagai rem anti-penyalahgunaan dari luar. Percobaan
+// login punya limiter sendiri yang jauh lebih ketat (loginLimiter di bawah),
+// jadi menaikkan jatah di sini tidak melonggarkan penebakan password.
+const ADMIN_MAX  = 3000;   // per admin / 15 menit (~200 pesanan)
+const PUBLIC_MAX = 300;    // per IP / 15 menit (checkout website)
+const bearerToken = (req) => {
+    const h = req.headers.authorization || '';
+    return h.startsWith('Bearer ') ? h.slice(7).trim() : null;
+};
+const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 300,
+    max: ADMIN_MAX,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Kunci per token, bukan per IP: satu admin yang sibuk tidak menghabiskan
+    // jatah admin lain di kantor yang sama. Token di-hash supaya tidak tersimpan
+    // utuh di memori limiter.
+    keyGenerator: (req) => 'adm:' + crypto.createHash('sha256').update(bearerToken(req) || 'x').digest('hex').slice(0, 32),
+    message: { error: 'Terlalu banyak permintaan dari akun ini. Tunggu beberapa menit lalu coba lagi.' },
+});
+const publicLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: PUBLIC_MAX,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Terlalu banyak request, coba lagi setelah 15 menit.' }
 });
+const apiLimiter = (req, res, next) =>
+    (bearerToken(req) ? adminLimiter : publicLimiter)(req, res, next);
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 15,
     message: { error: 'Terlalu banyak percobaan login, coba lagi setelah 15 menit.' }
 });
-app.use('/api/', apiLimiter);
-
 // ─── Middleware ────────────────────────────────────────────────────────────────
 // CORS: allow multiple origins (localhost dev + wearscrubs.id production + Railway URL)
 const ALLOWED_ORIGINS = [
@@ -78,6 +115,11 @@ app.use(cors({
     },
     credentials: true
 }));
+// Batas laju dipasang SESUDAH cors — urutannya penting. Kalau limiter lebih
+// dulu, balasan 429-nya keluar tanpa header CORS dan browser memblokirnya
+// sebelum dibaca; admin melihat "Failed to fetch" seolah server mati, bukan
+// pesan sebenarnya. (Bug 23 Sep 2026.)
+app.use('/api/', apiLimiter);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
