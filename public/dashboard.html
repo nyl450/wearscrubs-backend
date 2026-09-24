@@ -1857,8 +1857,8 @@
     <div id="module-settings" class="hidden p-6 space-y-8 max-w-4xl">
         <h2 class="text-xl font-bold">Pengaturan</h2>
 
-        <!-- ── Partner Collaboration Event ──────────────────────────────── -->
-        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+        <!-- ── Partner Collaboration Event (admin only) ─────────────────── -->
+        <div id="partner-section" class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
             <div class="flex items-center gap-3 flex-wrap">
                 <div class="w-9 h-9 rounded-xl bg-pink-500/10 flex items-center justify-center">
                     <i class="fa-solid fa-handshake text-sm text-pink-300"></i>
@@ -1875,8 +1875,8 @@
             <div id="partner-list"></div>
         </div>
 
-        <!-- ── Biaya COGS: Bordir (global) ──────────────────────────────── -->
-        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
+        <!-- ── Biaya COGS: Bordir (global, admin only) ──────────────────── -->
+        <div id="cogs-settings-section" class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-5">
             <div class="flex items-center gap-3 mb-1">
                 <div class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
                     <i class="fa-solid fa-coins text-sm text-amber-300"></i>
@@ -10578,7 +10578,12 @@ function canView(menu) { const p = myPerms(); return p === null || !!p[menu]; }
 function canEdit(menu) { const p = myPerms(); if (p === null) return true; return p[menu] === 'edit'; }
 
 // ── Initialize sidebar visibility based on current user's allowed_menus ────────
-function initSidebar() {
+// `arahkan` = boleh memindahkan layar ke menu pertama yang diizinkan. Itu hanya
+// benar SAAT BOOT. Dulu tanpa pembeda ini, staf tanpa izin Overview mustahil
+// membuka Pengaturan: klik Pengaturan -> loadSettings -> initSidebar -> layar
+// dilempar balik ke menu pertama, jadi mereka tak pernah bisa ganti password
+// sendiri. (Bug lama, ketahuan 24 Sep 2026.)
+function initSidebar({ arahkan = true } = {}) {
     const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
     const isAdmin = user.role === 'admin';
 
@@ -10586,8 +10591,14 @@ function initSidebar() {
     // tapi bagian kelola user (user-mgmt) hanya admin.
     const settingsWrap = document.getElementById('sidebar-settings-wrap');
     if (settingsWrap) settingsWrap.style.display = '';
-    const ugSec = document.getElementById('user-mgmt-section');
-    if (ugSec) ugSec.style.display = isAdmin ? '' : 'none';
+    // Non-admin di Pengaturan HANYA dapat "Ganti Password" (keputusan James,
+    // 24 Sep 2026). Tiga bagian lain memang sudah admin-only di server
+    // (requireAuth(['admin']) untuk partner tulis & COGS), jadi ini menutup
+    // tawaran yang pasti ditolak — bukan menambah keamanan baru.
+    ['user-mgmt-section', 'partner-section', 'cogs-settings-section'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isAdmin ? '' : 'none';
+    });
 
     const perms = myPerms();
     if (perms === null) return; // admin → semua menu tampil
@@ -10601,13 +10612,14 @@ function initSidebar() {
         if (ok && !firstVisible) firstVisible = menu;
     });
 
-    // Kalau overview tidak boleh diakses, arahkan ke menu pertama yang boleh.
-    if (!perms['overview'] && firstVisible) showModule(firstVisible);
+    // Kalau overview tidak boleh diakses, arahkan ke menu pertama yang boleh —
+    // hanya saat boot, bukan setiap kali sidebar disegarkan.
+    if (arahkan && !perms['overview'] && firstVisible) showModule(firstVisible);
 }
 
 // ── Load Settings module (users table + sidebar init) ─────────────────────────
 async function loadSettings() {
-    initSidebar();
+    initSidebar({ arahkan: false });   // jangan lempar layar keluar dari Pengaturan
     const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
     if (user.role !== 'admin') return;
     loadCogsSettings();
@@ -10897,7 +10909,7 @@ function togglePw(fieldId, btn) {
 document.addEventListener('DOMContentLoaded', () => {
     // initSidebar runs when settings module opens, but also init on load
     // to ensure correct menu visibility from the start
-    setTimeout(initSidebar, 100);
+    setTimeout(() => initSidebar(), 100);
 });
 
 // ═══════════════════════════════════════════════════
@@ -10950,6 +10962,11 @@ async function waInitModule() {
 let _partnerCache = [];
 
 async function loadPartners() {
+    // Bagiannya disembunyikan untuk non-admin (lihat initSidebar), dan endpoint
+    // tulisnya admin-only — jadi jangan memanggil API-nya sama sekali. Tanpa ini,
+    // staf tanpa akses Kasir memicu 403 yang tidak berguna bagi siapa pun.
+    const user = JSON.parse(localStorage.getItem('ws_admin_user') || '{}');
+    if (user.role !== 'admin') return;
     const wrap = document.getElementById('partner-list');
     if (!wrap) return;
     wrap.innerHTML = '<p class="text-xs text-white/30 py-3">Memuat…</p>';
