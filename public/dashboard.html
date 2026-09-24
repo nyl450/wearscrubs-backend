@@ -757,7 +757,7 @@
     <div id="module-products" class="hidden p-6 space-y-4">
         <div class="flex justify-between items-center">
             <h2 class="text-xl font-bold">Manajemen Produk</h2>
-            <button onclick="openProductModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all">
+            <button onclick="openProductModal()" class="edit-action flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all">
                 <i class="fa-solid fa-plus"></i> Tambah Produk
             </button>
         </div>
@@ -1527,8 +1527,8 @@
         </div>
 
         <div class="flex gap-2 flex-wrap">
-            <button id="pb-tab-kwitansi" onclick="pbShowTab('kwitansi')" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-white/10 border border-white/15 text-white">1 · Nomor Kwitansi</button>
-            <button id="pb-tab-buat" onclick="pbShowTab('buat')" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-white/5 border border-white/8 text-white/40 hover:text-white/70">2 · Buat Tagihan</button>
+            <button id="pb-tab-kwitansi" onclick="pbShowTab('kwitansi')" class="edit-action px-4 py-2 rounded-xl text-xs font-bold transition bg-white/10 border border-white/15 text-white">1 · Nomor Kwitansi</button>
+            <button id="pb-tab-buat" onclick="pbShowTab('buat')" class="edit-action px-4 py-2 rounded-xl text-xs font-bold transition bg-white/5 border border-white/8 text-white/40 hover:text-white/70">2 · Buat Tagihan</button>
             <button id="pb-tab-daftar" onclick="pbShowTab('daftar')" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-white/5 border border-white/8 text-white/40 hover:text-white/70">3 · Tagihan Terbit</button>
         </div>
 
@@ -4745,13 +4745,13 @@ function renderProducts() {
                 </div>
                 <p class="text-sm text-green-400 font-bold mt-2">Rp ${fmt(p.price)}</p>
                 <div class="flex gap-2 mt-3 pt-3 border-t border-darkborder">
-                    <button onclick='openProductModal(${safeP})' class="flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
+                    <button onclick='openProductModal(${safeP})' class="edit-action flex-1 text-xs font-bold py-2 rounded-xl bg-white/5 hover:bg-white/10 transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-pen text-[9px]"></i> Edit
                     </button>
                     <a href="product.html?id=${p.id}" target="_blank" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-xs">
                         <i class="fa-solid fa-arrow-up-right-from-square"></i>
                     </a>
-                    <button onclick="deleteProduct(${p.id},'${p.name}')" class="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition text-xs">
+                    <button onclick="deleteProduct(${p.id},'${p.name}')" class="edit-action px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition text-xs">
                         <i class="fa-solid fa-trash"></i>
                     </button>
                 </div>
@@ -5589,9 +5589,10 @@ function loanBadgeForVariant(pid, size, color, vtype) {
 // disembunyikan, dan Grid tidak bisa diklik untuk mengedit. Server TETAP penjaga
 // utamanya (semua endpoint tulis inventory pakai requireMenu('inventory','edit'));
 // ini murni supaya layarnya tidak menawarkan hal yang pasti ditolak.
-function invHanyaLihat() {
-    return typeof canView === 'function' && canView('inventory') && !canEdit('inventory');
+function hanyaLihat(menu) {
+    return typeof canView === 'function' && canView(menu) && !canEdit(menu);
 }
+function invHanyaLihat() { return hanyaLihat('inventory'); }
 
 function setInvView(mode) {
     // Riwayat tidak tersedia untuk akun lihat-saja — termasuk kalau mode itu
@@ -15118,12 +15119,19 @@ function pbSetHalBuat(n) { pbHalBuat = n; pbRenderBuat(pbRingkasanBuat || {}); d
 let pbRingkasanBuat = null;
 
 function pbShowTab(t) {
+    // Tab 1 (Nomor Kwitansi) dan 2 (Buat Tagihan) MENGUBAH data; akun lihat-saja
+    // hanya boleh melihat tagihan yang sudah terbit. Tab-nya sudah disembunyikan
+    // lewat .edit-action, ini menjaga kalau fungsinya dipanggil dari tempat lain.
+    if (hanyaLihat('partner-billing')) t = 'daftar';
     pbTab = t;
     ['kwitansi', 'buat', 'daftar'].forEach(k => {
         const b = document.getElementById('pb-tab-' + k);
         if (!b) return;
+        // className ditulis ulang di sini, jadi .edit-action harus dipasang lagi —
+        // kalau tidak, tab tulis muncul kembali begitu orang pindah tab.
+        const tulis = (k === 'kwitansi' || k === 'buat') ? 'edit-action ' : '';
         const aktif = k === t;
-        b.className = 'px-4 py-2 rounded-xl text-xs font-bold transition ' + (aktif
+        b.className = tulis + 'px-4 py-2 rounded-xl text-xs font-bold transition ' + (aktif
             ? 'bg-white/10 border border-white/15 text-white'
             : 'bg-white/5 border border-white/8 text-white/40 hover:text-white/70');
     });
@@ -15144,6 +15152,7 @@ async function pbInit() {
             toast('Gagal memuat daftar partner: ' + e.message, true);
         }
     }
+    if (hanyaLihat('partner-billing') && pbTab !== 'daftar') { pbShowTab('daftar'); return; }
     if (document.getElementById('pb-partner')?.value) pbLoad();
 }
 

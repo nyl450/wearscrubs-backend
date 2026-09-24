@@ -32,5 +32,12 @@ const { boot, none } = require('./_bootstrap');
       (2, 902, 1, 'M', 'charcoal-grey', 'pendek', 1, 220000, 130000),
       (3, 701, 1, 'M', 'charcoal-grey', 'panjang', 1, 300000, 130000);
     `);
+    // Satu tagihan yang SUDAH TERBIT — supaya tab "3 · Tagihan Terbit" ada isinya
+    // saat melihat modul ini dengan akun lihat-saja.
+    none(`
+    INSERT INTO partner_invoices (id, invoice_no, partner_id, partner_name_snapshot, status,
+                                  gross_total, discount_total, total_due, order_count, item_count, issued_at) VALUES
+      (500, 'INV-PTR-0001', 1, 'PT Arta Otto Indonesia', 'issued', 240000, 72000, 168000, 1, 1, NOW());
+    `);
     console.log('Pratinjau siap: http://localhost:3000/dashboard.html (admin / admin123)');
 })();

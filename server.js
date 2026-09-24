@@ -200,7 +200,12 @@ function sanitizePermsInput(allowed_menus) {
     return out;
 }
 // Middleware: gate endpoint behind a menu + level (verifies token like requireAuth).
+// `menu` boleh berupa daftar: cukup SALAH SATU yang dipenuhi. Dipakai untuk data
+// yang dipakai bersama dua menu — mis. daftar partner yang dibutuhkan Kasir DAN
+// Tagihan Partner. Tanpa ini, staf yang hanya punya Tagihan Partner kena 403 dan
+// dropdown partnernya kosong.
 function requireMenu(menu, level = 'view') {
+    const daftarMenu = Array.isArray(menu) ? menu : [menu];
     return (req, res, next) => {
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
@@ -210,7 +215,7 @@ function requireMenu(menu, level = 'view') {
             // Token customer BUKAN staff — tolak (permMap default kasih view-all, bahaya).
             if (user && user.kind === 'customer') return res.status(403).json({ error: 'Akses ditolak.' });
             req.user = user;
-            if (!hasMenu(user, menu, level)) {
+            if (!daftarMenu.some(m => hasMenu(user, m, level))) {
                 return res.status(403).json({ error: level === 'edit'
                     ? 'Akses ditolak. Anda hanya punya akses lihat (view-only) untuk menu ini.'
                     : 'Akses ditolak. Anda tidak punya akses ke menu ini.' });
@@ -2660,7 +2665,7 @@ app.put('/api/admin/partner-billing/invoices/:id/void', requireMenu('partner-bil
 
 // GET /api/admin/partners?q=&all=1 — daftar partner. Dibaca dari Kasir, jadi izinnya
 // menu manual-order (admin otomatis punya semua menu).
-app.get('/api/admin/partners', requireMenu('manual-order'), async (req, res) => {
+app.get('/api/admin/partners', requireMenu(['manual-order', 'partner-billing']), async (req, res) => {
     try {
         const q = String(req.query.q || '').trim();
         const includeInactive = req.query.all === '1';
