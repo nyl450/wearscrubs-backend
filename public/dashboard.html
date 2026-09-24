@@ -784,15 +784,15 @@
                 <div class="inv-view-toggle">
                     <button id="inv-view-card" onclick="setInvView('card')" class="active"><i class="fa-solid fa-list mr-1"></i> Card</button>
                     <button id="inv-view-grid" onclick="setInvView('grid')"><i class="fa-solid fa-table-cells mr-1"></i> Grid</button>
-                    <button id="inv-view-riwayat" onclick="setInvView('riwayat')" title="Riwayat pergerakan stok"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Riwayat</button>
+                    <button id="inv-view-riwayat" class="viewonly-hide" onclick="setInvView('riwayat')" title="Riwayat pergerakan stok"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Riwayat</button>
                 </div>
                 <button id="inv-bulk-btn" onclick="toggleBulkMode()"
-                    class="hidden items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 hover:bg-indigo-500/20 transition">
+                    class="edit-action hidden items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 hover:bg-indigo-500/20 transition">
                     <i class="fa-solid fa-square-check"></i>
                     <span id="inv-bulk-label">Pilih Banyak</span>
                 </button>
                 <button id="inv-opname-btn" onclick="toggleOpnameMode()"
-                    class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition"
+                    class="edit-action flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition"
                     title="Saat aktif: setiap perubahan stok dicatat dengan alasan 'Stock Opname Awal'">
                     <i class="fa-solid fa-clipboard-check"></i>
                     <span>Mulai Stock Opname</span>
@@ -1543,6 +1543,10 @@
             .report-preset-active, .report-tab-active { background:rgba(34,211,238,.15); border-color:rgba(34,211,238,.4); color:#a5f3fc; }
             /* View-only mode: sembunyikan tombol aksi ber-class .edit-action (server tetap penjaga utama) */
             .is-viewonly .edit-action { display:none !important; }
+            /* .viewonly-hide = BUKAN tombol tulis, tapi memang tidak dibutuhkan akun
+               lihat-saja (mis. riwayat stok untuk staf konten). Dipisah dari
+               .edit-action supaya niatnya tetap terbaca saat kode dibuka lagi. */
+            .is-viewonly .viewonly-hide { display:none !important; }
         </style>
         <div>
             <h2 class="text-xl font-bold">📊 Laporan Penjualan</h2>
@@ -5581,7 +5585,18 @@ function loanBadgeForVariant(pid, size, color, vtype) {
     return `<span class="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-400/25" title="${l.qty_out} item lagi keluar (loan) di ${l.order_count} order"><span>🧪</span> ${l.qty_out} keluar</span>`;
 }
 
+// Akun dengan izin Inventori "lihat saja": semua tombol tulis + layar Riwayat
+// disembunyikan, dan Grid tidak bisa diklik untuk mengedit. Server TETAP penjaga
+// utamanya (semua endpoint tulis inventory pakai requireMenu('inventory','edit'));
+// ini murni supaya layarnya tidak menawarkan hal yang pasti ditolak.
+function invHanyaLihat() {
+    return typeof canView === 'function' && canView('inventory') && !canEdit('inventory');
+}
+
 function setInvView(mode) {
+    // Riwayat tidak tersedia untuk akun lihat-saja — termasuk kalau mode itu
+    // tertinggal di localStorage dari sesi/akun sebelumnya.
+    if (mode === 'riwayat' && invHanyaLihat()) mode = 'card';
     invViewMode = mode;
     localStorage.setItem('ws_inv_view', mode);
     document.getElementById('inv-view-card').classList.toggle('active', mode === 'card');
@@ -6138,7 +6153,7 @@ function renderInventory() {
                 const key         = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
                 const rejectBadge = stockReject > 0
                     ? `<button onclick="openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
-                           class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition whitespace-nowrap"
+                           class="edit-action text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-400/25 text-red-400 hover:bg-red-500/20 transition whitespace-nowrap"
                            title="Stok Reject — klik untuk ubah ke Normal">${stockReject} reject</button>` : '';
                 const resv     = cachedReservations[key];
                 const poBadge  = resv && resv.po_qty > 0
@@ -6154,15 +6169,15 @@ function renderInventory() {
                     <div class="flex items-center gap-1 flex-1 min-w-0 flex-wrap">${poBadge}${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}${rejectBadge}</div>
                     <div class="flex gap-1 shrink-0 ml-auto">
                         <button onclick="invEditStart('${key}')"
-                            class="text-[10px] px-2.5 py-1 rounded-lg bg-white/8 border border-white/15 text-white/80 hover:bg-white/15 transition font-bold" title="Ubah stok">
+                            class="edit-action text-[10px] px-2.5 py-1 rounded-lg bg-white/8 border border-white/15 text-white/80 hover:bg-white/15 transition font-bold" title="Ubah stok">
                             <i class="fa-solid fa-pen text-[9px]"></i> Edit
                         </button>
                         <button onclick="openReceiveStock(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
-                            class="text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-400/20 text-green-400 hover:bg-green-500/20 transition font-bold" title="Terima Stok">
+                            class="edit-action text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-400/20 text-green-400 hover:bg-green-500/20 transition font-bold" title="Terima Stok">
                             <i class="fa-solid fa-plus"></i>
                         </button>
                         <button onclick="openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')"
-                            class="text-[10px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition" title="Riwayat">
+                            class="viewonly-hide text-[10px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition" title="Riwayat">
                             <i class="fa-solid fa-clock-rotate-left"></i>
                         </button>
                     </div>
@@ -6336,7 +6351,7 @@ function renderInventoryGrid(rows, container) {
                 const sClass = stock === 0 ? 's-empty' : stock < 5 ? 's-low' : 's-ok';
                 const selectedClass = (bulkMode && bulkSelection.has(key)) ? ' selected' : '';
                 const rejectBadge = reject > 0
-                    ? `<span class="reject-corner" onclick="event.stopPropagation();openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${reject})" title="${reject} reject — klik konversi">⚠${reject}</span>`
+                    ? `<span class="reject-corner edit-action" onclick="event.stopPropagation();openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${reject})" title="${reject} reject — klik konversi">⚠${reject}</span>`
                     : '';
                 const reserved = cachedReservations[key];
                 const reservedBadge = reserved && reserved.reserved_qty > 0
@@ -6345,7 +6360,7 @@ function renderInventoryGrid(rows, container) {
                 const poBadge = reserved && reserved.po_qty > 0
                     ? `<span class="po-corner" onclick="event.stopPropagation();showReservedPopover(event,'${escAttr(key)}')" title="${reserved.po_qty} pcs Pre-Order menunggu stok">PO${reserved.po_qty}</span>`
                     : '';
-                const detailBadge = `<span class="cell-detail" onclick="event.stopPropagation();openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')" title="Detail: riwayat stok & pembeli"><i class="fa-solid fa-clock-rotate-left"></i></span>`;
+                const detailBadge = `<span class="cell-detail viewonly-hide" onclick="event.stopPropagation();openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')" title="Detail: riwayat stok & pembeli"><i class="fa-solid fa-clock-rotate-left"></i></span>`;
                 return `<td class="cell-stock ${sClass}${selectedClass}"
                     data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-current="${stock}"
                     onclick="gridCellClick(this)">
@@ -6394,6 +6409,7 @@ function isTouchDevice() {
 
 function gridCellClick(td) {
     if (td.classList.contains('editing')) return;
+    if (invHanyaLihat()) return;   // akun lihat-saja: Grid murni tampilan
     const product_id  = parseInt(td.dataset.pid);
     const size        = td.dataset.size;
     const color       = td.dataset.color;
