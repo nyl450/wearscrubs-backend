@@ -7895,6 +7895,15 @@ async function viewOrder(id) {
         // stok sudah terpotong, jadi yang tersisa cuma ubah size (yang memindahkan stok).
         const canEditItem = !['packed','shipped','done','cancelled'].includes(o.order_status)
             && o.payment_status !== 'paid' && o.order_source !== 'test_size';
+        // Potongan boleh dibetulkan JAUH lebih lama daripada isi pesanan: mengubah
+        // angka diskon tidak menyentuh stok sama sekali, cuma nilai tagihan. Justru
+        // kasus yang perlu dibetulkan (lupa diskon manual / lupa centang
+        // Consignment) biasanya baru ketahuan setelah ordernya dibayar.
+        // Yang tetap ditolak server: order batal, Temporary Order, dan order yang
+        // sudah masuk tagihan partner aktif.
+        const canEditDiscount = o.order_status !== 'cancelled'
+            && o.order_source !== 'test_size'
+            && (typeof canEdit !== 'function' || canEdit('orders'));
         // Item trial yang DIKEMBALIKAN tidak ditagih → jangan ditaruh di daftar
         // "Item Pesanan". Dulu ikut tampil lengkap dengan harganya, jadi terlihat
         // seolah ditagih padahal Subtotal di bawah sudah tidak menghitungnya.
@@ -8318,16 +8327,18 @@ async function viewOrder(id) {
                 </p>
                 ${returnedTrialItems.map(i => `<p class="text-[11px] text-white/40">${esc(i.product_name || '')} · ${esc(i.color || '')}${i.variant_type && i.variant_type !== 'null' ? ' · ' + esc(i.variant_type) : ''} · ${esc(i.size || '')} ×${i.quantity}</p>`).join('')}
             </div>` : ''}
-            ${(o.discount_amount||0) > 0 ? `
+            ${(o.discount_amount||0) > 0 || canEditDiscount ? `
             <div class="flex justify-between mt-3 text-sm text-white/50">
                 <span>Subtotal Produk</span>
                 <span>Rp ${fmt((o.total_amount||0) - (o.shipping_cost||0) + (o.discount_amount||0))}</span>
             </div>
-            <div class="flex justify-between mt-1 text-sm text-green-400">
-                <span>🏷️ ${esc(o.discount_label || 'Diskon')}</span>
-                <span>−Rp ${fmt(o.discount_amount)}</span>
+            <div class="flex justify-between mt-1 text-sm ${(o.discount_amount||0) > 0 ? 'text-green-400' : 'text-white/35'}">
+                <span>🏷️ ${esc(o.discount_label || 'Tanpa potongan')}${canEditDiscount
+                    ? `<button onclick="openEditDiscountModal(${o.id})" class="edit-action ml-1.5 text-cyan-400/70 hover:text-cyan-300" title="Betulkan potongan / consignment"><i class="fa-solid fa-pen-to-square text-[10px]"></i></button>`
+                    : ''}</span>
+                <span>${(o.discount_amount||0) > 0 ? '−Rp ' + fmt(o.discount_amount) : 'Rp 0'}</span>
             </div>` : ''}
-            <div class="flex justify-between mt-${(o.discount_amount||0) > 0 ? '1' : '3'} text-sm text-white/50">
+            <div class="flex justify-between mt-${(o.discount_amount||0) > 0 || canEditDiscount ? '1' : '3'} text-sm text-white/50">
                 <span>Ongkir (${o.shipping_courier||'—'})</span>
                 <span>Rp ${fmt(o.shipping_cost||0)}</span>
             </div>
@@ -10056,6 +10067,154 @@ async function editItemSize(orderId, itemId, currentSize) {
 // disimpan — preview di modal ini memakai rumus yang sama supaya angkanya cocok.
 let _editItemProducts = null;      // cache katalog (dipakai lintas modal)
 const _editItemInvCache = {};      // { productId: rows[] } cache inventory
+
+// ── Edit Diskon pesanan ────────────────────────────────────────────────────
+// Latar (James, 28 Sep 2026): admin baru beberapa kali lupa memasukkan diskon
+// manual dan lupa mencentang Consignment. Dulu satu-satunya jalan adalah
+// membatalkan order lalu membuat ulang — ikut menghapus riwayat, nomor kwitansi,
+// dan bukti bayarnya.
+//
+// Pilihan diskonnya SAMA PERSIS dengan Kasir (token yang sama, waDiscTokenOf
+// yang sama, discAmountFor yang sama) supaya tidak ada rumus kedua yang bisa
+// melenceng. Server tetap menghitung ulang sendiri; angka di sini pratinjau.
+
+// Kotor & bordir satu order, dengan aturan yang sama dengan server: bonus dan
+// barang uji-coba yang dikembalikan tidak ikut dipotong.
+function edHitungDasar(o) {
+    const items = (o.items || []).filter(i => !i.is_bonus && !i.is_test_returned);
+    const kotor = items.reduce((t, i) => t + Number(i.price || 0) * Number(i.quantity || 0), 0);
+    const bordir = items.reduce((t, i) => t +
+        ((i.bordir_nama ? Number(i.bordir_nama_price ?? 20000) : 0) +
+         (i.bordir_logo ? Number(i.bordir_logo_price ?? 30000) : 0)) * Number(i.quantity || 0), 0);
+    return { kotor, bordir };
+}
+
+function openEditDiscountModal(orderId) {
+    let o = (window._currentOrder && window._currentOrder.id === orderId) ? window._currentOrder : null;
+    if (!o) o = (typeof cachedOrders !== 'undefined' ? cachedOrders : []).find(x => x.id === orderId);
+    if (!o) { toast('Data order belum dimuat.', true); return; }
+
+    document.getElementById('edit-discount-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'edit-discount-modal';
+    modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[1300] flex items-center justify-center p-4';
+    const { kotor, bordir } = edHitungDasar(o);
+    modal.innerHTML = `
+        <div class="bg-[#1c1c1c] border border-white/10 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-white/8 flex items-center justify-between shrink-0">
+                <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-tag text-cyan-400"></i> Ubah Potongan Pesanan</p>
+                <button onclick="document.getElementById('edit-discount-modal').remove()" class="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1">
+                <p class="text-[11px] text-white/40 mb-3">Sekarang: <span class="text-white/70">${esc(o.discount_label || 'tanpa potongan')}</span> — ${(o.discount_amount||0) > 0 ? '−Rp ' + fmt(o.discount_amount) : 'Rp 0'}</p>
+                <div>
+                    <label class="block text-[11px] text-white/50 mb-1">Potongan baru</label>
+                    <select id="ed-disc" onchange="waDiscManualToggle(this); edPreview()" class="w-full !py-2 !text-sm">
+                        <option value="">Tanpa potongan</option>
+                        <option value="5-inc">Diskon 5% (produk + bordir)</option>
+                        <option value="5-exc">Diskon 5% (produk saja)</option>
+                        <option value="30-inc">Consignment 30% (produk + bordir)</option>
+                        <option value="30-exc">Consignment 30% (produk saja)</option>
+                        <option value="10-inc">Promo 10% (aksesoris, min Rp 200.000)</option>
+                        <option value="10x30-inc">Promo 10% lalu Consignment 30% (event)</option>
+                        <option value="__manual__">Manual… (ketik sendiri)</option>
+                    </select>
+                    <div class="disc-manual hidden mt-2 grid grid-cols-[auto_1fr] gap-2 items-center">
+                        <div class="flex items-center gap-1">
+                            <input type="number" class="disc-manual-pct !py-2 !text-sm w-24" min="1" placeholder="15 / 20000" oninput="edPreview()" />
+                            <select class="disc-manual-unit !py-2 !text-xs" onchange="edPreview()"><option value="pct">%</option><option value="rp">Rp</option></select>
+                        </div>
+                        <select class="disc-manual-mode !py-2 !text-xs" onchange="edPreview()">
+                            <option value="inc">produk + bordir</option>
+                            <option value="exc">produk saja</option>
+                        </select>
+                        <label class="col-span-2 flex items-center gap-1.5 text-[11px] text-white/60 cursor-pointer">
+                            <input type="checkbox" class="disc-manual-cons accent-green-500" onchange="edPreview()" /> lalu Consignment 30%
+                        </label>
+                    </div>
+                </div>
+                <div id="ed-preview" class="mt-3 p-3 rounded-xl bg-white/4 border border-white/8 text-[11px] text-white/60 space-y-1"></div>
+                <p class="text-[10px] text-white/30 mt-2 leading-relaxed">Potongan hanya mengenai harga barang — <b>ongkir tidak pernah ikut didiskon</b>. Barang bonus dan barang uji-coba yang dikembalikan juga tidak dihitung. Perubahannya tercatat di Riwayat pesanan ini.</p>
+                <div class="flex gap-2 mt-4">
+                    <button id="ed-save" onclick="submitEditDiscount(${orderId})" disabled class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/30 text-cyan-200 font-bold text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">Simpan Perubahan</button>
+                    <button onclick="document.getElementById('edit-discount-modal').remove()" class="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/12 text-white/60 text-sm transition">Batal</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    modal._ctx = { order: o, kotor, bordir };
+    waResetDiscManual(modal);
+    edPreview();
+}
+
+function edPreview() {
+    const modal = document.getElementById('edit-discount-modal');
+    if (!modal) return;
+    const { order: o, kotor, bordir } = modal._ctx;
+    const box = document.getElementById('ed-preview');
+    const saveBtn = document.getElementById('ed-save');
+    const sel = document.getElementById('ed-disc');
+    const token = waDiscTokenOf(sel);
+
+    // "Manual…" dipilih tapi angkanya belum sah -> jangan diam-diam menyimpan
+    // "tanpa potongan", karena itu bukan yang dimaksud.
+    if (sel.value === '__manual__' && !token) {
+        box.innerHTML = '<p class="text-amber-300/80">Isi dulu angka potongannya (persen 1–99, atau nominal rupiah).</p>';
+        if (saveBtn) saveBtn.disabled = true;
+        return;
+    }
+
+    const lama = Number(o.discount_amount || 0);
+    const baru = discAmountFor(token, kotor - bordir, bordir);
+    const totalLama = Number(o.total_amount || 0);
+    const totalBaru = totalLama - (baru - lama);
+    const labelBaru = discTokenLabel(token) || 'Tanpa potongan';
+    const sama = baru === lama && labelBaru === (o.discount_label || 'Tanpa potongan');
+    const panah = (a, b) => a === b ? `Rp ${fmt(a)}`
+        : `<span class="text-white/40 line-through">Rp ${fmt(a)}</span> → <span class="text-green-400 font-bold">Rp ${fmt(b)}</span>`;
+
+    // Potongan berantai dipecah per tahap supaya hitungannya bisa diikuti
+    // (10% dari subtotal, lalu 30% dari sisanya) — bukan satu angka misterius.
+    // null = satu tahap saja / label tak terbaca; tidak ada yang perlu dirinci.
+    const tahapan = splitDiscountStages(token ? labelBaru : '',
+        parseDiscToken(token).incBordir ? kotor : kotor - bordir, baru);
+    box.innerHTML = `
+        <p>Subtotal barang: Rp ${fmt(kotor)}${bordir > 0 ? ` <span class="text-white/35">(termasuk bordir Rp ${fmt(bordir)})</span>` : ''}</p>
+        ${tahapan ? tahapan.map(t => `<p class="text-white/45">↳ ${esc(t.label)}: −Rp ${fmt(t.amount)}</p>`).join('') : ''}
+        <p>Potongan: ${panah(lama, baru)}</p>
+        <p class="pt-1 border-t border-white/8">Total pesanan: ${panah(totalLama, totalBaru)}</p>
+        <p class="text-white/35">Label baru: ${esc(labelBaru)}</p>
+        ${totalBaru < 0 ? '<p class="text-red-400">Potongan melebihi total order — tidak bisa disimpan.</p>' : ''}
+        ${o.payment_status === 'paid' ? '<p class="text-amber-300/80">Pesanan ini sudah dibayar; pastikan uang yang diterima cocok dengan total barunya.</p>' : ''}`;
+    if (saveBtn) saveBtn.disabled = sama || totalBaru < 0;
+}
+
+async function submitEditDiscount(orderId) {
+    const btn = document.getElementById('ed-save');
+    const token = waDiscTokenOf(document.getElementById('ed-disc'));
+    const { stages, incBordir } = parseDiscToken(token);
+    try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
+        const res = await apiFetch(`/api/orders/${orderId}/discount`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                stages: stages.map(st => st.rp ? { rp: st.rp } : st.pct),
+                inc_bordir: incBordir,
+            }),
+        });
+        toast('✅ ' + (res.message || 'Potongan diperbarui'));
+        if (res.notes && res.notes.length) alert('⚠️ ' + res.notes.join('\n\n'));
+        document.getElementById('edit-discount-modal')?.remove();
+        if (typeof closeOrderModal === 'function') closeOrderModal();
+        viewOrder(orderId);
+        if (typeof loadOrders === 'function') loadOrders();
+    } catch (e) {
+        toast('Gagal: ' + e.message, true);
+        if (btn) { btn.disabled = false; btn.textContent = 'Simpan Perubahan'; }
+    }
+}
 
 async function openEditItemModal(orderId, itemId) {
     let o = (window._currentOrder && window._currentOrder.id === orderId) ? window._currentOrder : null;
@@ -12130,6 +12289,18 @@ function waDiscTokenOf(sel) {
     const tahap1 = unit === 'rp' ? n + 'rp' : String(n);
     return (cons ? tahap1 + 'x30' : tahap1) + '-' + mode;
 }
+// Kosongkan SEMUA kotak diskon "Manual…" di dalam sebuah wadah, dan tutup lagi.
+// Dipisah jadi fungsi sendiri karena dipakai oleh Order Baru (Kasir) dan modal
+// Edit Diskon — dua tempat yang sama-sama harus mulai dari keadaan bersih.
+function waResetDiscManual(root) {
+    (root || document).querySelectorAll('.disc-manual').forEach(w => {
+        w.classList.add('hidden');
+        const pct = w.querySelector('.disc-manual-pct');   if (pct)  pct.value = '';
+        const unit = w.querySelector('.disc-manual-unit'); if (unit) unit.value = 'pct';
+        const mode = w.querySelector('.disc-manual-mode'); if (mode) mode.value = 'inc';
+        const cons = w.querySelector('.disc-manual-cons'); if (cons) cons.checked = false;
+    });
+}
 function waDiscManualToggle(sel) {
     const wrap = sel && sel.parentElement && sel.parentElement.querySelector('.disc-manual');
     if (wrap) wrap.classList.toggle('hidden', sel.value !== '__manual__');
@@ -12645,6 +12816,11 @@ function waResetForm() {
         }
         // Reset diskon umum + DP.
         const fd = document.getElementById('wa-form-discount'); if (fd) fd.value = '';
+        // Kotak "Manual…" TIDAK ikut kosong hanya dengan menyetel select-nya:
+        // waDiscManualToggle cuma jalan pada event change. Tanpa ini, angka diskon
+        // order sebelumnya masih terpampang (dan kotaknya masih terbuka) di order
+        // berikutnya — bug yang dilaporkan James 28 Sep 2026.
+        waResetDiscManual(document.getElementById('module-manual-order'));
         const dp = document.getElementById('wa-dp-amount'); if (dp) dp.value = '';
         if (typeof waUpdateDpHint === 'function') waUpdateDpHint();
         // Reset blok hasil ke kondisi default (pesan WA + tombol kirim tampil lagi).

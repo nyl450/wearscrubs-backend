@@ -7308,6 +7308,127 @@ app.put('/api/orders/:id/items/:itemId/size', requireMenu('orders','edit'), uplo
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// PUT /api/orders/:id/discount — betulkan POTONGAN order yang salah diinput.
+// Body: { stages: [10, {rp:20000}, 30], inc_bordir: true }
+//
+// Kenapa ada (permintaan James 28 Sep 2026): admin baru beberapa kali lupa
+// memasukkan diskon manual dan lupa mencentang Consignment. Sebelumnya satu-
+// satunya jalan adalah membatalkan order lalu membuatnya ulang dari nol — yang
+// menghapus riwayat, nomor kwitansi, dan bukti bayarnya.
+//
+// Bedanya dengan centang Consignment di penyusun tagihan: yang itu hanya bisa
+// menambah/menghapus satu tahap 30% dan menolak order yang potongannya tidak
+// cocok dengan labelnya. Yang ini menulis ULANG seluruh susunan potongan, jadi
+// order yang "kacau" pun bisa dibetulkan.
+//
+// Aturan uangnya sama persis dengan Kasir dan penyusun tagihan — TIDAK ada rumus
+// kedua di sini: tiap tahap dihitung dari SISA (hitungPotonganBerantai), dan
+// labelnya dirakit oleh discLabelDariPcts. Potongan hanya mengenai harga barang;
+// ongkir tidak pernah ikut didiskon, jadi total baru dihitung dari SELISIH
+// potongan — bukan dirakit ulang dari nol, yang akan menelan ongkir, DP, dan
+// koreksi manual yang pernah dilakukan di order ini.
+app.put('/api/orders/:id/discount', requireMenu('orders', 'edit'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.order_status === 'cancelled')
+            return res.status(400).json({ error: 'Pesanan sudah dibatalkan — potongannya tidak bisa diubah.' });
+        // Temporary Order menghitung potongannya sendiri saat keputusan keep/return
+        // (PUT /api/temp-orders/:id/decide). Mengubahnya di sini akan ditimpa.
+        if (order.order_source === 'test_size')
+            return res.status(400).json({ error: 'Temporary Order punya alur potongannya sendiri (saat keputusan keep/return).' });
+
+        // Tagihan partner adalah snapshot terkunci. Kalau ordernya diubah setelah
+        // tagihan terbit, angka yang sudah dikirim ke partner diam-diam berbeda.
+        const aktif = await dbGet(
+            `SELECT pinv.invoice_no FROM partner_invoice_orders pio
+               JOIN partner_invoices pinv ON pinv.id = pio.invoice_id
+              WHERE pio.order_id = $1 AND pio.is_active`, [order.id]);
+        if (aktif) return res.status(409).json({
+            error: `Order ini sudah masuk tagihan ${aktif.invoice_no}. Batalkan tagihan itu dulu kalau potongannya memang perlu dibetulkan.` });
+
+        // Sumber kotor SAMA dengan penyusun tagihan: harga item sudah termasuk
+        // bordir; bonus & barang uji-coba yang dikembalikan tidak ikut dipotong.
+        const items = await dbAll(
+            `SELECT quantity, price, bordir_nama, bordir_nama_price, bordir_logo, bordir_logo_price
+               FROM order_items WHERE order_id = $1 AND is_bonus = FALSE AND is_test_returned = FALSE`,
+            [order.id]);
+        const gross = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 0), 0);
+        const bordir = items.reduce((s, i) => s +
+            ((i.bordir_nama ? Number(i.bordir_nama_price || 0) : 0) +
+             (i.bordir_logo ? Number(i.bordir_logo_price || 0) : 0)) * Number(i.quantity || 0), 0);
+
+        // Susunan tahap. Nominal (rupiah) hanya boleh di urutan PERTAMA: diskon
+        // pelanggan lebih dulu, komisi partner dihitung dari harga yang benar-benar
+        // dibayar pembeli — bukan sebaliknya.
+        const mentah = Array.isArray(req.body.stages) ? req.body.stages : [];
+        if (mentah.length > 3) return res.status(400).json({ error: 'Maksimal 3 tahap potongan' });
+        const pcts = [];
+        for (let i = 0; i < mentah.length; i++) {
+            const tahap = mentah[i];
+            if (tahap && typeof tahap === 'object' && tahap.rp !== undefined) {
+                if (i !== 0) return res.status(400).json({ error: 'Potongan nominal (Rp) hanya boleh jadi tahap pertama' });
+                const rp = parseInt(tahap.rp, 10);
+                if (!Number.isInteger(rp) || rp < 1)
+                    return res.status(400).json({ error: 'Potongan nominal harus angka rupiah minimal 1' });
+                pcts.push({ rp });
+            } else {
+                const pct = parseInt(tahap, 10);
+                if (!Number.isInteger(pct) || pct < 1 || pct > 99)
+                    return res.status(400).json({ error: 'Persentase potongan harus 1 sampai 99' });
+                pcts.push(pct);
+            }
+        }
+
+        const incBordir = !(req.body.inc_bordir === false || req.body.inc_bordir === 'false');
+        const base = incBordir ? gross : gross - bordir;
+        if (pcts.length && base <= 0)
+            return res.status(400).json({ error: 'Order ini tidak punya nilai yang bisa dipotong' });
+
+        const lama = Number(order.discount_amount || 0);
+        const labelLama = order.discount_label || null;
+        const baru = hitungPotonganBerantai(base, pcts);
+        const labelBaru = discLabelDariPcts(pcts, incBordir);
+        if (baru === lama && (labelBaru || '') === (labelLama || ''))
+            return res.status(400).json({ error: 'Tidak ada yang berubah' });
+
+        const totalBaru = Number(order.total_amount || 0) - (baru - lama);
+        if (totalBaru < 0) return res.status(400).json({ error: 'Potongan melebihi total order' });
+
+        // discount_percent = kolom lama, hanya bermakna kalau potongannya SATU tahap
+        // persen polos. Susunan berantai / nominal tidak bisa diwakili satu angka,
+        // jadi dinolkan — pembacanya (edit item) sudah memperlakukan 0 sebagai
+        // "jangan hitung ulang proporsional".
+        const pctTunggal = (pcts.length === 1 && typeof pcts[0] === 'number') ? pcts[0] : 0;
+
+        const actor = req.user?.username || 'admin';
+        const catatan = `Potongan dibetulkan lewat Edit Diskon: ${labelLama || 'tanpa potongan'} (${lama}) -> `
+            + `${labelBaru || 'tanpa potongan'} (${baru}), total ${order.total_amount} -> ${totalBaru}.`;
+        await withTransaction(async (client) => {
+            await client.query(
+                `UPDATE orders SET discount_amount = $1, discount_label = $2, discount_percent = $3,
+                                   total_amount = $4, updated_at = NOW() WHERE id = $5`,
+                [baru, labelBaru, pctTunggal, totalBaru, order.id]);
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
+                 VALUES ($1,'edit',NULL,$2,$3)`, [order.id, catatan, actor]);
+        });
+
+        // Hal yang perlu DIBACA admin, bukan penghalang.
+        const notes = [];
+        if (order.payment_status === 'paid')
+            notes.push('Pesanan ini sudah dibayar — pastikan uang yang benar-benar diterima cocok dengan total barunya.');
+        if (Number(order.dp_amount || 0) > totalBaru)
+            notes.push(`DP yang sudah dibayar (${order.dp_amount}) kini melebihi total order (${totalBaru}).`);
+
+        res.json({
+            message: 'Potongan pesanan diperbarui',
+            discount_amount: baru, discount_label: labelBaru, total_amount: totalBaru,
+            notes,
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // PUT /api/orders/:id/items/:itemId — ganti produk / warna / variant / size SEBELUM dibayar.
 // Body: { product_id?, color?, variant_type?, size? }. Field yang tidak dikirim = tidak diubah.
 // Tujuan: salah input tidak lagi harus dibatalkan lalu dibuat ulang dari nol (request James).
