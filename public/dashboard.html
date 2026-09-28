@@ -6161,13 +6161,20 @@ function renderInventory() {
                     ? `<button onclick="showModule('preorder')"
                            class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 border border-orange-400/30 text-orange-300 hover:bg-orange-500/20 transition whitespace-nowrap"
                            title="${resv.po_qty} pcs Pre-Order menunggu stok">${resv.po_qty} PO</button>` : '';
+                // Angka besar di baris ini SENGAJA tetap stok fisik — ini layar kelola
+                // stok, jadi harus mencerminkan isi rak. Badge ini yang menjelaskan
+                // kenapa Kasir & website menawarkan lebih sedikit daripada angka itu.
+                const ditahan  = parseInt(r.held || 0);
+                const holdBadge = ditahan > 0
+                    ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/10 border border-sky-400/30 text-sky-300 whitespace-nowrap"
+                           title="${ditahan} pcs ditahan pesanan yang menunggu bayar. Otomatis lepas kalau tidak dibayar sampai batas waktunya (website 24 jam, lainnya 72 jam) atau kalau pesanannya dibatalkan.">${ditahan} ditahan</span>` : '';
                 sizeRows += `
                 <div class="inv-size-row flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 border-t border-white/5 first:border-0" id="invrow-${key}"
                      data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-stock="${stock}">
                     <span class="text-xs font-bold text-white/60 w-9 sm:w-12 shrink-0">${esc(r.size)}</span>
                     <span class="text-base font-bold tabular-nums w-8 sm:w-10 text-right shrink-0 ${stockClass}">${stock}</span>
                     <span class="text-[10px] ${stockClass} w-9 shrink-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
-                    <div class="flex items-center gap-1 flex-1 min-w-0 flex-wrap">${poBadge}${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}${rejectBadge}</div>
+                    <div class="flex items-center gap-1 flex-1 min-w-0 flex-wrap">${holdBadge}${poBadge}${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}${rejectBadge}</div>
                     <div class="flex gap-1 shrink-0 ml-auto">
                         <button onclick="invEditStart('${key}')"
                             class="edit-action text-[10px] px-2.5 py-1 rounded-lg bg-white/8 border border-white/15 text-white/80 hover:bg-white/15 transition font-bold" title="Ubah stok">
@@ -10308,12 +10315,17 @@ async function eiOnProductChange(keepCurrent) {
     const pid = parseInt(document.getElementById('ei-product').value, 10);
     if (!pid) return;
     try {
-        if (!_editItemInvCache[pid]) {
-            const res = await fetch(API + `/api/inventory/${pid}`);
+        // for_order — supaya tahanan stok milik pesanan INI tidak terhitung sebagai
+        // saingan; tanpa itu varian yang sudah jadi miliknya terlihat habis. Karena
+        // jawabannya kini BEDA per pesanan, kuncinya harus ikut memuat id pesanan.
+        const oid = modal._ctx.order && modal._ctx.order.id;
+        const kunci = `${pid}|${oid}`;
+        if (!_editItemInvCache[kunci]) {
+            const res = await fetch(API + `/api/inventory/${pid}?for_order=${oid}`);
             const inv = await res.json();
-            _editItemInvCache[pid] = Array.isArray(inv) ? inv : [];
+            _editItemInvCache[kunci] = Array.isArray(inv) ? inv : [];
         }
-        modal._ctx.inv = _editItemInvCache[pid];
+        modal._ctx.inv = _editItemInvCache[kunci];
     } catch (e) {
         toast('Gagal memuat varian produk: ' + e.message, true);
         modal._ctx.inv = [];
@@ -12147,11 +12159,17 @@ function waOnVariantChange(idx) {
     const sizes = [...new Set(filtered.map(i => i.size))];
     sizes.forEach(s => {
         const row = filtered.find(i => i.size === s);
+        // `stock` dari server = yang BOLEH DIJUAL (fisik dikurangi yang sedang
+        // ditahan pesanan lain yang menunggu bayar). Angka fisiknya ikut dikirim
+        // sebagai stock_fisik — dipakai untuk menjelaskan selisihnya, supaya admin
+        // tidak bingung melihat "PO" untuk barang yang jelas-jelas ada di rak.
         const stock = row ? Number(row.stock) : 0;
+        const ditahan = row ? Number(row.held || 0) : 0;
         // Stok 0 → tetap dimunculkan, ditandai "— PO" supaya admin tahu ini akan jadi
         // Pre-Order. Toggle PO otomatis muncul saat qty > stock (waCheckPO).
         const suffix = stock === 0 ? ' — PO' : '';
-        sizeSel.innerHTML += `<option value="${s}">${s}${suffix}</option>`;
+        const catatanTahan = ditahan > 0 ? ` (${ditahan} ditahan order lain)` : '';
+        sizeSel.innerHTML += `<option value="${s}">${s}${suffix}${catatanTahan}</option>`;
     });
     // Off-catalog custom size (e.g. 4XL) — always available, skips stock entirely.
     sizeSel.innerHTML += `<option value="__custom__">✏️ Custom Size…</option>`;

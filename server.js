@@ -901,6 +901,40 @@ async function initDB() {
     await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_lookup          ON stock_movements(product_id, color, size, variant_type)');
     await createIdx('CREATE INDEX IF NOT EXISTS idx_sm_created         ON stock_movements(created_at DESC)');
 
+    // ── PENAHANAN STOK (28 Sep 2026) ──────────────────────────────────────────
+    // Masalahnya (kasus WS-WA-20260903-8151): stok BARU dipotong saat pembayaran
+    // dikonfirmasi. Di antara "order dibuat" dan "order dibayar", barang yang sama
+    // masih terlihat tersedia untuk pembeli lain — dua orang bisa memesan potongan
+    // terakhir yang sama, dan yang kalah baru ketahuan di kasir.
+    //
+    // Yang dipakai di sini: penahanan LUNAK. `inventory.stock` tetap berarti stok
+    // FISIK di rak dan tetap hanya dipotong saat pembayaran dikonfirmasi — jadi
+    // seluruh alur lama (PO FIFO, kekurangan-jadi-PO, pembatalan, Tukar Size)
+    // tidak berubah sama sekali. Yang ditambahkan hanya lapisan KETERSEDIAAN:
+    //     tersedia = stok fisik - yang sedang ditahan order lain
+    //
+    // Kedaluwarsanya PASIF: baris tahanan punya `expires_at`, dan pembacaan
+    // ketersediaan hanya menghitung yang belum lewat. Tidak ada job yang wajib
+    // jalan — kalau server mati semalaman, tahanan tetap lepas tepat waktu dengan
+    // sendirinya. Job pembersih hanyalah kerapian, bukan syarat kebenaran.
+    await dbRun(`CREATE TABLE IF NOT EXISTS stock_holds (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        order_item_id INTEGER,
+        product_id INTEGER NOT NULL,
+        size TEXT NOT NULL,
+        color TEXT NOT NULL,
+        variant_type TEXT NOT NULL DEFAULT 'null',
+        quantity INTEGER NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        released_at TIMESTAMPTZ,
+        release_reason TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_holds_varian ON stock_holds(product_id, size, color, variant_type)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_holds_order  ON stock_holds(order_id)');
+    await createIdx('CREATE INDEX IF NOT EXISTS idx_holds_aktif  ON stock_holds(released_at, expires_at)');
+
     // ── Migrate: reject stock support ─────────────────────────────────────────
     await dbRun(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS stock_reject INTEGER DEFAULT 0`);
     await dbRun(`ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS is_reject BOOLEAN DEFAULT FALSE`);
@@ -2041,6 +2075,109 @@ function sortByReceipt(rows) {
 // ⚠️ Rumusnya HARUS identik dengan `discAmountFor` di dashboard.html: tiap tahap
 // dihitung dari SISA, bukan persennya dijumlah dulu. Kalau dua sisi ini melenceng,
 // mencentang lalu membatalkan centang tidak akan mengembalikan angka semula.
+// ═══════════════════════════════════════════════════════════════════════════
+// PENAHANAN STOK — lihat catatan panjang di initDB (tabel stock_holds).
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Durasinya BEDA PER KANAL, dan itu disengaja. Dari 6 bulan data nyata
+// (dicek 28 Sep 2026): pembeli Website 90% lunas dalam 24 jam, pembeli
+// WhatsApp 90% baru lunas dalam ~97 jam. Satu angka untuk semua berarti salah
+// satu sisi selalu rugi: terlalu pendek, order WA kehilangan tahanannya sebelum
+// pembeli sempat transfer; terlalu panjang, potongan terakhir terkunci berhari-
+// hari gara-gara keranjang website yang ditinggal.
+const HOLD_JAM_PER_SUMBER = { website: 24 };
+const HOLD_JAM_DEFAULT = 72;      // whatsapp, event_offline, offline, collab
+function holdJamUntuk(source) {
+    return HOLD_JAM_PER_SUMBER[String(source || '')] ?? HOLD_JAM_DEFAULT;
+}
+const holdKey = (r) => `${r.product_id}|${r.size}|${r.color}|${r.variant_type || 'null'}`;
+
+// Baris pesanan yang MENAHAN stok. Pre-Order tidak menahan (barangnya memang
+// belum ada), begitu juga custom size / custom product (tidak punya baris
+// inventory). Bonus IKUT menahan — barangnya tetap keluar dari rak meski gratis.
+const holdBarisMenahan = (it) => !it.is_po && !it.is_custom_size && !it.is_custom_product;
+
+// Berapa yang sedang ditahan per varian, untuk sekumpulan varian.
+// `abaikanOrderId` dipakai saat menghitung ketersediaan UNTUK order itu sendiri
+// (mis. layar edit) supaya tahanannya sendiri tidak terlihat seperti saingan.
+async function tahananVarian(varian, abaikanOrderId = null) {
+    const out = new Map();
+    if (!varian.length) return out;
+    const params = [new Date()];
+    const ph = varian.map(v => {
+        params.push(v.product_id, v.size, v.color, v.variant_type || 'null');
+        const n = params.length;
+        return `(product_id=$${n-3} AND size=$${n-2} AND color=$${n-1} AND variant_type=$${n})`;
+    });
+    let extra = '';
+    if (abaikanOrderId != null) { params.push(abaikanOrderId); extra = ` AND order_id <> $${params.length}`; }
+    // expires_at dibandingkan dengan waktu dari Node, bukan NOW(), supaya jalur
+    // ini juga bisa diuji di pg-mem (yang tidak punya INTERVAL/NOW yang andal).
+    const rows = await dbAll(
+        `SELECT product_id, size, color, variant_type, SUM(quantity)::int AS held
+           FROM stock_holds
+          WHERE released_at IS NULL AND expires_at > $1${extra}
+            AND (${ph.join(' OR ')})
+          GROUP BY product_id, size, color, variant_type`, params);
+    for (const r of rows) out.set(holdKey(r), Number(r.held || 0));
+    return out;
+}
+
+// Pasang tahanan untuk sebuah order yang baru dibuat. Dipanggil DI DALAM
+// transaksi pembuatan order. Order yang langsung lunas (total Rp 0) tidak
+// menahan apa pun — stoknya sudah dipotong betulan di sana.
+async function pasangTahanan(client, orderId, items, source, expiresOverride = null) {
+    const jam = holdJamUntuk(source);
+    const expires = expiresOverride || new Date(Date.now() + jam * 3600 * 1000);
+    const per = new Map();
+    for (const it of items) {
+        if (!holdBarisMenahan(it)) continue;
+        const k = holdKey(it);
+        if (!per.has(k)) per.set(k, { product_id: it.product_id, size: it.size, color: it.color,
+                                      variant_type: it.variant_type || 'null', quantity: 0 });
+        per.get(k).quantity += Number(it.quantity || 0);
+    }
+    for (const v of per.values()) {
+        if (v.quantity <= 0) continue;
+        await client.query(
+            `INSERT INTO stock_holds (order_id, product_id, size, color, variant_type, quantity, expires_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [orderId, v.product_id, v.size, v.color, v.variant_type, v.quantity, expires]);
+    }
+    return expires;
+}
+
+// Ubah sekumpulan baris inventory menjadi KETERSEDIAAN. `stock` sengaja ditimpa
+// dengan angka yang boleh dijual, karena semua pembacanya (katalog website,
+// dropdown Kasir) memang menanyakan "berapa yang bisa saya pesan sekarang".
+// Angka fisiknya tetap dikirim sebagai `stock_fisik` supaya layar admin bisa
+// menjelaskan selisihnya, bukan menampilkan nol yang misterius.
+//
+// TIDAK dipakai di /api/inventory/all: itu layar KELOLA stok, yang harus
+// menampilkan isi rak sebenarnya — di sana `held` hanya ditambahkan.
+async function lampirkanKetersediaan(rows, abaikanOrderId = null) {
+    if (!rows || !rows.length) return rows;
+    const held = await tahananVarian(rows, abaikanOrderId);
+    for (const r of rows) {
+        const h = held.get(holdKey(r)) || 0;
+        r.stock_fisik = Number(r.stock || 0);
+        r.held = h;
+        r.stock = Math.max(0, r.stock_fisik - h);
+    }
+    return rows;
+}
+
+// Lepaskan semua tahanan sebuah order. WAJIB dipanggil begitu ordernya tidak
+// lagi "menunggu bayar": lunas (stok sudah dipotong betulan — kalau tahanannya
+// tidak dilepas, barang yang sama terhitung dua kali) atau batal.
+async function lepasTahanan(client, orderId, alasan) {
+    const q = `UPDATE stock_holds SET released_at = $1, release_reason = $2
+                WHERE order_id = $3 AND released_at IS NULL`;
+    const params = [new Date(), String(alasan || '').slice(0, 60), orderId];
+    if (client) return client.query(q, params);
+    return dbRun(q, params);
+}
+
 const DISC_CONSIGNMENT_PCT = 30;
 // Tahap potongan = angka persen (10, 30) ATAU nominal { rp: 20000 } — Kasir
 // (17 Sep) bisa memberi diskon pelanggan nominal, ditulis "Diskon Rp 20.000".
@@ -3401,11 +3538,14 @@ app.get('/api/inventory', async (req, res) => {
                  WHERE p.is_active = TRUE
                  ORDER BY i.product_id, i.color, i.variant_type, i.size`);
         }
-        res.json(rows);
+        res.json(await lampirkanKetersediaan(rows));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // GET /api/inventory/all — semua inventory join product (satu query, untuk dashboard)
+// Ini layar KELOLA stok: `stock` tetap angka fisik di rak. Yang ditambahkan cuma
+// `held` — berapa yang sedang ditahan pesanan yang menunggu bayar — supaya admin
+// tahu kenapa Kasir menawarkan lebih sedikit daripada yang terlihat di sini.
 app.get('/api/inventory/all', requireAuth(), async (req, res) => {
     try {
         const rows = await dbAll(
@@ -3437,6 +3577,10 @@ app.get('/api/inventory/all', requireAuth(), async (req, res) => {
             const kw = r.product_id + '|' + r.color;
             r.photo_url = fotoTepat.get(kw + '|' + (r.variant_type || 'null')) || fotoWarna.get(kw) || null;
         }
+        // `stock` DIBIARKAN fisik di sini (lihat catatan di atas endpoint);
+        // `held` ditambahkan supaya layar bisa menjelaskan selisihnya.
+        const ditahan = await tahananVarian(rows);
+        for (const r of rows) r.held = ditahan.get(holdKey(r)) || 0;
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3657,7 +3801,11 @@ app.get('/api/inventory/:product_id', async (req, res) => {
         const rows = await dbAll(
             'SELECT * FROM inventory WHERE product_id = $1 ORDER BY color, variant_type, size',
             [req.params.product_id]);
-        res.json(rows);
+        // ?for_order=<id> — layar edit item sebuah pesanan. Tanpa ini, pesanan yang
+        // sedang diedit melihat TAHANANNYA SENDIRI sebagai saingan dan varian yang
+        // sudah jadi miliknya terlihat habis.
+        const untukOrder = parseInt(req.query.for_order, 10);
+        res.json(await lampirkanKetersediaan(rows, Number.isInteger(untukOrder) ? untukOrder : null));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3669,7 +3817,14 @@ app.get('/api/inventory/:product_id/check', async (req, res) => {
             'SELECT stock FROM inventory WHERE product_id = $1 AND size = $2 AND color = $3 AND variant_type = $4',
             [req.params.product_id, size, color, type]
         );
-        res.json({ available: row ? row.stock : 0 });
+        if (!row) return res.json({ available: 0, stock_fisik: 0, held: 0 });
+        // `available` sudah dikurangi barang yang sedang ditahan pesanan lain yang
+        // menunggu bayar — inilah yang mencegah dua pembeli memesan potongan
+        // terakhir yang sama (kasus WS-WA-20260903-8151).
+        const held = (await tahananVarian([{ product_id: req.params.product_id, size, color, variant_type: type }]))
+            .get(`${req.params.product_id}|${size}|${color}|${type || 'null'}`) || 0;
+        const fisik = Number(row.stock || 0);
+        res.json({ available: Math.max(0, fisik - held), stock_fisik: fisik, held });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -4529,13 +4684,17 @@ app.post('/api/orders', async (req, res) => {
                 Number(it.quantity || 0), !!it.bordir_nama, !!it.bordir_logo
             ].join('|')).sort().join(';;');
             const incomingSig = sigOf(items);
+            // Batas 24 jam dihitung di JS, bukan `NOW() - INTERVAL` di SQL: dengan
+            // INTERVAL, seluruh jalur pembuatan order publik tidak bisa diuji sama
+            // sekali (pg-mem tidak mendukungnya). Hasilnya sama persis.
+            const batas24Jam = new Date(Date.now() - 24 * 3600 * 1000);
             const candidates = await dbAll(
                 `SELECT id, order_code FROM orders
                  WHERE regexp_replace(customer_phone,'\\D','','g') = $1
                    AND order_status = 'waiting_payment' AND payment_status = 'pending'
-                   AND created_at > NOW() - INTERVAL '24 hours'
+                   AND created_at > $2
                  ORDER BY created_at DESC LIMIT 10`,
-                [custPhoneDigits]
+                [custPhoneDigits, batas24Jam]
             );
             for (const c of candidates) {
                 const oldItems = await dbAll(
@@ -4811,6 +4970,48 @@ app.post('/api/orders', async (req, res) => {
         // Atomic: insert order + all items in one transaction. Either all rows land
         // or none — no orphan orders with missing items.
         const orderId = await withTransaction(async (client) => {
+            // ── PALANG KETERSEDIAAN (pembeli website) ─────────────────────────
+            // Tahanan saja tidak cukup kalau dua pembeli menekan "checkout" nyaris
+            // bersamaan: keduanya sempat melihat stok masih ada. Baris inventory
+            // dikunci lebih dulu (FOR UPDATE) supaya kedua permintaan berbaris, lalu
+            // tahanan dibaca ULANG di dalam antrean itu — yang kedua melihat tahanan
+            // yang pertama dan ditolak, bukan menumpuk di kasir.
+            //
+            // Kasir (admin) SENGAJA tidak dipalang: admin memang berhak membuat
+            // Pre-Order untuk barang yang stoknya kurang, dan dia melihat sendiri
+            // angka "ditahan" di dropdownnya.
+            if (!isAdmin) {
+                const perVarian = new Map();
+                for (const it of itemDetails) {
+                    if (!holdBarisMenahan(it)) continue;
+                    const vt = it.variant_type || 'null';
+                    const k = `${it.product_id}|${it.size}|${it.color}|${vt}`;
+                    if (!perVarian.has(k)) perVarian.set(k, { product_id: it.product_id, size: it.size,
+                        color: it.color, variant_type: vt, nama: it.product_name, quantity: 0 });
+                    perVarian.get(k).quantity += Number(it.quantity || 0);
+                }
+                const kurang = [];
+                for (const v of perVarian.values()) {
+                    const inv = await client.query(
+                        'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                        [v.product_id, v.size, v.color, v.variant_type]);
+                    const fisik = inv.rows[0] ? parseInt(inv.rows[0].stock) : 0;
+                    const held = await client.query(
+                        `SELECT COALESCE(SUM(quantity),0)::int AS held FROM stock_holds
+                          WHERE released_at IS NULL AND expires_at > $1
+                            AND product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5`,
+                        [new Date(), v.product_id, v.size, v.color, v.variant_type]);
+                    const tersedia = Math.max(0, fisik - Number(held.rows[0].held || 0));
+                    if (tersedia < v.quantity)
+                        kurang.push(`${v.nama || 'Produk'} ${v.color}/${v.size} — tersisa ${tersedia}, diminta ${v.quantity}`);
+                }
+                if (kurang.length) {
+                    const e = new Error(`Maaf, stoknya keburu diambil pembeli lain: ${kurang.join('; ')}. Silakan ubah jumlah atau pilih varian lain.`);
+                    e.statusCode = 409;
+                    throw e;
+                }
+            }
+
             const orderResult = await client.query(
                 `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
@@ -4850,6 +5051,15 @@ app.post('/api/orders', async (req, res) => {
                         item.is_custom_product || false, item.custom_product_name || null, item.custom_product_category || null,
                         item.unit_cogs || 0, item.bordir_nama_cogs || 0, item.bordir_logo_cogs || 0, item.packaging_cogs || 0, item.total_cogs || 0]
                 );
+            }
+
+            // Tahan stoknya selama order ini menunggu pembayaran, supaya pembeli
+            // lain tidak ikut memesan potongan yang sama. Order gratis (total 0)
+            // dilewati: stoknya dipotong betulan beberapa baris di bawah, jadi
+            // menahannya lagi berarti menghitung barang yang sama dua kali.
+            // Temporary Order juga tidak menahan — stoknya sudah keluar (test_out).
+            if (!(isAdmin && total === 0) && safeOrderSource !== 'test_size') {
+                await pasangTahanan(client, newOrderId, itemDetails, safeOrderSource);
             }
 
             // Auto-confirm order gratis (total = 0): kalau semua produk bonus + ongkir 0
@@ -5018,7 +5228,9 @@ app.post('/api/orders', async (req, res) => {
         });
     } catch (err) {
         if (isReceiptConflict(err)) return res.status(409).json({ error: 'Nomor kwitansi ini sudah dipakai order lain di partner yang sama. Satu lembar kwitansi hanya untuk satu order.' });
-        res.status(500).json({ error: err.message });
+        // Palang ketersediaan (409) & stok kurang order gratis (409) memberi
+        // statusCode sendiri — jangan diturunkan jadi 500, pembeli butuh tahu alasannya.
+        res.status(err.statusCode || 500).json({ error: err.message });
     }
 });
 
@@ -5192,6 +5404,12 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
                      `Order ${order.order_code}`, order.id, req.user.username]
                 );
             }
+
+            // Stok sudah dipotong betulan di atas. Tahanannya WAJIB dilepas di sini
+            // — kalau tidak, barang yang sama terhitung dua kali (sekali sebagai
+            // stok yang hilang, sekali sebagai tahanan) dan varian ini terlihat
+            // habis padahal masih ada.
+            await lepasTahanan(client, order.id, 'lunas');
 
             // ── PO PAID-AFTER-RECEIVE FIX ─────────────────────────────────────
             // Skenario: stok PO datang SEBELUM customer bayar. Endpoint receive
@@ -5617,6 +5835,10 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
                     );
                 }
             }
+
+            // Order batal tidak lagi berhak menahan apa pun — lepaskan sekarang,
+            // jangan menunggu waktunya habis sendiri.
+            await lepasTahanan(client, order.id, 'dibatalkan');
 
             if (cancelContextUrl) {
                 // Stored as 'refund' step for backward-compat with existing photo timeline UI.
@@ -6157,10 +6379,17 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
                 );
             }
 
-            // 2. Re-parent items terpilih ke child
+            // 2. Re-parent items terpilih ke child.
+            // Daftar id ditulis sebagai placeholder satu per satu, bukan
+            // `id = ANY($3::int[])`: dengan ANY(array) seluruh endpoint pemisahan
+            // pesanan TIDAK BISA DIUJI sama sekali (pg-mem tidak menjalankannya dan
+            // diam-diam tidak memindahkan apa pun). moveIds sudah disaring jadi
+            // bilangan bulat positif di atas, jadi hasilnya identik dan tetap
+            // memakai parameter — bukan string yang dirangkai.
+            const phMove = moveIds.map((_, i) => '$' + (i + 3)).join(',');
             await client.query(
-                `UPDATE order_items SET order_id = $1 WHERE order_id = $2 AND id = ANY($3::int[])`,
-                [newId, order.id, moveIds]
+                `UPDATE order_items SET order_id = $1 WHERE order_id = $2 AND id IN (${phMove})`,
+                [newId, order.id, ...moveIds]
             );
 
             // Child langsung 'done' (pickup) = barang diserahkan di tempat, tapi child
@@ -6191,6 +6420,23 @@ app.post('/api/orders/:id/split', requireMenu('orders','edit'), upload.none(), a
                 [stayingTotal, stayingDiscount, stayingHasBordirLogo, stayingHasBordirNama,
                  JSON.stringify(stayingEmbroidery), stayingNote, order.id]
             );
+
+            // Tahanan stok ikut dipisah. Jumlah total yang ditahan tidak berubah —
+            // barangnya itu-itu juga — tapi kepemilikannya harus benar: kalau
+            // tahanan item yang pindah tetap tercatat di pesanan asal, membatalkan
+            // pesanan asal akan melepas stok yang sebenarnya masih dipegang pesanan
+            // anak. Batas waktunya dipertahankan; memisah bukan alasan memperpanjang.
+            if (order.payment_status !== 'paid') {
+                const expLama = await client.query(
+                    `SELECT MIN(expires_at) AS exp FROM stock_holds WHERE order_id = $1 AND released_at IS NULL`,
+                    [order.id]);
+                const exp = expLama.rows[0] && expLama.rows[0].exp ? new Date(expLama.rows[0].exp) : null;
+                await lepasTahanan(client, order.id, 'dipisah');
+                const sisa = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+                const pindah = await client.query('SELECT * FROM order_items WHERE order_id = $1', [newId]);
+                await pasangTahanan(client, order.id, sisa.rows, order.order_source, exp);
+                await pasangTahanan(client, newId, pindah.rows, order.order_source, exp);
+            }
 
             return newId;
         });
@@ -7632,6 +7878,17 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
                 `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by) VALUES ($1,'edit',NULL,$2,$3)`,
                 [order.id, `Edit item: ${changes.join(', ')} · total Rp ${oldTotal} → Rp ${newTotal}`, req.user.username]
             );
+            // Tahanan stok harus ikut pindah ke varian/jumlah yang baru — kalau
+            // tidak, varian lama tetap terkunci dan varian baru tidak terlindungi.
+            // Disusun ulang dari isi pesanan terkini, tapi JAM KEDALUWARSANYA
+            // dipertahankan: mengedit item bukan alasan memperpanjang tahanan.
+            const expLama = await client.query(
+                `SELECT MIN(expires_at) AS exp FROM stock_holds WHERE order_id = $1 AND released_at IS NULL`,
+                [order.id]);
+            await lepasTahanan(client, order.id, 'item diubah');
+            const isiBaru = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+            await pasangTahanan(client, order.id, isiBaru.rows, order.order_source,
+                expLama.rows[0] && expLama.rows[0].exp ? new Date(expLama.rows[0].exp) : null);
         });
 
         res.json({

@@ -39,5 +39,16 @@ const { boot, none } = require('./_bootstrap');
                                   gross_total, discount_total, total_due, order_count, item_count, issued_at) VALUES
       (500, 'INV-PTR-0001', 1, 'PT Arta Otto Indonesia', 'issued', 240000, 72000, 168000, 1, 1, NOW());
     `);
+    // Satu pesanan website yang MENUNGGU BAYAR, menahan 2 pcs Minna charcoal-grey
+    // pendek M — supaya badge "ditahan" & angka Kasir bisa dilihat langsung.
+    none(`
+    INSERT INTO orders (id, order_code, customer_name, customer_phone, customer_address, total_amount,
+                        payment_status, order_status, shipping_cost, shipping_courier, order_source) VALUES
+      (950, 'WS-20260928-0950', 'Dina', '08119990001', 'Jl. Uji', 580000, 'pending', 'waiting_payment', 0, 'J&T', 'website');
+    INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price) VALUES
+      (950, 950, 1, 'M', 'charcoal-grey', 'pendek', 2, 290000);
+    `);
+    none(`INSERT INTO stock_holds (order_id, product_id, size, color, variant_type, quantity, expires_at)
+          VALUES (950, 1, 'M', 'charcoal-grey', 'pendek', 2, '${new Date(Date.now() + 20 * 3600 * 1000).toISOString()}')`);
     console.log('Pratinjau siap: http://localhost:3000/dashboard.html (admin / admin123)');
 })();
