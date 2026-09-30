@@ -15309,6 +15309,44 @@ function pbTogglePick(id, ikut) {
     if (ikut) pbPilih.add(Number(id)); else pbPilih.delete(Number(id));
     pbRecalc();
 }
+
+// Centang / kosongkan SEMUA order yang bisa ditagih — termasuk yang ada di
+// halaman lain. Diminta James 1 Okt 2026: tagihan baju dan aksesoris dibuat
+// terpisah, jadi alurnya "kosongkan semua dulu, lalu centang yang ini saja".
+//
+// Cakupannya SENGAJA seluruh halaman, bukan halaman yang sedang tampil. Pilihan
+// disimpan di Set lintas halaman (lihat catatan di pbPilih); kalau tombol ini
+// cuma mengenai halaman tampil, "kosongkan semua" akan meninggalkan centang di
+// halaman lain yang tidak terlihat — dan order itu ikut tertagih diam-diam.
+//
+// Centang di halaman yang sedang tampil disetel LANGSUNG, tanpa render ulang:
+// merender ulang akan menghapus isi kotak "Catatan di lembar tagihan" yang
+// mungkin sudah diketik admin.
+function pbPilihSemua(ikut) {
+    if (!pbPilih) return;
+    for (const o of pbCandidates) {
+        if (!o.billable) continue;
+        if (ikut) pbPilih.add(Number(o.id)); else pbPilih.delete(Number(o.id));
+    }
+    document.querySelectorAll('#pb-body .pb-pick').forEach(cb => { if (!cb.disabled) cb.checked = ikut; });
+    pbRecalc();
+}
+
+// Samakan keadaan kotak "semua" dengan pilihan yang sebenarnya. Dipanggil dari
+// pbRecalc supaya ikut benar walau yang berubah cuma satu baris atau halamannya
+// berpindah. Sebagian terpilih ditampilkan sebagai garis (indeterminate), bukan
+// tercentang penuh — tercentang penuh akan berbohong soal apa yang akan tertagih.
+function pbSyncPilihSemua() {
+    const kotak = document.getElementById('pb-pick-all');
+    if (!kotak) return;
+    const bisa = pbCandidates.filter(o => o.billable);
+    const terpilih = bisa.filter(o => pbPilih && pbPilih.has(Number(o.id))).length;
+    kotak.disabled = bisa.length === 0;
+    kotak.checked = bisa.length > 0 && terpilih === bisa.length;
+    kotak.indeterminate = terpilih > 0 && terpilih < bisa.length;
+    const hitung = document.getElementById('pb-pick-count');
+    if (hitung) hitung.textContent = `${terpilih} dari ${bisa.length}`;
+}
 function pbSetHalBuat(n) { pbHalBuat = n; pbRenderBuat(pbRingkasanBuat || {}); document.getElementById('pb-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 let pbRingkasanBuat = null;
 
@@ -15518,11 +15556,16 @@ function pbRenderBuat(data) {
         </div>`;
     body.innerHTML = `
         <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
-            ${totalHalB > 1 ? `<div class="px-4 py-2.5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
-                <p class="text-[11px] text-white/35">Menampilkan ${dariB}–${sampaiB} dari ${pbCandidates.length} order.
-                   <b class="text-white/55">Centang di halaman lain tetap terhitung</b> — ringkasan di atas & tagihan yang terbit mencakup semuanya.</p>
+            <div class="px-4 py-2.5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-[11px] text-white/35">
+                    <b class="text-white/60" id="pb-pick-count">0 dari 0</b> order dipilih.
+                    ${totalHalB > 1
+                        ? `Menampilkan ${dariB}–${sampaiB} dari ${pbCandidates.length}.
+                           <b class="text-white/55">Centang di halaman lain tetap terhitung</b> — ringkasan di atas & tagihan yang terbit mencakup semuanya.`
+                        : 'Kotak di kepala kolom mencentang / mengosongkan semuanya sekaligus.'}
+                </p>
                 ${pagerB}
-            </div>` : ''}
+            </div>
             ${adaBlokir ? `<div class="px-4 py-2.5 bg-amber-500/10 border-b border-amber-400/20 text-[11px] text-amber-200/90">
                 Ada order yang belum bisa ditagih (lihat alasannya di kolom paling kanan). Order itu tidak ikut terhitung.
             </div>` : ''}
@@ -15530,7 +15573,11 @@ function pbRenderBuat(data) {
                 <table class="w-full">
                     <thead class="bg-white/5">
                         <tr class="text-[10px] uppercase tracking-wider text-white/40">
-                            <th class="px-3 py-2.5 w-9"></th>
+                            <th class="px-3 py-2.5 w-9">
+                                <input type="checkbox" id="pb-pick-all" class="w-4 h-4 accent-emerald-500 cursor-pointer"
+                                       onchange="pbPilihSemua(this.checked)"
+                                       title="Centang / kosongkan semua order yang bisa ditagih${totalHalB > 1 ? ' — termasuk yang ada di halaman lain' : ''}" />
+                            </th>
                             <th class="px-3 py-2.5 text-left">No. Kwitansi / Voucher</th>
                             <th class="px-3 py-2.5 text-left">Tgl</th>
                             <th class="px-3 py-2.5 text-left">Pembeli</th>
@@ -15613,6 +15660,7 @@ function pbRecalc() {
     set('pb-sum-gross', pbRp(ikut.reduce((s, o) => s + pbPromoView(o).harga, 0)));
     set('pb-sum-disc', '− ' + pbRp(ikut.reduce((s, o) => s + pbPromoView(o).potongan, 0)));
     set('pb-sum-net', pbRp(ikut.reduce((s, o) => s + o.net_amount, 0)));
+    pbSyncPilihSemua();
 }
 
 async function pbIssue(btn) {
