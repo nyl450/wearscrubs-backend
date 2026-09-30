@@ -15310,21 +15310,59 @@ function pbTogglePick(id, ikut) {
     pbRecalc();
 }
 
-// Centang / kosongkan SEMUA order yang bisa ditagih — termasuk yang ada di
-// halaman lain. Diminta James 1 Okt 2026: tagihan baju dan aksesoris dibuat
-// terpisah, jadi alurnya "kosongkan semua dulu, lalu centang yang ini saja".
+// ── Saringan kategori (1 Okt 2026) ─────────────────────────────────────────
+// Tagihan baju dan aksesoris diterbitkan sebagai invoice terpisah. Menyaring
+// dulu, lalu "centang semua", jauh lebih cepat daripada mencentang belasan baris.
 //
-// Cakupannya SENGAJA seluruh halaman, bukan halaman yang sedang tampil. Pilihan
-// disimpan di Set lintas halaman (lihat catatan di pbPilih); kalau tombol ini
-// cuma mengenai halaman tampil, "kosongkan semua" akan meninggalkan centang di
-// halaman lain yang tidak terlihat — dan order itu ikut tertagih diam-diam.
+// Saringannya MURNI TAMPILAN: pilihan (pbPilih) tidak ikut dihapus saat saringan
+// berganti. Order yang sudah dicentang lalu tersembunyi oleh saringan TETAP akan
+// tertagih — itu sengaja (supaya bisa menggabung dua kategori kalau perlu), tapi
+// karena itu jumlahnya WAJIB diberitahukan: lihat peringatan "di luar saringan"
+// di pbSyncPilihSemua. Menyembunyikannya = tagihan berisi barang yang tidak
+// diniatkan, dan itu baru ketahuan setelah terbit.
+let pbFilterKat = '';        // '' = semua kategori
+
+// Kategori sebuah order = semua kategori barang di dalamnya (bisa lebih dari satu).
+function pbKatOrder(o) {
+    return [...new Set((o.items || []).map(i => i.kategori).filter(Boolean))];
+}
+function pbKandidatTerlihat() {
+    if (!pbFilterKat) return pbCandidates;
+    return pbCandidates.filter(o => pbKatOrder(o).includes(pbFilterKat));
+}
+function pbSetFilterKat(kat) {
+    pbFilterKat = kat === pbFilterKat ? '' : kat;   // klik lagi = lepas saringan
+    pbHalBuat = 1;
+    pbRenderBuat(pbRingkasanBuat || {});
+}
+
+// "Pilih hanya kategori ini" — buang SEMUA pilihan lain, lalu centang yang ada di
+// saringan sekarang. Ini gerakan yang sebenarnya dibutuhkan untuk membuat tagihan
+// aksesoris terpisah; tanpa tombol ini urutannya jadi empat langkah (lepas
+// saringan -> kosongkan semua -> pasang saringan -> centang semua) dan gampang
+// terlewat satu, yang berarti barang kategori lain ikut tertagih.
+function pbPilihHanyaSaringan() {
+    if (!pbPilih) return;
+    pbPilih.clear();
+    for (const o of pbKandidatTerlihat()) if (o.billable) pbPilih.add(Number(o.id));
+    document.querySelectorAll('#pb-body .pb-pick').forEach(cb => { if (!cb.disabled) cb.checked = true; });
+    pbRecalc();
+}
+
+// Centang / kosongkan SEMUA order yang bisa ditagih DI SARINGAN YANG SEDANG
+// AKTIF — termasuk yang ada di halaman lain. Diminta James 1 Okt 2026.
+//
+// Cakupan lintas halaman itu SENGAJA. Pilihan disimpan di Set lintas halaman
+// (lihat catatan di pbPilih); kalau tombol ini cuma mengenai halaman tampil,
+// "kosongkan semua" akan meninggalkan centang di halaman lain yang tidak
+// terlihat — dan order itu ikut tertagih diam-diam.
 //
 // Centang di halaman yang sedang tampil disetel LANGSUNG, tanpa render ulang:
 // merender ulang akan menghapus isi kotak "Catatan di lembar tagihan" yang
 // mungkin sudah diketik admin.
 function pbPilihSemua(ikut) {
     if (!pbPilih) return;
-    for (const o of pbCandidates) {
+    for (const o of pbKandidatTerlihat()) {
         if (!o.billable) continue;
         if (ikut) pbPilih.add(Number(o.id)); else pbPilih.delete(Number(o.id));
     }
@@ -15333,19 +15371,31 @@ function pbPilihSemua(ikut) {
 }
 
 // Samakan keadaan kotak "semua" dengan pilihan yang sebenarnya. Dipanggil dari
-// pbRecalc supaya ikut benar walau yang berubah cuma satu baris atau halamannya
-// berpindah. Sebagian terpilih ditampilkan sebagai garis (indeterminate), bukan
-// tercentang penuh — tercentang penuh akan berbohong soal apa yang akan tertagih.
+// pbRecalc supaya ikut benar walau yang berubah cuma satu baris, halamannya
+// berpindah, atau saringannya berganti. Sebagian terpilih ditampilkan sebagai
+// garis (indeterminate), bukan tercentang penuh — tercentang penuh akan
+// berbohong soal apa yang akan tertagih.
 function pbSyncPilihSemua() {
     const kotak = document.getElementById('pb-pick-all');
-    if (!kotak) return;
-    const bisa = pbCandidates.filter(o => o.billable);
+    const bisa = pbKandidatTerlihat().filter(o => o.billable);
     const terpilih = bisa.filter(o => pbPilih && pbPilih.has(Number(o.id))).length;
-    kotak.disabled = bisa.length === 0;
-    kotak.checked = bisa.length > 0 && terpilih === bisa.length;
-    kotak.indeterminate = terpilih > 0 && terpilih < bisa.length;
+    if (kotak) {
+        kotak.disabled = bisa.length === 0;
+        kotak.checked = bisa.length > 0 && terpilih === bisa.length;
+        kotak.indeterminate = terpilih > 0 && terpilih < bisa.length;
+    }
     const hitung = document.getElementById('pb-pick-count');
     if (hitung) hitung.textContent = `${terpilih} dari ${bisa.length}`;
+    // Order terpilih yang TIDAK terlihat karena saringan. Tetap akan tertagih,
+    // jadi harus disebut angkanya — bukan disembunyikan.
+    const luar = pbCandidates.filter(o => o.billable && pbPilih && pbPilih.has(Number(o.id))
+        && !bisa.some(b => Number(b.id) === Number(o.id))).length;
+    const peringatan = document.getElementById('pb-pick-luar');
+    if (peringatan) {
+        peringatan.classList.toggle('hidden', luar === 0);
+        peringatan.textContent = luar === 0 ? ''
+            : `+${luar} order terpilih di luar saringan ini — tetap ikut tertagih.`;
+    }
 }
 function pbSetHalBuat(n) { pbHalBuat = n; pbRenderBuat(pbRingkasanBuat || {}); document.getElementById('pb-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 let pbRingkasanBuat = null;
@@ -15425,6 +15475,10 @@ async function pbLoad() {
                 // ditagih dicentang, sama seperti perilaku sebelumnya.
                 pbPilih = new Set(bisaSemua);
                 pbHalBuat = 1;
+                // Saringan kategori ikut dilepas: daftar ordernya sudah beda, dan
+                // saringan yang tertinggal dari partner sebelumnya akan menampilkan
+                // layar kosong yang terlihat seperti "tidak ada order".
+                pbFilterKat = '';
                 pbKunciBuat = kunciB;
             } else {
                 // Muat ulang di partner yang sama (mis. setelah centang Consignment):
@@ -15501,14 +15555,25 @@ function pbRenderBuat(data) {
         return;
     }
 
-    const totalHalB = Math.max(1, Math.ceil(pbCandidates.length / PB_PER_HAL));
+    // Daftar yang dipakai halaman & tombol "centang semua" adalah yang SUDAH
+    // disaring — bukan pbCandidates mentah.
+    const terlihat = pbKandidatTerlihat();
+    const totalHalB = Math.max(1, Math.ceil(terlihat.length / PB_PER_HAL));
     if (pbHalBuat > totalHalB) pbHalBuat = totalHalB;
     const mulaiB = (pbHalBuat - 1) * PB_PER_HAL;
-    const halamanB = pbCandidates.slice(mulaiB, mulaiB + PB_PER_HAL);
+    const halamanB = terlihat.slice(mulaiB, mulaiB + PB_PER_HAL);
 
     const rows = halamanB.map(o => {
         const bisa = o.billable;
         const pv = pbPromoView(o);
+        // Order isi campuran (mis. atasan + celana) masuk ke SATU tagihan utuh —
+        // tidak bisa dibelah per kategori. Ditandai supaya tidak terlanjur
+        // dicentang dengan anggapan isinya satu kategori saja.
+        const katO = pbKatOrder(o);
+        const campur = katO.length > 1
+            ? `<span class="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 text-amber-200 whitespace-nowrap"
+                     title="Order ini berisi ${katO.map(k => WA_CAT_LABELS[k] || k).join(' + ')}. Satu order tidak bisa dibelah ke dua tagihan — semuanya ikut ke tagihan yang sama.">campur</span>`
+            : '';
         const rincian = (o.items || []).map(i => {
             const L = pbItemLabel(i);
             // Qty per item ikut ditulis supaya pratinjau bercerita sama dengan
@@ -15525,7 +15590,7 @@ function pbRenderBuat(data) {
             <td class="px-3 py-2 font-mono text-[12px] font-bold whitespace-nowrap">${esc(o.receipt_no || '—')}${o.voucher_no ? `<div class="text-[10px] font-semibold text-amber-200/80">V: ${esc(o.voucher_no)}</div>` : ''}</td>
             <td class="px-3 py-2 text-[11px] text-white/50 whitespace-nowrap">${o.order_date ? new Date(o.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'}</td>
             <td class="px-3 py-2 text-sm">${esc(o.customer_name || '-')}</td>
-            <td class="px-3 py-2 text-[11px] text-white/40 max-w-[260px] truncate" title="${esc(rincian)}">${esc(rincian || '-')}</td>
+            <td class="px-3 py-2 text-[11px] text-white/40 max-w-[260px]"><span class="inline-block max-w-[200px] truncate align-middle" title="${esc(rincian)}">${esc(rincian || '-')}</span>${campur}</td>
             <td class="px-3 py-2 text-right text-[12px] font-mono">${o.qty || 0}</td>
             <td class="px-3 py-2 text-right text-[12px] font-mono">${o.is_cancelled ? '—' : pbRp(pv.harga)}${!o.is_cancelled && pv.promo ? `<div class="text-[9px] font-sans text-amber-300/80 whitespace-nowrap">(${pbPromoNote(pv.promo)})</div>` : ''}</td>
             <td class="px-3 py-2 text-right text-[12px] font-mono text-white/50">
@@ -15541,9 +15606,26 @@ function pbRenderBuat(data) {
         </tr>`;
     }).join('');
 
-    const adaBlokir = pbCandidates.some(o => !o.billable && !o.is_cancelled);
-    const dariB = pbCandidates.length ? mulaiB + 1 : 0;
-    const sampaiB = Math.min(mulaiB + PB_PER_HAL, pbCandidates.length);
+    const adaBlokir = terlihat.some(o => !o.billable && !o.is_cancelled);
+    const dariB = terlihat.length ? mulaiB + 1 : 0;
+    const sampaiB = Math.min(mulaiB + PB_PER_HAL, terlihat.length);
+
+    // Chip saringan — hanya kategori yang MEMANG ada di daftar ini, dengan
+    // jumlahnya, supaya tidak menawarkan saringan yang pasti kosong.
+    const hitungKat = new Map();
+    for (const o of pbCandidates) for (const k of pbKatOrder(o)) hitungKat.set(k, (hitungKat.get(k) || 0) + 1);
+    const chip = (kat, label, jml) => `<button onclick="pbSetFilterKat('${escAttr(kat)}')"
+        class="text-[11px] font-bold px-3 py-1.5 rounded-lg border transition ${pbFilterKat === kat
+            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
+            : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:bg-white/10'}">${esc(label)}
+        <span class="opacity-50">${jml}</span></button>`;
+    const chipsKat = hitungKat.size < 2 ? '' : `
+        <div class="px-4 py-2.5 border-b border-white/5 flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] uppercase tracking-wider text-white/30 mr-1">Saring kategori</span>
+            ${chip('', 'Semua', pbCandidates.length)}
+            ${[...hitungKat.entries()].sort((a, b) => b[1] - a[1])
+                .map(([k, n]) => chip(k, WA_CAT_LABELS[k] || k, n)).join('')}
+        </div>`;
     const tblB = (label, ke, aktif) => `<button ${aktif ? `onclick="pbSetHalBuat(${ke})"` : 'disabled'}
         class="text-[11px] px-2.5 py-1.5 rounded-lg border ${aktif
             ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white/70'
@@ -15556,13 +15638,17 @@ function pbRenderBuat(data) {
         </div>`;
     body.innerHTML = `
         <div class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden">
+            ${chipsKat}
             <div class="px-4 py-2.5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
                 <p class="text-[11px] text-white/35">
-                    <b class="text-white/60" id="pb-pick-count">0 dari 0</b> order dipilih.
+                    <b class="text-white/60" id="pb-pick-count">0 dari 0</b> order dipilih${pbFilterKat ? ` di kategori ${esc(WA_CAT_LABELS[pbFilterKat] || pbFilterKat)}` : ''}.
                     ${totalHalB > 1
-                        ? `Menampilkan ${dariB}–${sampaiB} dari ${pbCandidates.length}.
+                        ? `Menampilkan ${dariB}–${sampaiB} dari ${terlihat.length}.
                            <b class="text-white/55">Centang di halaman lain tetap terhitung</b> — ringkasan di atas & tagihan yang terbit mencakup semuanya.`
                         : 'Kotak di kepala kolom mencentang / mengosongkan semuanya sekaligus.'}
+                    <span id="pb-pick-luar" class="hidden ml-1 font-bold text-amber-300/90"></span>
+                    ${pbFilterKat ? `<button onclick="pbPilihHanyaSaringan()" class="ml-1 underline font-bold text-emerald-300/90 hover:text-emerald-200"
+                        title="Kosongkan semua pilihan lain, lalu centang hanya order di kategori ini — untuk membuat tagihan kategori ini saja">Pilih hanya kategori ini</button>` : ''}
                 </p>
                 ${pagerB}
             </div>
@@ -15576,7 +15662,7 @@ function pbRenderBuat(data) {
                             <th class="px-3 py-2.5 w-9">
                                 <input type="checkbox" id="pb-pick-all" class="w-4 h-4 accent-emerald-500 cursor-pointer"
                                        onchange="pbPilihSemua(this.checked)"
-                                       title="Centang / kosongkan semua order yang bisa ditagih${totalHalB > 1 ? ' — termasuk yang ada di halaman lain' : ''}" />
+                                       title="Centang / kosongkan semua order yang bisa ditagih${pbFilterKat ? ' di kategori ' + (WA_CAT_LABELS[pbFilterKat] || pbFilterKat) : ''}${totalHalB > 1 ? ' — termasuk yang ada di halaman lain' : ''}" />
                             </th>
                             <th class="px-3 py-2.5 text-left">No. Kwitansi / Voucher</th>
                             <th class="px-3 py-2.5 text-left">Tgl</th>
@@ -15588,7 +15674,9 @@ function pbRenderBuat(data) {
                             <th class="px-3 py-2.5 text-right">Ditagih</th>
                         </tr>
                     </thead>
-                    <tbody>${rows}</tbody>
+                    <tbody>${rows || `<tr><td colspan="9" class="px-3 py-8 text-center text-[12px] text-white/35">
+                        Tidak ada order di kategori ini. <button onclick="pbSetFilterKat('')" class="underline hover:text-white/60">Tampilkan semua</button>
+                    </td></tr>`}</tbody>
                 </table>
             </div>
             <div class="p-3 border-t border-white/5 space-y-3">
