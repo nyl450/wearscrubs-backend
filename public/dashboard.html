@@ -2236,8 +2236,16 @@
             <!-- HPP / COGS per variant (admin only) -->
             <div id="pf-cogs-wrap" class="hidden space-y-2 pt-3 border-t border-white/8">
                 <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">HPP / COGS per Variant (Rp) <span class="text-amber-300/70 normal-case font-normal">· admin</span></label>
+                <!-- Judul kolom: tanpa ini angka di kanan tiap baris muncul tanpa
+                     keterangan apa pun dan tidak bisa ditebak artinya. -->
+                <div class="flex items-center gap-2 text-[9px] uppercase tracking-wider text-white/25">
+                    <span class="w-28 shrink-0">Variant</span>
+                    <span class="flex-1">HPP per pcs</span>
+                    <span class="w-28 text-right shrink-0">Margin</span>
+                    <span class="w-5 shrink-0"></span>
+                </div>
                 <div id="pf-cogs-rows" class="space-y-1.5"></div>
-                <p class="text-[10px] text-white/30">Biaya pokok per pcs (kain + jahit + packaging) per variant. Lengan Panjang biasanya lebih mahal dari Pendek. Margin = (harga jual − HPP) / harga. Dipakai di Report. Kosong = belum diisi.</p>
+                <p class="text-[10px] text-white/30">Biaya pokok per pcs (kain + jahit + packaging) per variant. Lengan Panjang biasanya lebih mahal dari Pendek. <b class="text-white/45">Margin = (harga jual − HPP) ÷ harga jual</b> — jadi margin 73% berarti HPP-nya 27% dari harga. Angka rupiah di bawahnya = untung per pcs. Dipakai di Report. Kosong = belum diisi.</p>
                 <div class="pt-2 mt-1 border-t border-white/5">
                     <label class="text-[10px] font-bold text-white/45 uppercase tracking-wider">Override COGS per Warna <span class="normal-case font-normal text-white/30">(opsional — mis. grey beda kain)</span></label>
                     <div id="pf-cogs-overrides" class="space-y-2 mt-1.5"></div>
@@ -5211,23 +5219,46 @@ function renderCogsRows() {
                 <span class="text-[10px] text-white/30">Rp</span>
                 <input type="number" min="0" data-cogs-key="${r.key}" data-price-id="${r.priceId}" oninput="updateCogsMargins()" placeholder="HPP" class="!py-1 !text-sm flex-1" value="${prev[r.key] || ''}">
             </div>
-            <span class="cogs-margin text-[10px] font-semibold w-20 text-right" data-for="${r.key}"></span>
+            <span class="${COGS_MARGIN_CLS}" data-for="${r.key}"></span>
             <button type="button" onclick="openCogsCalc('${r.key}', '${r.label}')" title="Hitung dari komponen (kalkulator)" class="text-sm shrink-0 hover:scale-110 transition">🧮</button>
         </div>`).join('');
     updateCogsMargins();
 }
+// Angka di kanan tiap baris HPP. Dulu cuma "73%" tanpa keterangan apa pun —
+// James menanyakan "itu angka apa?" (2 Okt 2026), dan memang tidak ada cara
+// menebaknya dari layar. Sekarang angkanya diberi nama DAN ditunjukkan asalnya:
+// rupiah untungnya per pcs, plus porsi HPP terhadap harga di tooltip.
+//
+// Definisinya tetap sama seperti sebelumnya (margin kotor terhadap HARGA JUAL,
+// bukan terhadap HPP) — ini yang dipakai juga di Report, jadi jangan diubah
+// diam-diam: angka di dua layar harus bercerita hal yang sama.
+const COGS_MARGIN_CLS = 'cogs-margin text-[10px] font-semibold w-28 text-right leading-tight shrink-0';
 function updateCogsMargins() {
     document.querySelectorAll('#pf-cogs-wrap [data-cogs-key]').forEach(inp => {
         const cogs = parseInt(inp.value) || 0;
         const price = parseInt(document.getElementById(inp.dataset.priceId)?.value) || 0;
         const span = document.querySelector(`#pf-cogs-wrap .cogs-margin[data-for="${inp.dataset.cogsKey}"]`);
         if (!span) return;
-        if (!cogs) { span.textContent = '⚠ kosong'; span.className = 'cogs-margin text-[10px] font-semibold w-24 text-right text-amber-300/70'; return; }
-        if (!price) { span.textContent = ''; return; }
-        const pct = Math.round((price - cogs) / price * 100);
+        const setuju = (html, warna, judul) => {
+            span.innerHTML = html;
+            span.className = `${COGS_MARGIN_CLS} ${warna}`;
+            span.title = judul || '';
+        };
+        // Harga variant-nya belum diisi → tidak ada yang bisa dibandingkan.
+        if (!price) return setuju('<span class="font-normal text-white/25">isi harga dulu</span>', 'text-white/25');
+        if (!cogs)  return setuju('⚠ HPP kosong', 'text-amber-300/70',
+            'HPP belum diisi — margin produk ini tidak bisa dihitung, dan laporan margin akan menganggapnya untung penuh.');
+        const untung = price - cogs;
+        const pct = Math.round(untung / price * 100);
+        const hppPct = Math.round(cogs / price * 100);
         const col = pct >= 30 ? 'text-green-400' : pct >= 0 ? 'text-yellow-400' : 'text-red-400';
-        span.textContent = `${pct}%`;
-        span.className = `cogs-margin text-[10px] font-semibold w-24 text-right ${col}`;
+        setuju(
+            `<div>Margin ${pct < 0 ? '−' + Math.abs(pct) : pct}%</div>
+             <div class="font-normal text-white/35">${untung < 0 ? '−' : '+'}Rp ${fmt(Math.abs(untung))}</div>`,
+            col,
+            `Harga jual Rp ${fmt(price)} − HPP Rp ${fmt(cogs)} = ${untung < 0 ? 'RUGI' : 'untung'} Rp ${fmt(Math.abs(untung))} per pcs.\n`
+            + `Margin ${pct}% dihitung dari harga jual (untung ÷ harga).\n`
+            + `HPP-nya sendiri = ${hppPct}% dari harga jual.`);
     });
 }
 
@@ -5377,7 +5408,7 @@ function renderColorOverrides() {
                         <span class="text-[10px] text-white/45 w-28 shrink-0">${esc(v.label)}</span>
                         <div class="flex items-center gap-1 flex-1"><span class="text-[10px] text-white/30">Rp</span>
                           <input type="number" min="0" data-cogs-key="${esc(key)}" data-price-id="${v.priceId}" data-ov-color="${esc(color)}" data-ov-variant="${esc(v.key)}" value="${val}" placeholder="HPP" oninput="onOverrideInput(this)" class="!py-1 !text-xs flex-1"></div>
-                        <span class="cogs-margin text-[10px] font-semibold w-14 text-right" data-for="${esc(key)}"></span>
+                        <span class="${COGS_MARGIN_CLS}" data-for="${esc(key)}"></span>
                         <button type="button" onclick="openCogsCalc('${esc(key)}', '${esc(_cogsPrettyColor(color))} · ${esc(v.label)}')" title="Kalkulator" class="text-sm shrink-0">🧮</button>
                     </div>`;
                 }).join('')}
