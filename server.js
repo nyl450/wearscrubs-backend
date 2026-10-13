@@ -294,7 +294,10 @@ if (SUPABASE_URL && SUPABASE_KEY) {
  * @returns {Promise<string>} URL publik foto
  */
 async function uploadToSupabase(buffer, originalname, folder = 'products', opts = {}) {
-    const { optimize = false } = opts;
+    // maxWidth/quality bisa ditimpa: logo bordir dikirim ke tukang bordir untuk
+    // DITIRU garisnya, jadi dikompres dengan ukuran & mutu lebih tinggi daripada
+    // foto bukti transfer. Nilai bawaannya tetap seperti semula.
+    const { optimize = false, maxWidth = 1920, quality = 85 } = opts;
     let ext = path.extname(originalname).toLowerCase();
     let finalBuffer = buffer;
 
@@ -302,8 +305,8 @@ async function uploadToSupabase(buffer, originalname, folder = 'products', opts 
         try {
             const optimized = await sharp(buffer)
                 .rotate()                                          // auto-orient via EXIF dulu sebelum strip
-                .resize(1920, null, { withoutEnlargement: true, fit: 'inside' })
-                .webp({ quality: 85 })
+                .resize(maxWidth, null, { withoutEnlargement: true, fit: 'inside' })
+                .webp({ quality })
                 .toBuffer();
             finalBuffer = optimized;
             ext = '.webp';
@@ -387,7 +390,13 @@ async function externalizeEmbroideryLogos(embDetails) {
             const parsed = dataUrlToBuffer(e.value);
             if (parsed) {
                 try {
-                    const url = await uploadToSupabase(parsed.buffer, `logo${parsed.ext}`, 'logos');
+                    // Dulu logo diunggah apa adanya — file 5-8 MB dari galeri HP
+                    // ikut masuk DB/Storage dan bikin halaman detail berat.
+                    // Dikecilkan ke WebP (permintaan James 13 Okt 2026), TAPI dengan
+                    // mutu & lebar lebih tinggi daripada foto biasa: logonya dipakai
+                    // tukang bordir untuk meniru garis, bukan sekadar dilihat.
+                    const url = await uploadToSupabase(parsed.buffer, `logo${parsed.ext}`, 'logos',
+                        { optimize: true, maxWidth: 2000, quality: 92 });
                     out.push({ ...e, value: url });
                     continue;
                 } catch (err) {
@@ -8009,7 +8018,15 @@ app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res
         const priceByType = safeJSON(product.price_by_type, null);
         const catalogPrice = (priceByType && toVariant !== 'null' && priceByType[toVariant] != null)
             ? Number(priceByType[toVariant]) : Number(product.price || 0);
-        const unitPrice = catalogPrice + namaPrice + logoPrice;
+        // Harga khusus (admin-only, aturan sama dengan baris katalog di Kasir):
+        // menimpa harga katalog untuk kesepakatan tertentu. Bordir TETAP ditambahkan
+        // di atasnya — harga item di DB memang selalu sudah termasuk bordir.
+        // Dibatasi admin, bukan sekadar punya izin edit pesanan: ini menurunkan
+        // nilai tagihan dan tidak boleh bisa dilakukan staf gudang.
+        const rawKhusus = parseInt(req.body.custom_price, 10);
+        const hargaKhusus = (req.user?.role === 'admin' && Number.isInteger(rawKhusus) && rawKhusus > 0)
+            ? rawKhusus : null;
+        const unitPrice = (hargaKhusus !== null ? hargaKhusus : catalogPrice) + namaPrice + logoPrice;
 
         const cogsByType  = safeJSON(product.cogs_by_type, null);
         const cogsByColor = safeJSON(product.cogs_by_color, null);
@@ -8076,7 +8093,11 @@ app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res
         const catatan = `Tambah item: ${toQty}× ${product.name} ${toColor}`
             + (itemVariant ? ` ${itemVariant}` : '') + ` ${toSize}`
             + (wantNama ? ' + bordir nama' : '') + (wantLogo ? ' + bordir logo' : '')
-            + ` · Rp ${unitPrice.toLocaleString('id-ID')}/pcs · total ${order.total_amount} -> ${newTotal}`;
+            + ` · Rp ${unitPrice.toLocaleString('id-ID')}/pcs`
+            // Harga khusus WAJIB tercatat di jejak audit: tanpa ini, harga yang
+            // berbeda dari katalog tidak punya penjelasan sama sekali nanti.
+            + (hargaKhusus !== null ? ` (harga khusus, katalog Rp ${catalogPrice.toLocaleString('id-ID')})` : '')
+            + ` · total ${order.total_amount} -> ${newTotal}`;
 
         let newItemId = null;
         await withTransaction(async (client) => {

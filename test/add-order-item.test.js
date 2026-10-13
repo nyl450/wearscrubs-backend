@@ -213,6 +213,80 @@ async function run() {
     check('tidak ada tahanan baru dari percobaan gagal',
         tahanan(380).length === 1, tahanan(380));
 
+    group('10. Harga khusus (admin-only) menimpa harga katalog, bordir tetap di atasnya');
+    seed();
+    r = await tambah(380, { ...MINNA, quantity: 2, custom_price: 250000, bordir_nama: true, nama_text: 'drg. Deal' });
+    check('diterima 200', r.status === 200, r.body);
+    let bk = barisBaru(r);
+    check('harga satuan 250.000 + bordir 20.000 = 270.000', Number(bk.price) === 270000, bk.price);
+    check('BUKAN harga katalog 290.000', Number(bk.price) !== 310000, bk.price);
+    check('total 340.000 + (270.000 × 2) = 880.000', Number(ord(380).total_amount) === 880000, ord(380).total_amount);
+    check('harga khusus tercatat di jejak audit (kalau tidak, angkanya tak punya penjelasan)',
+        /harga khusus/i.test(many(`SELECT note FROM order_photos WHERE order_id = 380 AND step = 'edit'`)[0].note || ''),
+        many(`SELECT note FROM order_photos WHERE order_id = 380 AND step = 'edit'`)[0]);
+    // Staf ber-izin edit pesanan TIDAK boleh menurunkan nilai tagihan.
+    seed();
+    const STAF = jwt.sign({ id: 8, username: 'gudang', role: 'staff', allowed_menus: { orders: 'edit' } }, SECRET, { expiresIn: '1h' });
+    r = await tambah(380, { ...MINNA, quantity: 1, custom_price: 1000 }, STAF);
+    check('staf: permintaannya diterima', r.status === 200, r.body);
+    check('tapi harga khususnya DIABAIKAN — tetap harga katalog 290.000',
+        Number(barisBaru(r).price) === 290000, barisBaru(r).price);
+
+    group('11. Harga khusus ngawur ditolak diam-diam, bukan bikin harga aneh');
+    seed();
+    for (const nilai of [0, -5000, 'abc']) {
+        r = await tambah(380, { ...MINNA, quantity: 1, custom_price: nilai });
+        check(`custom_price ${JSON.stringify(nilai)}: jatuh ke harga katalog 290.000`,
+            r.status === 200 && Number(barisBaru(r).price) === 290000, { status: r.status, harga: r.status === 200 && barisBaru(r).price });
+        none(`DELETE FROM order_items WHERE id = ${Number(r.body.item_id)}`);
+    }
+
+    group('12. Rantai kunci stok: ditambah -> terkunci -> dibatalkan -> lepas');
+    seed();
+    const fisikAwal = Number(one(`SELECT stock FROM inventory WHERE product_id=25 AND size='M' AND color='charcoal-grey' AND variant_type='panjang'`).stock);
+    r = await tambah(380, { ...MINNA, quantity: 2 });
+    check('item ditambahkan', r.status === 200, r.body);
+    const terkunci = () => tahanan(380).filter(x => x.size === 'M').reduce((t, x) => t + Number(x.quantity), 0);
+    check('2 pcs terkunci', terkunci() === 2, tahanan(380));
+    check('stok fisik TIDAK berubah — yang dikunci bukan dipotong',
+        Number(one(`SELECT stock FROM inventory WHERE product_id=25 AND size='M' AND color='charcoal-grey' AND variant_type='panjang'`).stock) === fisikAwal);
+    // Inilah yang dilihat Kasir & website: sisa yang bisa dijanjikan sudah berkurang.
+    let cek = await req('GET', `/api/inventory/25/check?size=M&color=charcoal-grey&type=panjang`, null, ADMIN);
+    check(`tersedia turun ${fisikAwal} -> ${fisikAwal - 2}`, cek.body.available === fisikAwal - 2, cek.body);
+    check('angka fisiknya tetap dilaporkan apa adanya', cek.body.stock_fisik === fisikAwal, cek.body);
+    // Batalkan pesanannya -> kuncinya lepas, barang kembali bisa dijual.
+    r = await req('PUT', `/api/orders/380/cancel`, { cancel_reason: 'uji' }, ADMIN);
+    check('pembatalan diterima', r.status === 200, r.body);
+    check('tidak ada lagi yang terkunci', tahanan(380).length === 0, tahanan(380));
+    cek = await req('GET', `/api/inventory/25/check?size=M&color=charcoal-grey&type=panjang`, null, ADMIN);
+    check('tersedia kembali utuh', cek.body.available === fisikAwal, cek.body);
+    check('stok fisik tetap tidak pernah bergerak',
+        Number(one(`SELECT stock FROM inventory WHERE product_id=25 AND size='M' AND color='charcoal-grey' AND variant_type='panjang'`).stock) === fisikAwal);
+    check('tidak ada catatan pergerakan stok sama sekali',
+        one(`SELECT COUNT(*)::int AS n FROM stock_movements`).n === 0);
+
+    group('13. Logo bordir yang diunggah dikecilkan jadi WebP, bukan disimpan mentah');
+    seed();
+    // PNG 2×2 asli (bukan string karangan) supaya sharp benar-benar bisa mengolahnya.
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mP8z8BQz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC';
+    r = await tambah(380, { ...MINNA, quantity: 1, bordir_logo: true, logo_color: 'Multi warna', logo_data: PNG });
+    check('diterima 200', r.status === 200, r.body);
+    let embL = JSON.parse(ord(380).embroidery_details);
+    const eLogo = embL.find(e => e.type === 'logo');
+    check('entry logonya tersimpan', !!eLogo, embL);
+    check('nilainya jadi ALAMAT berkas, bukan base64 mentah di dalam DB',
+        eLogo && !String(eLogo.value).startsWith('data:'), eLogo && String(eLogo.value).slice(0, 40));
+    check('berkasnya berakhiran .webp', eLogo && /\.webp$/.test(String(eLogo.value)), eLogo && eLogo.value);
+    check('harga logo ikut masuk harga item (290.000 + 30.000)',
+        Number(barisBaru(r).price) === 320000, barisBaru(r).price);
+
+    group('14. Tanpa unggahan, alur lama tetap jalan (file diminta via WA)');
+    seed();
+    r = await tambah(380, { ...MINNA, quantity: 1, bordir_logo: true, logo_color: 'Hitam' });
+    check('diterima 200', r.status === 200, r.body);
+    const eTanpa = JSON.parse(ord(380).embroidery_details).find(e => e.type === 'logo');
+    check('ditandai "Logo dikirim via WA"', eTanpa && eTanpa.value === 'Logo dikirim via WA', eTanpa);
+
     await new Promise(z => setTimeout(z, 250));
     finish();
 }

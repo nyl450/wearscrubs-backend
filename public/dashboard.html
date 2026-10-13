@@ -6179,9 +6179,15 @@ function renderInventory() {
             const foto = v.photo ? resolvePhoto(v.photo) : '';
             let sizeRows = '';
             v.sizes.forEach(r => {
-                const stock       = parseInt(r.stock);
+                const stock       = parseInt(r.stock);            // FISIK di rak
                 const stockReject = parseInt(r.stock_reject || 0);
-                const stockClass  = stock === 0 ? 'text-red-400' : stock < 5 ? 'text-yellow-400' : 'text-white';
+                const ditahanN    = parseInt(r.held || 0);
+                // Yang benar-benar bisa dijual = fisik dikurangi yang sedang dikunci
+                // pesanan yang menunggu bayar. Inilah angka yang ditampilkan besar;
+                // warnanya (Habis/Kritis) juga mengikuti ini, karena itu yang
+                // menentukan apakah barangnya masih bisa dijanjikan ke pembeli.
+                const tersediaN   = Math.max(0, stock - ditahanN);
+                const stockClass  = tersediaN === 0 ? 'text-red-400' : tersediaN < 5 ? 'text-yellow-400' : 'text-white';
                 const key         = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
                 const rejectBadge = stockReject > 0
                     ? `<button onclick="openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${stockReject})"
@@ -6198,13 +6204,16 @@ function renderInventory() {
                 const ditahan  = parseInt(r.held || 0);
                 const holdBadge = ditahan > 0
                     ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/10 border border-sky-400/30 text-sky-300 whitespace-nowrap"
-                           title="${ditahan} pcs ditahan pesanan yang menunggu bayar. Otomatis lepas kalau tidak dibayar sampai batas waktunya (website 24 jam, lainnya 72 jam) atau kalau pesanannya dibatalkan.">${ditahan} ditahan</span>` : '';
+                           title="${ditahan} pcs dikunci pesanan yang menunggu bayar — stok di rak masih utuh, tapi tidak bisa dijanjikan ke pembeli lain. Otomatis lepas kalau tidak dibayar sampai batas waktunya (website 24 jam, lainnya 72 jam) atau kalau pesanannya dibatalkan.">${ditahan} dikunci</span>` : '';
                 sizeRows += `
                 <div class="inv-size-row flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 border-t border-white/5 first:border-0" id="invrow-${key}"
                      data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-stock="${stock}">
                     <span class="text-xs font-bold text-white/60 w-9 sm:w-12 shrink-0">${esc(r.size)}</span>
-                    <span class="text-base font-bold tabular-nums w-8 sm:w-10 text-right shrink-0 ${stockClass}">${stock}</span>
-                    <span class="text-[10px] ${stockClass} w-9 shrink-0">${stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : ''}</span>
+                    <span class="text-base font-bold tabular-nums w-8 sm:w-10 text-right shrink-0 ${stockClass}"
+                          title="${ditahanN > 0 ? `Sisa yang bisa dijual. Di rak ada ${stock}, ${ditahanN} sedang dikunci pesanan yang menunggu bayar.` : 'Stok di rak'}">${tersediaN}</span>
+                    <span class="text-[10px] w-9 shrink-0 ${ditahanN > 0 ? 'text-white/30' : stockClass}">${ditahanN > 0
+                        ? `<span class="whitespace-nowrap">dari ${stock}</span>`
+                        : (stock === 0 ? 'Habis' : stock < 5 ? 'Kritis' : '')}</span>
                     <div class="flex items-center gap-1 flex-1 min-w-0 flex-wrap">${holdBadge}${poBadge}${loanBadgeForVariant(r.product_id, r.size, r.color, r.variant_type)}${rejectBadge}</div>
                     <div class="flex gap-1 shrink-0 ml-auto">
                         <button onclick="invEditStart('${key}')"
@@ -6384,10 +6393,14 @@ function renderInventoryGrid(rows, container) {
             const cells = sizes.map(size => {
                 const r = v.cells[size];
                 if (!r) return `<td class="cell-na">—</td>`;
-                const stock = parseInt(r.stock);
+                const stock = parseInt(r.stock);                   // FISIK di rak
                 const reject = parseInt(r.stock_reject || 0);
+                // Sama dengan mode Card: yang tampil = sisa yang bisa dijual.
+                // `data-current` tetap stok fisik karena itu yang diedit.
+                const dikunci = parseInt(r.held || 0);
+                const tersediaG = Math.max(0, stock - dikunci);
                 const key = `${r.product_id}__${r.size}__${r.color}__${r.variant_type}`;
-                const sClass = stock === 0 ? 's-empty' : stock < 5 ? 's-low' : 's-ok';
+                const sClass = tersediaG === 0 ? 's-empty' : tersediaG < 5 ? 's-low' : 's-ok';
                 const selectedClass = (bulkMode && bulkSelection.has(key)) ? ' selected' : '';
                 const rejectBadge = reject > 0
                     ? `<span class="reject-corner edit-action" onclick="event.stopPropagation();openR2N(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}',${stock},${reject})" title="${reject} reject — klik konversi">⚠${reject}</span>`
@@ -6402,8 +6415,9 @@ function renderInventoryGrid(rows, container) {
                 const detailBadge = `<span class="cell-detail viewonly-hide" onclick="event.stopPropagation();openVariantHistory(${r.product_id},'${escAttr(r.size)}','${escAttr(r.color)}','${escAttr(r.variant_type)}','${escAttr(prod.name)}')" title="Detail: riwayat stok & pembeli"><i class="fa-solid fa-clock-rotate-left"></i></span>`;
                 return `<td class="cell-stock ${sClass}${selectedClass}"
                     data-pid="${r.product_id}" data-size="${escAttr(r.size)}" data-color="${escAttr(r.color)}" data-vtype="${escAttr(r.variant_type)}" data-current="${stock}"
+                    title="${dikunci > 0 ? `Sisa yang bisa dijual ${tersediaG}. Di rak ada ${stock}, ${dikunci} dikunci pesanan yang menunggu bayar.` : `Stok di rak ${stock}`}"
                     onclick="gridCellClick(this)">
-                    <span class="stock-value ${sClass}">${stock}</span>
+                    <span class="stock-value ${sClass}">${tersediaG}</span>
                     ${rejectBadge}
                     ${reservedBadge}
                     ${poBadge}
@@ -10273,6 +10287,29 @@ async function submitEditDiscount(orderId) {
 // edit item, tapi state-nya terpisah supaya keduanya tidak saling menimpa.
 let _addItemProducts = null;
 let _addItemInvCache = {};
+let _aiLogoData = null;        // dataURL logo yang dipilih; dikecilkan ke WebP di server
+
+function aiLogoPilih(inp) {
+    const f = inp.files && inp.files[0];
+    if (!f) return aiLogoHapus();
+    // 10 MB = batas unggah server (multer). Ditolak di sini supaya admin tahu
+    // sebabnya sekarang, bukan setelah menunggu unggahan gagal.
+    if (f.size > 10 * 1024 * 1024) { toast('Ukuran logo maksimal 10 MB', true); inp.value = ''; return; }
+    const fr = new FileReader();
+    fr.onload = () => {
+        _aiLogoData = String(fr.result || '');
+        const img = document.getElementById('ai-logo-preview');
+        if (img) { img.src = _aiLogoData; img.classList.remove('hidden'); }
+        document.getElementById('ai-logo-hapus')?.classList.remove('hidden');
+    };
+    fr.readAsDataURL(f);
+}
+function aiLogoHapus() {
+    _aiLogoData = null;
+    const inp = document.getElementById('ai-logo-file'); if (inp) inp.value = '';
+    const img = document.getElementById('ai-logo-preview'); if (img) { img.src = ''; img.classList.add('hidden'); }
+    document.getElementById('ai-logo-hapus')?.classList.add('hidden');
+}
 
 async function openAddItemModal(orderId) {
     let o = (window._currentOrder && window._currentOrder.id === orderId) ? window._currentOrder : null;
@@ -10303,9 +10340,15 @@ async function openAddItemModal(orderId) {
                         <div><label class="block text-[11px] text-white/50 mb-1">Ukuran</label>
                             <select id="ai-size" onchange="aiPreview()" class="w-full !py-2 !text-sm" disabled><option value="">--</option></select></div>
                     </div>
-                    <div class="w-28">
-                        <label class="block text-[11px] text-white/50 mb-1">Jumlah (pcs)</label>
-                        <input id="ai-qty" type="number" min="1" max="999" step="1" value="1" oninput="aiPreview()" class="w-full !py-2 !text-sm" />
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] text-white/50 mb-1">Jumlah (pcs)</label>
+                            <input id="ai-qty" type="number" min="1" max="999" step="1" value="1" oninput="aiPreview()" class="w-full !py-2 !text-sm" />
+                        </div>
+                        <div id="ai-harga-khusus-wrap" class="hidden">
+                            <label class="block text-[11px] text-white/50 mb-1">Harga Khusus <span class="text-white/25">(opsional)</span></label>
+                            <input id="ai-harga-khusus" type="number" min="0" step="1000" placeholder="pakai harga katalog" oninput="aiPreview()" class="w-full !py-2 !text-sm" />
+                        </div>
                     </div>
                 </div>
 
@@ -10330,7 +10373,13 @@ async function openAddItemModal(orderId) {
                             <select id="ai-logo-color" class="w-full !py-2 !text-xs"></select>
                             <select id="ai-logo-pos" class="w-full !py-2 !text-xs"></select>
                         </div>
-                        <p class="text-[10px] text-white/30">File logonya diminta lewat WhatsApp seperti biasa.</p>
+                        <div class="flex items-center gap-2">
+                            <input id="ai-logo-file" type="file" accept="image/*" onchange="aiLogoPilih(this)"
+                                   class="text-[10px] text-white/50 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-white/10 file:text-white/70 flex-1 min-w-0" />
+                            <img id="ai-logo-preview" class="hidden w-10 h-10 rounded-lg object-contain bg-white/5 border border-white/10 shrink-0" alt="" />
+                            <button type="button" id="ai-logo-hapus" onclick="aiLogoHapus()" class="hidden text-[10px] text-red-400/70 hover:text-red-400 shrink-0">✕</button>
+                        </div>
+                        <p class="text-[10px] text-white/30">Boleh dikosongkan — file logonya bisa diminta lewat WhatsApp seperti biasa. Kalau diunggah, gambarnya otomatis dikecilkan ke WebP supaya tidak memberatkan halaman.</p>
                     </div>
                 </div>
 
@@ -10347,6 +10396,12 @@ async function openAddItemModal(orderId) {
     document.body.appendChild(modal);
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
     modal._ctx = { order: o, inv: [] };
+    _aiLogoData = null;
+    // Harga khusus hanya untuk admin — ini menurunkan nilai tagihan, jadi tidak
+    // boleh bisa dilakukan staf yang cuma punya izin edit pesanan. Server juga
+    // menolaknya sendiri; ini supaya kotaknya tidak ditawarkan sia-sia.
+    const akuAdmin = (JSON.parse(localStorage.getItem('ws_admin_user') || '{}').role === 'admin');
+    document.getElementById('ai-harga-khusus-wrap')?.classList.toggle('hidden', !akuAdmin);
 
     try {
         if (!_addItemProducts) {
@@ -10417,7 +10472,16 @@ function aiCascade(changed) {
     }
     if (changed === 'ai-variant') {
         const variant = document.getElementById('ai-variant').value;
-        eiFill('ai-size', sortSizes([...new Set(inv.filter(r => r.color === color && r.variant_type === variant).map(r => r.size))]), null);
+        const baris = inv.filter(r => r.color === color && r.variant_type === variant);
+        const sizeSel = document.getElementById('ai-size');
+        // Sisa stok ditulis di tiap ukuran, sama seperti dropdown Kasir — supaya
+        // admin tidak perlu memilih dulu baru tahu barangnya tinggal berapa.
+        // `stock` dari server SUDAH = sisa yang bisa dijual untuk pesanan ini.
+        sizeSel.innerHTML = sortSizes([...new Set(baris.map(r => r.size))]).map(sz => {
+            const sisa = Number((baris.find(r => r.size === sz) || {}).stock || 0);
+            return `<option value="${esc(sz)}">${esc(sz)} — ${sisa > 0 ? `sisa ${sisa}` : 'habis, jadi PO'}</option>`;
+        }).join('');
+        sizeSel.disabled = baris.length === 0;
     }
     aiPreview();
 }
@@ -10454,8 +10518,11 @@ function aiPreview() {
     if (wantNama && !String(document.getElementById('ai-nama-text')?.value || '').trim())
         return tolak('<p class="text-amber-300/80">Isi dulu teks nama bordirnya.</p>');
 
-    const base = (prod.price_by_type && variant && variant !== 'null' && prod.price_by_type[variant] != null)
+    const katalog = (prod.price_by_type && variant && variant !== 'null' && prod.price_by_type[variant] != null)
         ? Number(prod.price_by_type[variant]) : Number(prod.price || 0);
+    const khusus = parseInt(document.getElementById('ai-harga-khusus')?.value, 10);
+    const pakaiKhusus = Number.isInteger(khusus) && khusus > 0;
+    const base = pakaiKhusus ? khusus : katalog;
     const namaP = wantNama ? 20000 : 0;
     const logoP = wantLogo ? 30000 : 0;
     const unit = base + namaP + logoP;
@@ -10470,6 +10537,7 @@ function aiPreview() {
     box.innerHTML = `
         <p>Harga satuan: <b class="text-white/80">Rp ${fmt(unit)}</b>${(namaP + logoP) > 0
             ? ` <span class="text-white/35">(produk Rp ${fmt(base)}${namaP ? ' + nama Rp ' + fmt(namaP) : ''}${logoP ? ' + logo Rp ' + fmt(logoP) : ''})</span>` : ''}</p>
+        ${pakaiKhusus ? `<p class="text-amber-300/80">Harga khusus dipakai — harga katalognya Rp ${fmt(katalog)}.</p>` : ''}
         <p>Subtotal baris (×${qty}): <b class="text-white/80">Rp ${fmt(unit * qty)}</b></p>
         <p class="pt-1 border-t border-white/8">Total pesanan: <span class="text-white/40 line-through">Rp ${fmt(totalLama)}</span> → <span class="text-green-400 font-bold">Rp ${fmt(totalBaru)}</span></p>
         <p class="text-white/35">Stok tersedia: ${tersedia}${jadiPO ? ` — kurang dari ${qty}, baris ini jadi <span class="text-orange-300">Pre-Order</span>` : ''}</p>
@@ -10489,6 +10557,8 @@ async function submitAddItem(orderId) {
         quantity: parseInt(document.getElementById('ai-qty').value, 10) || 1,
         bordir_nama: wantNama, bordir_logo: wantLogo,
     };
+    const khusus = parseInt(document.getElementById('ai-harga-khusus')?.value, 10);
+    if (Number.isInteger(khusus) && khusus > 0) body.custom_price = khusus;
     if (wantNama) {
         body.nama_text  = document.getElementById('ai-nama-text').value;
         body.nama_text2 = document.getElementById('ai-nama-text2').value;
@@ -10498,6 +10568,10 @@ async function submitAddItem(orderId) {
     if (wantLogo) {
         body.logo_color = document.getElementById('ai-logo-color').value;
         body.logo_pos   = document.getElementById('ai-logo-pos').value;
+        // Dikirim sebagai dataURL; server yang mengecilkannya ke WebP lalu menyimpan
+        // URL-nya (lihat externalizeEmbroideryLogos). Kalau kosong, entry-nya diberi
+        // penanda "Logo dikirim via WA" seperti alur lama.
+        if (_aiLogoData) body.logo_data = _aiLogoData;
     }
     try {
         if (btn) { btn.disabled = true; btn.textContent = 'Menambahkan…'; }
