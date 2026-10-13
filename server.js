@@ -7915,6 +7915,233 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// POST /api/orders/:id/items — TAMBAH baris produk katalog ke pesanan yang sudah ada.
+//
+// Latar (James, 13 Okt 2026, order WS-WA-20261013-9982): pesanan sudah dibuat,
+// lalu client menambah baju dengan bordir nama dokter lain. Sebelumnya satu-
+// satunya jalan adalah membatalkan pesanan dan membuat ulang dari nol — ikut
+// menghapus riwayat, nomor kwitansi, dan pesan WA yang sudah dikirim.
+//
+// Body JSON: { product_id, color, variant_type, size, quantity,
+//              bordir_nama?, nama_text?, nama_text2?, nama_color?, nama_pos?,
+//              nama_underline?, nama_price?,
+//              bordir_logo?, logo_color?, logo_pos?, logo_price?, logo_data? }
+//
+// HANYA untuk pesanan yang BELUM dibayar. Sesudah dibayar, menambah barang berarti
+// memotong stok saat itu juga DAN menagih selisih uang — dua hal yang punya alurnya
+// sendiri (lihat add-bordir untuk pola selisih uang). Menambahkannya di sini tanpa
+// itu akan membuat stok dan tagihan tidak sinkron secara diam-diam.
+//
+// Harga, COGS, dan status Pre-Order memakai resolusi yang SAMA PERSIS dengan
+// PUT /api/orders/:id/items/:itemId — kalau salah satu diubah, ubah keduanya.
+app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (['packed', 'shipped', 'done', 'cancelled'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan sudah dikemas/dikirim/selesai/batal — item tidak bisa ditambah lagi.' });
+        if (order.payment_status === 'paid')
+            return res.status(400).json({ error: 'Pesanan sudah dibayar — menambah barang berarti memotong stok dan menagih selisih. Buat pesanan baru untuk tambahannya.' });
+        if (order.order_source === 'test_size')
+            return res.status(400).json({ error: 'Temporary Order punya alur sendiri — item tidak bisa ditambah di sini.' });
+
+        const toProductId = parseInt(req.body.product_id, 10);
+        const toColor   = String(req.body.color || '').trim();
+        const toVariant = String(req.body.variant_type || 'null').trim() || 'null';
+        const toSize    = String(req.body.size || '').trim();
+        const toQty     = parseInt(req.body.quantity, 10);
+        if (!Number.isInteger(toProductId) || !toColor || !toSize)
+            return res.status(400).json({ error: 'Produk, warna, dan ukuran wajib diisi' });
+        if (!Number.isInteger(toQty) || toQty < 1 || toQty > 999)
+            return res.status(400).json({ error: 'Jumlah (qty) harus angka 1 sampai 999' });
+
+        const product = await dbGet('SELECT * FROM products WHERE id = $1 AND is_active = TRUE', [toProductId]);
+        if (!product) return res.status(400).json({ error: 'Produk tidak ditemukan atau sudah dihapus dari katalog' });
+
+        const invRow = await dbGet(
+            'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4',
+            [product.id, toSize, toColor, toVariant]);
+        if (!invRow)
+            return res.status(400).json({ error: `Kombinasi ${product.name} / ${toColor} / ${toVariant} / ${toSize} tidak ada di katalog.` });
+
+        // ── Bordir ────────────────────────────────────────────────────────────
+        const wantNama = req.body.bordir_nama === true || req.body.bordir_nama === 'true';
+        const wantLogo = req.body.bordir_logo === true || req.body.bordir_logo === 'true';
+        if ((wantNama || wantLogo) && !BORDIR_CATS.includes(product.category))
+            return res.status(400).json({ error: `${product.name} kategorinya ${product.category} — bordir hanya untuk Atasan, Gown, Set & Cap.` });
+        let namaPrice = 0, logoPrice = 0;
+        if (wantNama) {
+            if (!String(req.body.nama_text || '').trim())
+                return res.status(400).json({ error: 'Isi teks nama bordirnya' });
+            namaPrice = parseInt(req.body.nama_price, 10);
+            if (!Number.isInteger(namaPrice) || namaPrice < 0) namaPrice = 20000;
+        }
+        if (wantLogo) {
+            logoPrice = parseInt(req.body.logo_price, 10);
+            if (!Number.isInteger(logoPrice) || logoPrice < 0) logoPrice = 30000;
+        }
+        const namaPos = VALID_BORDIR_POS.has(String(req.body.nama_pos || '').trim().toLowerCase())
+            ? String(req.body.nama_pos).trim().toLowerCase() : bordirPosDefault(product.category, 'nama');
+        const logoPos = VALID_BORDIR_POS.has(String(req.body.logo_pos || '').trim().toLowerCase())
+            ? String(req.body.logo_pos).trim().toLowerCase() : bordirPosDefault(product.category, 'logo');
+        if (wantNama && wantLogo && namaPos === logoPos)
+            return res.status(400).json({ error: 'Posisi nama & logo tidak boleh sama' });
+
+        // `item_label` adalah SATU-SATUNYA jembatan antara entry bordir dan barisnya
+        // di invoice. Kalau di pesanan ini sudah ada baris dengan nama+warna+size
+        // persis sama DAN punya bordir, labelnya kembar dan mustahil tahu entry mana
+        // milik baris yang mana — tolak daripada merusak bordir baris lain.
+        const labelOf = (name, color, size) => `${name} (${color}, ${size})`;
+        const label = labelOf(product.name, toColor, toSize);
+        let embArr = safeJSON(order.embroidery_details, []);
+        if (!Array.isArray(embArr)) embArr = [];
+        if (wantNama || wantLogo) {
+            const kembar = await dbGet(
+                `SELECT oi.id FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
+                  WHERE oi.order_id = $1 AND COALESCE(p.name, oi.custom_product_name) = $2
+                    AND oi.color = $3 AND oi.size = $4 AND (oi.bordir_nama OR oi.bordir_logo)`,
+                [order.id, product.name, toColor, toSize]);
+            if (kembar) return res.status(409).json({
+                error: `Pesanan ini sudah punya ${product.name} ${toColor} ${toSize} yang berbordir. Menambah satu lagi dengan nama+warna+size persis sama membuat entry bordirnya tidak bisa dibedakan di invoice — pakai ukuran/warna lain, atau buat pesanan terpisah.` });
+        }
+
+        // ── Harga & COGS: resolusi sama dengan PUT .../items/:itemId ───────────
+        const priceByType = safeJSON(product.price_by_type, null);
+        const catalogPrice = (priceByType && toVariant !== 'null' && priceByType[toVariant] != null)
+            ? Number(priceByType[toVariant]) : Number(product.price || 0);
+        const unitPrice = catalogPrice + namaPrice + logoPrice;
+
+        const cogsByType  = safeJSON(product.cogs_by_type, null);
+        const cogsByColor = safeJSON(product.cogs_by_color, null);
+        const colorOv = cogsByColor ? cogsByColor[toColor] : null;
+        const unitCogs = (colorOv && toVariant !== 'null' && colorOv[toVariant] != null) ? Number(colorOv[toVariant])
+            : (cogsByType && toVariant !== 'null' && cogsByType[toVariant] != null) ? Number(cogsByType[toVariant])
+            : Number(product.cogs_default || 0);
+        const cogsSettings = await getCogsSettings();
+        const namaCogs = wantNama ? cogsSettings.bordirNama : 0;
+        const logoCogs = wantLogo ? cogsSettings.bordirLogo : 0;
+        const totalCogs = (unitCogs + namaCogs + logoCogs) * toQty;
+
+        // ── Pre-Order ─────────────────────────────────────────────────────────
+        // Dibandingkan dengan KETERSEDIAAN (stok fisik dikurangi yang ditahan pesanan
+        // LAIN yang menunggu bayar), bukan stok mentah — itu angka yang sama dengan
+        // yang dilihat admin di dropdown Kasir, dan yang menentukan apakah barangnya
+        // benar-benar bisa dijanjikan.
+        const stokFisik = parseInt(invRow.stock) || 0;
+        const tahanLain = (await tahananVarian(
+            [{ product_id: product.id, size: toSize, color: toColor, variant_type: toVariant }], order.id))
+            .get(`${product.id}|${toSize}|${toColor}|${toVariant}`) || 0;
+        const tersedia = Math.max(0, stokFisik - tahanLain);
+        const isPO = tersedia < toQty;
+
+        // ── Total pesanan ─────────────────────────────────────────────────────
+        const allItems = await dbAll('SELECT price, quantity FROM order_items WHERE order_id = $1', [order.id]);
+        const oldProductTotal = allItems.reduce((t, r) => t + Number(r.price || 0) * Number(r.quantity || 0), 0);
+        const newProductTotal = oldProductTotal + unitPrice * toQty;
+        // Diskon persen murni ikut dihitung ulang; diskon nominal/berantai DIPERTAHANKAN
+        // apa adanya — menghitung ulang akan mengubah kesepakatan dengan customer.
+        // Aturan yang sama persis dengan edit item.
+        const pct = Number(order.discount_percent || 0);
+        const oldDisc = Number(order.discount_amount || 0);
+        const wasPlainPct = pct > 0 && oldDisc === Math.round(oldProductTotal * pct / 100);
+        const newDisc = Math.max(0, Math.min(
+            wasPlainPct ? Math.round(newProductTotal * pct / 100) : oldDisc, newProductTotal));
+        const newTotal = newProductTotal - newDisc + Number(order.shipping_cost || 0);
+
+        // ── Entry bordir ──────────────────────────────────────────────────────
+        const newEntries = [];
+        const itemVariant = toVariant !== 'null' ? toVariant : '';
+        if (wantNama) {
+            const entry = { type: 'nama', item_label: label, value: String(req.body.nama_text).trim(),
+                            color: String(req.body.nama_color || '').trim(), position: namaPos };
+            const t2 = String(req.body.nama_text2 || '').trim();
+            if (t2) entry.value_line2 = t2;
+            if (req.body.nama_underline === true || req.body.nama_underline === 'true') entry.value_underline = true;
+            if (itemVariant) entry.variant_type = itemVariant;
+            newEntries.push(entry);
+        }
+        if (wantLogo) {
+            const logoData = typeof req.body.logo_data === 'string' && req.body.logo_data.startsWith('data:image/')
+                ? req.body.logo_data : 'Logo dikirim via WA';
+            const entry = { type: 'logo', item_label: label, value: logoData,
+                            color: String(req.body.logo_color || '').trim(), position: logoPos };
+            if (itemVariant) entry.variant_type = itemVariant;
+            newEntries.push(entry);
+        }
+        const mergedEntries = newEntries.length
+            ? [...embArr, ...(await externalizeEmbroideryLogos(newEntries))]
+            : embArr;
+
+        const actor = req.user?.username || 'admin';
+        const catatan = `Tambah item: ${toQty}× ${product.name} ${toColor}`
+            + (itemVariant ? ` ${itemVariant}` : '') + ` ${toSize}`
+            + (wantNama ? ' + bordir nama' : '') + (wantLogo ? ' + bordir logo' : '')
+            + ` · Rp ${unitPrice.toLocaleString('id-ID')}/pcs · total ${order.total_amount} -> ${newTotal}`;
+
+        let newItemId = null;
+        await withTransaction(async (client) => {
+            const ins = await client.query(
+                `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price,
+                                          bordir_nama, bordir_logo, bordir_nama_price, bordir_logo_price,
+                                          is_bonus, is_po, is_custom_size, is_custom_product,
+                                          unit_cogs, bordir_nama_cogs, bordir_logo_cogs, total_cogs)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,FALSE,$12,FALSE,FALSE,$13,$14,$15,$16) RETURNING id`,
+                [order.id, product.id, toSize, toColor, toVariant, toQty, unitPrice,
+                 wantNama, wantLogo, wantNama ? namaPrice : null, wantLogo ? logoPrice : null,
+                 isPO, unitCogs, namaCogs, logoCogs, totalCogs]);
+            newItemId = ins.rows[0].id;
+
+            // Bordir baru selalu mengembalikan review ke 'pending': istri perlu
+            // memeriksa ejaan nama yang baru masuk sebelum ditandai selesai.
+            const adaBordir = wantNama || wantLogo;
+            await client.query(
+                `UPDATE orders SET total_amount = $1, discount_amount = $2,
+                                   embroidery_details = $3,
+                                   has_bordir_nama = $4, has_bordir_logo = $5,
+                                   bordir_status = CASE WHEN $6 THEN 'pending' ELSE bordir_status END,
+                                   updated_at = NOW()
+                  WHERE id = $7`,
+                [newTotal, newDisc, JSON.stringify(mergedEntries),
+                 order.has_bordir_nama || wantNama, order.has_bordir_logo || wantLogo,
+                 adaBordir, order.id]);
+
+            await client.query(
+                `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
+                 VALUES ($1,'edit',NULL,$2,$3)`, [order.id, catatan, actor]);
+
+            // Barang yang baru ditambahkan ikut DITAHAN selama pesanan menunggu
+            // bayar — tanpa ini, barangnya masih terlihat bebas untuk pembeli lain.
+            // Batas waktunya mengikuti tahanan pesanan ini yang sudah ada; menambah
+            // item bukan alasan memperpanjang.
+            if (!isPO) {
+                const expLama = await client.query(
+                    `SELECT MIN(expires_at) AS exp FROM stock_holds WHERE order_id = $1 AND released_at IS NULL`,
+                    [order.id]);
+                await pasangTahanan(client, order.id,
+                    [{ product_id: product.id, size: toSize, color: toColor, variant_type: toVariant, quantity: toQty }],
+                    order.order_source,
+                    expLama.rows[0] && expLama.rows[0].exp ? new Date(expLama.rows[0].exp) : null);
+            }
+        });
+
+        res.json({
+            message: `Item ditambahkan: ${toQty}× ${product.name} ${toColor} ${toSize}`,
+            item_id: newItemId,
+            unit_price: unitPrice,
+            order_total: newTotal,
+            discount_amount: newDisc,
+            is_po: isPO,
+            notes: [
+                isPO ? `Stok ${product.name} ${toColor} ${toSize} tersisa ${tersedia} (butuh ${toQty}) — baris ini ditandai Pre-Order.` : null,
+                // Ongkir SENGAJA tidak dihitung ulang: nominalnya sudah dikutip ke
+                // customer. Barang bertambah hampir selalu menambah berat.
+                `Ongkir Rp ${Number(order.shipping_cost || 0).toLocaleString('id-ID')} TIDAK ikut dihitung ulang — cek lewat Edit Pesanan kalau beratnya jadi beda.`,
+                (wantNama || wantLogo) ? 'Bordir baru masuk — status review bordir dikembalikan ke "pending".' : null,
+            ].filter(Boolean),
+        });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
 // PUT /api/orders/:id/embroidery/:index — edit SATU entry bordir (nama / logo)
 // sebelum barang dikemas. Client sering ubah nama/gelar/logo. Body (nama):
 // { value, value_line2, value_underline, color, position }. Logo: { color, position }
