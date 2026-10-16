@@ -554,6 +554,8 @@
         document.getElementById('breadcrumb-name').textContent = p.name;
         document.getElementById('product-name').textContent = p.name;
         document.getElementById('product-price').textContent = p.price_formatted;
+        // Dipanggil lagi setelah warna & variant awal ditentukan (lihat akhir render).
+        setTimeout(renderHarga, 0);
 
         // Render descriptions in current language (with fallback to ID)
         renderDescriptions(p);
@@ -646,20 +648,42 @@
         return url; // local path like images/Minna LS Black/1.webp
     }
 
+    // Harga dasar katalog untuk variant yang sedang dipilih (sebelum diskon).
+    function hargaDasarTerpilih() {
+        if (currentProduct.price_by_type && selectedType && currentProduct.price_by_type[selectedType] != null)
+            return Number(currentProduct.price_by_type[selectedType]);
+        return Number(currentProduct.price) || 0;
+    }
+    // Harga yang BERLAKU untuk warna + variant yang dipilih sekarang. Dipakai
+    // untuk tampilan DAN untuk item yang masuk keranjang, supaya keduanya tidak
+    // pernah berbeda. Server tetap menghitung ulang saat pesanan dibuat.
+    function hargaBerlakuTerpilih() {
+        return wsDiskonUntuk(currentProduct.discounts, selectedColor, selectedType, hargaDasarTerpilih()).harga;
+    }
+    // Perbarui tampilan harga: kalau sedang didiskon, harga lamanya dicoret.
+    function renderHarga() {
+        const el = document.getElementById('product-price');
+        if (!el || !currentProduct) return;
+        const dasar = hargaDasarTerpilih();
+        const r = wsDiskonUntuk(currentProduct.discounts, selectedColor, selectedType, dasar);
+        el.innerHTML = r.potongan > 0
+            ? `<span class="text-base text-gray-400 dark:text-white/35 line-through mr-2">${wsRp(dasar)}</span>`
+              + `<span class="text-red-600 dark:text-red-400 font-bold">${wsRp(r.harga)}</span>`
+              + (r.label ? `<span class="ml-2 align-middle text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400">${r.label}</span>` : '')
+            : wsRp(dasar);
+    }
+
     function selectType(t) {
         selectedType = t;
         document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.val === t));
-        // Update price if product has price_by_type
-        if (currentProduct.price_by_type && currentProduct.price_by_type[t]) {
-            const price = currentProduct.price_by_type[t];
-            document.getElementById('product-price').textContent = 'Rp ' + Number(price).toLocaleString('id-ID');
-        }
+        renderHarga();
         updateMainImage();
         checkStock();
     }
 
     function selectColor(c) {
         selectedColor = c;
+        setTimeout(renderHarga, 0);
         const label = currentProduct.color_label_map[c] || c;
         document.getElementById('selected-color-label').textContent = label;
         // Toggle active on both color-dot (circles) and motif-box (text boxes)
@@ -831,9 +855,11 @@
             // Harga per variant (Lengan Pendek vs Panjang beda harga di price_by_type).
             // currentProduct.price = harga termurah (min) → JANGAN dipakai langsung, nanti
             // cart/checkout tampil lebih murah dari yang ditagih server. Resolve per tipe.
-            const variantPrice = (currentProduct.price_by_type && currentProduct.price_by_type[selectedType] != null)
-                ? Number(currentProduct.price_by_type[selectedType])
-                : Number(currentProduct.price);
+            // Harga yang dipakai keranjang = harga yang DILIHAT pembeli, sudah
+            // termasuk diskon produk. Server menghitungnya ulang saat pesanan dibuat,
+            // jadi ini tidak pernah jadi celah — tapi kalau beda, pembeli melihat
+            // satu angka di halaman produk dan angka lain di keranjang.
+            const variantPrice = hargaBerlakuTerpilih();
             const item = {
                 product_id: currentProduct.id,
                 name: currentProduct.name,

@@ -987,7 +987,6 @@
               <div>
                 <label class="wa-field-label">Email <span class="text-white/30 font-normal">(opsional)</span></label>
                 <input type="email" id="wa-customer-email" placeholder="nama@klinik.com" autocomplete="off" />
-                <p class="text-[11px] text-white/30 mt-1">Jalur kontak cadangan — berguna untuk pembeli yang tidak mau memberikan nomor HP.</p>
               </div>
               <div>
                 <label class="wa-field-label">Kota Pengiriman <span class="text-red-400">*</span></label>
@@ -1034,7 +1033,6 @@
                 <input type="checkbox" id="wa-barang-diambil" class="mt-0.5 accent-amber-500" onchange="waOnDiambilChange()" />
                 <span class="min-w-0">
                     <span class="block text-[13px] font-bold text-amber-200">Barang diambil dulu, bayar belakangan</span>
-                    <span class="block text-[11px] text-white/45 mt-0.5">Stok langsung dipotong sekarang karena barangnya dibawa pulang. Saat pembayaran dikonfirmasi, pesanan <b>langsung selesai</b> — tidak lewat Kemas &amp; Kirim. Ongkir dinolkan.</span>
                 </span>
               </label>
 
@@ -2253,6 +2251,14 @@
             <div class="space-y-3">
                 <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Ukuran Tersedia</label>
                 <div id="size-btns" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <!-- Diskon produk (admin only) -->
+            <div id="pf-diskon-wrap" class="hidden space-y-2 pt-3 border-t border-white/8">
+                <label class="text-[10px] font-bold text-white/50 uppercase tracking-wider">Diskon Produk <span class="text-amber-300/70 normal-case font-normal">· admin</span></label>
+                <div id="pf-diskon-rows" class="space-y-2"></div>
+                <button type="button" onclick="pdTambahBaris()" class="text-[11px] font-bold text-cyan-300 hover:text-cyan-200">+ Tambah Diskon</button>
+                <p class="text-[10px] text-white/30 leading-relaxed">Potongan harga yang menempel pada produk ini. Tampil di website sebagai harga coret, dan otomatis terpakai di Kasir. Kosongkan pilihan warna/variant = berlaku untuk <b>semua</b>. Kalau satu kombinasi kena beberapa baris, yang dipakai potongan paling besar. Harga Khusus di Kasir tetap menang kalau diisi.</p>
             </div>
 
             <!-- HPP / COGS per variant (admin only) -->
@@ -5179,6 +5185,10 @@ async function openProductModal(product = null) {
     const _isAdmin = _u.role === 'admin';
     const cogsWrap = document.getElementById('pf-cogs-wrap');
     if (cogsWrap) cogsWrap.classList.toggle('hidden', !_isAdmin);
+    // Diskon produk: admin-only, sama seperti HPP. Server juga menolaknya sendiri.
+    const diskonWrap = document.getElementById('pf-diskon-wrap');
+    if (diskonWrap) diskonWrap.classList.toggle('hidden', !_isAdmin);
+    if (_isAdmin) pdMuat(product && product.id);
     _cogsConfig = (product && product.cost_config && typeof product.cost_config === 'object') ? product.cost_config : {};
     _cogsByColor = (product && product.cogs_by_color && typeof product.cogs_by_color === 'object') ? product.cogs_by_color : {};
     if (_isAdmin) {
@@ -5413,6 +5423,121 @@ function _cogsActiveVariants() {
     else if (cat === 'caps') out.push({ key:'single', label:'Harga', priceId:'pf-price-caps' });
     return out;
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// DISKON PRODUK — form produk
+// Disimpan dengan MENGGANTI seluruh daftar (PUT .../discounts), supaya apa yang
+// terlihat di layar persis sama dengan yang tersimpan.
+// ═══════════════════════════════════════════════════════════════════════════
+let _pdRows = [];       // [{ kind, value, colors:[], variants:[], label, is_active }]
+
+function pdTambahBaris() {
+    _pdRows.push({ kind: 'pct', value: '', colors: [], variants: [], label: '', is_active: true });
+    pdRender();
+}
+function pdHapusBaris(i) { _pdRows.splice(i, 1); pdRender(); }
+function pdSet(i, field, val) { if (_pdRows[i]) _pdRows[i][field] = val; }
+function pdToggleCakupan(i, field, nilai, on) {
+    const arr = _pdRows[i] && _pdRows[i][field];
+    if (!Array.isArray(arr)) return;
+    const k = arr.indexOf(nilai);
+    if (on && k === -1) arr.push(nilai);
+    if (!on && k !== -1) arr.splice(k, 1);
+    pdRender();   // render ulang supaya pratinjau harganya ikut
+}
+
+// Pratinjau: harga terendah & tertinggi yang terkena baris ini, supaya admin
+// langsung melihat akibatnya tanpa harus membuka website.
+function pdPratinjau(row) {
+    const nilai = parseInt(row.value, 10);
+    if (!Number.isInteger(nilai) || nilai <= 0) return '';
+    // Hanya variant YANG TERKENA baris ini yang dihitung — kalau semua variant
+    // ikut dihitung, pratinjaunya memberi rentang harga yang tidak pernah terjadi.
+    const semuaVarian = _cogsActiveVariants();
+    const varian = (row.variants && row.variants.length)
+        ? semuaVarian.filter(v => row.variants.includes(v.key)) : semuaVarian;
+    const dasar = varian.length
+        ? varian.map(v => parseInt(document.getElementById(v.priceId)?.value, 10) || 0).filter(n => n > 0)
+        : [parseInt(document.getElementById('pf-price-single')?.value || document.getElementById('pf-price-caps')?.value, 10) || 0].filter(n => n > 0);
+    if (!dasar.length) return '';
+    const hasil = dasar.map(h => row.kind === 'rp' ? Math.max(0, h - Math.min(nilai, h)) : h - Math.round(h * nilai / 100));
+    const min = Math.min(...hasil), max = Math.max(...hasil);
+    return min === max ? `jadi Rp ${fmt(min)}` : `jadi Rp ${fmt(min)} – Rp ${fmt(max)}`;
+}
+
+function pdRender() {
+    const wrap = document.getElementById('pf-diskon-rows');
+    if (!wrap) return;
+    if (!_pdRows.length) {
+        wrap.innerHTML = '<p class="text-[11px] text-white/25">Belum ada diskon untuk produk ini.</p>';
+        return;
+    }
+    const warna = _cogsProductColors();
+    const varian = _cogsActiveVariants();
+    wrap.innerHTML = _pdRows.map((row, i) => `
+        <div class="bg-white/3 border border-white/8 rounded-lg p-2.5 space-y-2">
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center gap-1 shrink-0">
+                    <input type="number" min="1" value="${row.value === '' ? '' : Number(row.value)}" placeholder="20"
+                           oninput="pdSet(${i},'value',this.value); pdRender()" class="!py-1 !text-sm w-16" />
+                    <select onchange="pdSet(${i},'kind',this.value); pdRender()" class="!py-1 !text-xs w-14">
+                        <option value="pct"${row.kind === 'pct' ? ' selected' : ''}>%</option>
+                        <option value="rp"${row.kind === 'rp' ? ' selected' : ''}>Rp</option>
+                    </select>
+                </div>
+                <input type="text" maxlength="80" value="${escAttr(row.label || '')}" placeholder="Nama promo (opsional)"
+                       oninput="pdSet(${i},'label',this.value)" class="!py-1 !text-xs flex-1 min-w-[8rem]" />
+                <label class="flex items-center gap-1 text-[11px] text-white/55 cursor-pointer whitespace-nowrap">
+                    <input type="checkbox" class="accent-green-500" ${row.is_active !== false ? 'checked' : ''}
+                           onchange="pdSet(${i},'is_active',this.checked); pdRender()" /> aktif
+                </label>
+                <button type="button" onclick="pdHapusBaris(${i})" class="text-red-400/60 hover:text-red-400 text-[11px] shrink-0">✕</button>
+            </div>
+            <p class="text-[10px] ${row.is_active === false ? 'text-white/25' : 'text-green-400/80'}">${row.is_active === false ? 'nonaktif' : esc(pdPratinjau(row) || 'isi nilainya dulu')}</p>
+            <div>
+                <p class="text-[10px] uppercase tracking-wider text-white/30 mb-1">Warna ${row.colors.length ? '' : '<span class="normal-case text-white/45">(kosong = semua)</span>'}</p>
+                <div class="flex flex-wrap gap-1">
+                    ${warna.length ? warna.map(c => `
+                        <label class="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border cursor-pointer ${row.colors.includes(c) ? 'bg-cyan-500/15 border-cyan-400/35 text-cyan-200' : 'bg-white/5 border-white/10 text-white/45'}">
+                            <input type="checkbox" class="hidden" ${row.colors.includes(c) ? 'checked' : ''}
+                                   onchange="pdToggleCakupan(${i},'colors','${escAttr(c)}',this.checked)" />${esc(_cogsPrettyColor(c))}
+                        </label>`).join('') : '<span class="text-[11px] text-white/25">pilih warna produknya dulu</span>'}
+                </div>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase tracking-wider text-white/30 mb-1">Variant ${row.variants.length ? '' : '<span class="normal-case text-white/45">(kosong = semua)</span>'}</p>
+                <div class="flex flex-wrap gap-1">
+                    ${varian.length ? varian.map(v => `
+                        <label class="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border cursor-pointer ${row.variants.includes(v.key) ? 'bg-cyan-500/15 border-cyan-400/35 text-cyan-200' : 'bg-white/5 border-white/10 text-white/45'}">
+                            <input type="checkbox" class="hidden" ${row.variants.includes(v.key) ? 'checked' : ''}
+                                   onchange="pdToggleCakupan(${i},'variants','${escAttr(v.key)}',this.checked)" />${esc(v.label)}
+                        </label>`).join('') : '<span class="text-[11px] text-white/25">produk ini tidak punya variant</span>'}
+                </div>
+            </div>
+        </div>`).join('');
+}
+
+// Dipanggil setelah produk disimpan — id-nya baru ada di titik itu untuk produk baru.
+async function pdSimpan(productId) {
+    const bersih = _pdRows
+        .map(r => ({ kind: r.kind === 'rp' ? 'rp' : 'pct', value: parseInt(r.value, 10),
+                     colors: r.colors || [], variants: r.variants || [],
+                     label: (r.label || '').trim(), is_active: r.is_active !== false }))
+        .filter(r => Number.isInteger(r.value) && r.value > 0);
+    await apiFetch(`/api/products/${productId}/discounts`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discounts: bersih }),
+    });
+}
+
+async function pdMuat(productId) {
+    _pdRows = [];
+    if (productId) {
+        try { _pdRows = await apiFetch(`/api/products/${productId}/discounts`); }
+        catch (e) { _pdRows = []; }
+    }
+    pdRender();
+}
+
 function _cogsProductColors() {
     return [...new Set([...document.querySelectorAll('#color-btns .color-toggle.selected, #gown-color-btns .color-toggle.selected, #gown-motif-btns .color-toggle.selected')].map(b => b.dataset.color))];
 }
@@ -5574,6 +5699,14 @@ document.getElementById('product-form').addEventListener('submit', async e => {
         if (ct.includes('application/json')) { data = await res.json(); }
         else { const txt = await res.text(); throw new Error('Server: ' + txt.slice(0,200)); }
         if (!res.ok) throw new Error(data.error || 'Gagal');
+        // Diskon disimpan SETELAH produknya, karena untuk produk baru id-nya baru
+        // ada di titik ini. Kegagalannya tidak membatalkan penyimpanan produk —
+        // produknya sudah tersimpan — tapi WAJIB diberitahukan, bukan ditelan.
+        const idTersimpan = id || (data && data.id);
+        if (idTersimpan) {
+            try { await pdSimpan(idTersimpan); }
+            catch (e) { alert('⚠️ Produk tersimpan, tapi diskonnya GAGAL disimpan: ' + e.message); }
+        }
         toast(id ? 'Produk diperbarui ✅' : 'Produk ditambahkan ✅');
         // Backend membersihkan varian lama yang sudah tidak dipilih; kalau ada yang
         // masih punya stok, baris itu dibiarkan dan admin diberi tahu di sini.
@@ -12853,11 +12986,48 @@ function pbPromoNote(promo) {
 // Tops/gown beda harga per variant (price_by_type[variant]). Produk single-price
 // punya price_by_type = NULL → fallback ke product.price. Mirror resolusi backend
 // (server.js ~2274) supaya preview cart = invoice final.
-function waResolveUnitPrice(product, variant) {
+// ── DISKON PRODUK ──────────────────────────────────────────────────────────
+// Kembaran PERSIS `diskonProdukUntuk` di server.js. Server tetap yang berkuasa:
+// harga yang ditagih selalu dihitung ulang di sana. Yang di sini hanya supaya
+// angka di layar Kasir sama dengan yang nanti tersimpan.
+// Kalau aturan di server berubah, UBAH JUGA DI SINI.
+function diskonProdukUntuk(baris, color, variantType, hargaDasar) {
+    const warna = String(color || '').trim();
+    const varian = String(variantType || 'null').trim();
+    let terbaik = null;
+    for (const d of (baris || [])) {
+        if (d.is_active === false) continue;
+        const cs = Array.isArray(d.colors) ? d.colors : [];
+        const vs = Array.isArray(d.variants) ? d.variants : [];
+        if (cs.length && !cs.includes(warna)) continue;
+        if (vs.length && !vs.includes(varian)) continue;
+        const nilai = Number(d.value || 0);
+        if (nilai <= 0) continue;
+        const potong = d.kind === 'rp'
+            ? Math.min(nilai, Number(hargaDasar || 0))
+            : Math.round(Number(hargaDasar || 0) * nilai / 100);
+        if (potong <= 0) continue;
+        if (!terbaik || potong > terbaik.potongan) terbaik = { potongan: potong, label: d.label || null, kind: d.kind, value: nilai };
+    }
+    if (!terbaik) return { potongan: 0, harga: Number(hargaDasar || 0), diskon: null };
+    return { potongan: terbaik.potongan, harga: Number(hargaDasar || 0) - terbaik.potongan, diskon: terbaik };
+}
+
+// Harga katalog MENTAH (sebelum diskon produk) — dipakai untuk menampilkan
+// harga coret.
+function waHargaKatalogMentah(product, variant) {
     if (!product) return 0;
     const pbt = product.price_by_type;
     if (pbt && variant && pbt[variant] != null) return Number(pbt[variant]) || 0;
     return Number(product.price) || 0;
+}
+
+// Harga satuan yang BERLAKU. `color` opsional supaya pemanggil lama tetap jalan;
+// tanpa warna, diskon yang cakupannya khusus warna tertentu tidak ikut terpakai.
+function waResolveUnitPrice(product, variant, color) {
+    const dasar = waHargaKatalogMentah(product, variant);
+    if (!product || !dasar) return dasar;
+    return diskonProdukUntuk(product.discounts, color, variant, dasar).harga;
 }
 
 // Harga satuan katalog untuk item non-custom (single mode, by row idx).
@@ -12866,7 +13036,20 @@ function waCatalogUnitPrice(idx) {
     if (!pid) return 0;
     const prod = waProducts.find(p => p.id === pid);
     const vt = document.getElementById(`wa-variant-${idx}`)?.value;
-    return waResolveUnitPrice(prod, vt);
+    const warna = document.getElementById(`wa-color-${idx}`)?.value;
+    return waResolveUnitPrice(prod, vt, warna);
+}
+
+// Keterangan diskon untuk satu baris Kasir — dipakai menampilkan harga coret.
+function waInfoDiskon(idx) {
+    const pid = parseInt(document.getElementById(`wa-prod-${idx}`)?.value);
+    if (!pid) return null;
+    const prod = waProducts.find(p => p.id === pid);
+    const vt = document.getElementById(`wa-variant-${idx}`)?.value;
+    const warna = document.getElementById(`wa-color-${idx}`)?.value;
+    const dasar = waHargaKatalogMentah(prod, vt);
+    const hasil = diskonProdukUntuk(prod && prod.discounts, warna, vt, dasar);
+    return hasil.potongan > 0 ? { dasar, ...hasil } : null;
 }
 
 // Sumber order berubah → tampilkan box "Bill To (Partner)" hanya untuk
@@ -14672,7 +14855,7 @@ function bulkPrefillCustomPrice(panel) {
     const priceEl = panel.querySelector('.bulk-cell-custom-price');
     if (!priceEl || !panel._state.selectedProduct || !variant) return;
     if (priceEl.value && parseInt(priceEl.value) > 0) return;
-    const catalogPrice = waResolveUnitPrice(panel._state.selectedProduct, variant);
+    const catalogPrice = waResolveUnitPrice(panel._state.selectedProduct, variant, color);
     if (catalogPrice > 0) priceEl.value = catalogPrice;
 }
 
@@ -14923,7 +15106,7 @@ function bulkUpdatePanelTotal(panel) {
     const isCustomColor = color === '__custom__';
     const unitPrice = isCustomColor
         ? (parseInt(panel.querySelector('.bulk-cell-custom-price')?.value) || 0)
-        : (bulkHargaKhusus(panel) || waResolveUnitPrice(panel._state.selectedProduct, variant));
+        : (bulkHargaKhusus(panel) || waResolveUnitPrice(panel._state.selectedProduct, variant, panel.querySelector('.bulk-cell-color')?.value));
 
     const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
     const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
@@ -14988,7 +15171,7 @@ function bulkUpdateGrandTotal() {
         const isCustomColor = color === '__custom__';
         const unitPrice = isCustomColor
             ? (parseInt(panel.querySelector('.bulk-cell-custom-price')?.value) || 0)
-            : (bulkHargaKhusus(panel) || waResolveUnitPrice(panel._state.selectedProduct, variant));
+            : (bulkHargaKhusus(panel) || waResolveUnitPrice(panel._state.selectedProduct, variant, panel.querySelector('.bulk-cell-color')?.value));
         const namaActive = panel.querySelector('.bulk-cell-bordir-nama').value === 'true';
         const logoActive = panel.querySelector('.bulk-cell-bordir-logo').value === 'true';
         const logoPrice = parseInt(panel.querySelector('.bulk-cell-logo-price')?.value) || 30000;
@@ -15436,7 +15619,7 @@ function kasirAddToCartBulk() {
         const namaUL      = panel.querySelector('.bulk-cell-nama-underline')?.checked === true;
         const panelDiscToken = waDiscTokenOf(panel.querySelector('.bulk-cell-panel-discount'));
         const hargaKhusus = isCustomColor ? 0 : bulkHargaKhusus(panel);
-        const approxBase  = isCustomColor ? customPrice : (hargaKhusus || waResolveUnitPrice(panel._state.selectedProduct, variant));
+        const approxBase  = isCustomColor ? customPrice : (hargaKhusus || waResolveUnitPrice(panel._state.selectedProduct, variant, panel.querySelector('.bulk-cell-color')?.value));
 
         const allocated = {};
         const panelItems = [], panelEmb = [];

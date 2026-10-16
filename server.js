@@ -829,6 +829,33 @@ async function initDB() {
     // di sini hanya disalin ke baris client kalau barisnya memang sudah ada.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT`).catch(() => {});
 
+    // ── DISKON PRODUK (16 Okt 2026) ───────────────────────────────────────────
+    // Potongan harga yang menempel pada PRODUK, bukan pada pesanan. Terlihat di
+    // website (harga lama dicoret) dan otomatis terpakai di Kasir.
+    //
+    // Cakupannya per WARNA dan per VARIANT, karena itu yang diminta di lapangan:
+    // "Minna warna ungu didiskon, boleh lengan panjang & pendek, bisa juga salah
+    // satu saja". Daftar kosong = berlaku untuk SEMUA warna / SEMUA variant.
+    //
+    // Satu produk boleh punya beberapa baris (mis. ungu pendek 20%, ungu panjang
+    // 10%). Kalau sebuah kombinasi kena lebih dari satu baris, yang dipakai
+    // adalah potongan rupiah TERBESAR — pembeli tidak boleh dirugikan oleh
+    // aturan yang tumpang tindih.
+    await dbRun(`CREATE TABLE IF NOT EXISTS product_discounts (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL DEFAULT 'pct',
+        value INTEGER NOT NULL,
+        colors TEXT DEFAULT '[]',
+        variants TEXT DEFAULT '[]',
+        label TEXT DEFAULT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    // dbRun langsung, bukan createIdx: helper itu baru dideklarasikan jauh di bawah
+    // dalam fungsi yang sama, jadi memanggilnya di sini kena TDZ.
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_prod_disc_product ON product_discounts(product_id)').catch(() => {});
+
     // ── Kapan pesanan dikirim (16 Okt 2026) ───────────────────────────────────
     // Dipakai penyelesaian otomatis 1x24 jam setelah resi diisi. Dulu tidak ada
     // penanda waktunya sama sekali: `updated_at` ikut berubah setiap kali apa pun
@@ -1385,6 +1412,51 @@ const PRODUCT_COLOR_HEX_OVERRIDES = {
     'WS-GWN-AVERY': { 'purple': '#362136' }
 };
 
+// ── DISKON PRODUK: satu-satunya tempat aturannya ditulis ───────────────────
+// Dipakai oleh harga pesanan (server) DAN dicerminkan di website/Kasir. Kalau
+// aturan di sini berubah, cermin di public/catalog.js, public/product.html dan
+// public/dashboard.html (diskonProdukUntuk) harus ikut diubah — kalau tidak,
+// harga yang dilihat pembeli beda dengan yang ditagih.
+//
+// `baris` = hasil dbAll dari product_discounts untuk produk itu.
+function diskonProdukUntuk(baris, color, variantType, hargaDasar) {
+    const warna = String(color || '').trim();
+    const varian = String(variantType || 'null').trim();
+    let terbaik = null;
+    for (const d of (baris || [])) {
+        if (!d.is_active) continue;
+        const cs = safeJSON(d.colors, []);
+        const vs = safeJSON(d.variants, []);
+        // Daftar kosong = berlaku untuk semuanya.
+        if (Array.isArray(cs) && cs.length && !cs.includes(warna)) continue;
+        if (Array.isArray(vs) && vs.length && !vs.includes(varian)) continue;
+        const nilai = Number(d.value || 0);
+        if (nilai <= 0) continue;
+        const potong = d.kind === 'rp'
+            ? Math.min(nilai, Number(hargaDasar || 0))
+            : Math.round(Number(hargaDasar || 0) * nilai / 100);
+        if (potong <= 0) continue;
+        if (!terbaik || potong > terbaik.potongan) {
+            terbaik = { potongan: potong, kind: d.kind, value: nilai, label: d.label || null, id: d.id };
+        }
+    }
+    if (!terbaik) return { potongan: 0, harga: Number(hargaDasar || 0), diskon: null };
+    return { potongan: terbaik.potongan, harga: Number(hargaDasar || 0) - terbaik.potongan, diskon: terbaik };
+}
+
+// Harga katalog SETELAH diskon produk. Semua jalur yang membuat/mengubah baris
+// pesanan WAJIB lewat sini — kalau salah satu memakai harga mentah, pembeli
+// melihat harga diskon di website tapi ditagih harga penuh.
+async function hargaKatalogAktif(product, variantType, color) {
+    const priceByType = safeJSON(product.price_by_type, null);
+    const v = String(variantType || 'null').trim();
+    const dasar = (priceByType && v !== 'null' && priceByType[v] != null)
+        ? Number(priceByType[v]) : Number(product.price || 0);
+    const baris = await dbAll('SELECT * FROM product_discounts WHERE product_id = $1', [product.id]);
+    const hasil = diskonProdukUntuk(baris, color, v, dasar);
+    return { dasar, harga: hasil.harga, potongan: hasil.potongan, diskon: hasil.diskon };
+}
+
 function formatProduct(p, mainPhoto = null, opts = {}) {
     const priceByType = safeJSON(p.price_by_type, null);
     const out = {
@@ -1400,7 +1472,15 @@ function formatProduct(p, mainPhoto = null, opts = {}) {
         short_description: p.short_description || '',
         long_description: p.long_description || '',
         short_description_en: p.short_description_en || '',
-        long_description_en: p.long_description_en || ''
+        long_description_en: p.long_description_en || '',
+        // Baris diskon mentah — website & Kasir menghitungnya sendiri dengan
+        // aturan yang sama (lihat diskonProdukUntuk). Kosong kalau produk ini
+        // tidak sedang didiskon.
+        discounts: (opts.discounts || []).map(d => ({
+            id: d.id, kind: d.kind, value: Number(d.value || 0),
+            colors: safeJSON(d.colors, []), variants: safeJSON(d.variants, []),
+            label: d.label || null, is_active: !!d.is_active,
+        })).filter(d => d.is_active && d.value > 0)
     };
     // COGS rahasia → hanya untuk admin (opts.includeCogs). Default: strip dari payload
     // publik (catalog) supaya cost tidak bocor.
@@ -3179,7 +3259,78 @@ app.get('/api/products', async (req, res) => {
         const rows = await dbAll(sql, params);
         const u = getOptionalUser(req);
         const includeCogs = !!u && u.role === 'admin';
-        res.json(rows.map(r => formatProduct(r, r.main_photo, { includeCogs })));
+        // Satu query untuk semua produk sekaligus (bukan per baris) supaya daftar
+        // katalog tidak berubah jadi N+1 query.
+        const semuaDiskon = rows.length
+            ? await dbAll(`SELECT * FROM product_discounts WHERE product_id IN (${rows.map((_, i) => '$' + (i + 1)).join(',')})`,
+                rows.map(r => r.id))
+            : [];
+        const perProduk = new Map();
+        for (const d of semuaDiskon) {
+            const k = Number(d.product_id);
+            if (!perProduk.has(k)) perProduk.set(k, []);
+            perProduk.get(k).push(d);
+        }
+        res.json(rows.map(r => formatProduct(r, r.main_photo,
+            { includeCogs, discounts: perProduk.get(Number(r.id)) || [] })));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/products/:id/discounts — daftar diskon satu produk (admin).
+app.get('/api/products/:id/discounts', requireMenu('products'), async (req, res) => {
+    try {
+        const rows = await dbAll('SELECT * FROM product_discounts WHERE product_id = $1 ORDER BY id', [req.params.id]);
+        res.json(rows.map(d => ({
+            id: d.id, kind: d.kind, value: Number(d.value || 0),
+            colors: safeJSON(d.colors, []), variants: safeJSON(d.variants, []),
+            label: d.label || '', is_active: !!d.is_active,
+        })));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/products/:id/discounts — GANTI seluruh daftar diskon produk.
+// Body: { discounts: [{ kind:'pct'|'rp', value, colors:[], variants:[], label?, is_active? }] }
+//
+// Mengganti seluruhnya (bukan tambal satu-satu) supaya keadaan di layar dan di
+// database mustahil berbeda: apa yang admin lihat di form itulah yang tersimpan.
+// Dibatasi ADMIN, bukan sekadar izin edit produk — ini menurunkan harga jual.
+app.put('/api/products/:id/discounts', requireAuth(['admin']), async (req, res) => {
+    try {
+        const product = await dbGet('SELECT id, name FROM products WHERE id = $1', [req.params.id]);
+        if (!product) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+        const mentah = Array.isArray(req.body.discounts) ? req.body.discounts : [];
+        if (mentah.length > 20) return res.status(400).json({ error: 'Maksimal 20 baris diskon per produk' });
+        const bersih = [];
+        for (const d of mentah) {
+            const kind = d.kind === 'rp' ? 'rp' : 'pct';
+            const value = parseInt(d.value, 10);
+            if (!Number.isInteger(value) || value <= 0)
+                return res.status(400).json({ error: 'Nilai diskon harus angka lebih dari 0' });
+            // Batas 90% disengaja: diskon 100% berarti barang gratis, dan itu punya
+            // jalurnya sendiri (is_bonus di Kasir) yang ikut mencatat alasannya.
+            if (kind === 'pct' && value > 90)
+                return res.status(400).json({ error: 'Diskon persen maksimal 90% — untuk barang gratis pakai Bonus di Kasir' });
+            const colors = Array.isArray(d.colors) ? d.colors.map(c => String(c).trim()).filter(Boolean).slice(0, 50) : [];
+            const variants = Array.isArray(d.variants) ? d.variants.map(v => String(v).trim()).filter(Boolean).slice(0, 20) : [];
+            bersih.push({
+                kind, value, colors, variants,
+                label: String(d.label || '').trim().slice(0, 80) || null,
+                is_active: d.is_active === undefined ? true : !!d.is_active,
+            });
+        }
+
+        await withTransaction(async (client) => {
+            await client.query('DELETE FROM product_discounts WHERE product_id = $1', [product.id]);
+            for (const d of bersih) {
+                await client.query(
+                    `INSERT INTO product_discounts (product_id, kind, value, colors, variants, label, is_active)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                    [product.id, d.kind, d.value, JSON.stringify(d.colors), JSON.stringify(d.variants), d.label, d.is_active]);
+            }
+        });
+        invalidateCache('products');
+        res.json({ message: bersih.length ? `${bersih.length} baris diskon tersimpan` : 'Diskon produk dihapus', count: bersih.length });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3246,7 +3397,8 @@ app.get('/api/products/:id', async (req, res) => {
 
         const u = getOptionalUser(req);
         const includeCogs = !!u && u.role === 'admin';
-        res.json({ ...formatProduct(p, mainPhoto, { includeCogs }), variants, inventory });
+        const diskonBaris = await dbAll('SELECT * FROM product_discounts WHERE product_id = $1', [p.id]);
+        res.json({ ...formatProduct(p, mainPhoto, { includeCogs, discounts: diskonBaris }), variants, inventory });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -4873,9 +5025,20 @@ app.post('/api/orders', async (req, res) => {
             // menyimpan harga TERMURAH (min), jadi resolve per variant_type dulu;
             // fallback ke product.price untuk produk harga-tunggal / variant tak dikenal.
             const priceByType = safeJSON(product.price_by_type, null);
-            const catalogPrice = (priceByType && item.variant_type && priceByType[item.variant_type] != null)
+            const catalogPriceAsli = (priceByType && item.variant_type && priceByType[item.variant_type] != null)
                 ? Number(priceByType[item.variant_type])
                 : Number(product.price);
+            // Diskon produk (per warna & variant) dipotong DI SERVER. Harga dari
+            // client tidak pernah dipercaya: kalau ini dihitung di browser saja,
+            // pembeli website bisa mengirim harga apa pun lewat panggilan langsung.
+            // Custom product/size punya harganya sendiri → tidak kena diskon katalog.
+            let catalogPrice = catalogPriceAsli;
+            let diskonProdukDipakai = null;
+            if (!isCustomProduct && !isCustomSize) {
+                const baris = await dbAll('SELECT * FROM product_discounts WHERE product_id = $1', [item.product_id]);
+                const hasil = diskonProdukUntuk(baris, item.color, item.variant_type, catalogPriceAsli);
+                if (hasil.potongan > 0) { catalogPrice = hasil.harga; diskonProdukDipakai = hasil.diskon; }
+            }
             // Harga khusus baris KATALOG (Kasir, admin-only): custom_price > 0 pada
             // baris biasa menimpa harga katalog — untuk deal di event (mis. aksesoris
             // dijual di bawah harga). 0/kosong = katalog. Gratis tetap lewat is_bonus.
@@ -4913,7 +5076,10 @@ app.post('/api/orders', async (req, res) => {
             const totalCogs = (baseCogs + bordirNamaCogs + bordirLogoCogs) * item.quantity;
             itemDetails.push({ ...item, is_bonus: isBonus, is_custom_size: isCustomSize, is_custom_product: isCustomProduct, is_po: isPO, price: unitPrice, product_name: product.name, custom_product_name: isCustomProduct ? product.name : null, custom_product_category: isCustomProduct ? product.category : null, base_price: basePrice, embroidery_cost: itemEmbroidery,
                 bordir_nama_price: item.bordir_nama ? namaPrice : null, bordir_logo_price: item.bordir_logo ? logoPrice : null,
-                unit_cogs: baseCogs, bordir_nama_cogs: bordirNamaCogs, bordir_logo_cogs: bordirLogoCogs, packaging_cogs: 0, total_cogs: totalCogs });
+                unit_cogs: baseCogs, bordir_nama_cogs: bordirNamaCogs, bordir_logo_cogs: bordirLogoCogs, packaging_cogs: 0, total_cogs: totalCogs,
+                // Dicatat supaya jejak audit bisa menjelaskan kenapa harganya beda
+                // dari katalog. Tanpa ini, bulan depan tidak ada yang tahu sebabnya.
+                diskon_produk: diskonProdukDipakai, harga_katalog_asli: catalogPriceAsli });
             productTotal += unitPrice * item.quantity;
         }
 
@@ -5202,6 +5368,20 @@ app.post('/api/orders', async (req, res) => {
                     [newOrderId, 'Barang diserahkan di muka (bayar belakangan) — stok sudah dipotong saat ini.',
                      authUser?.username || 'admin']);
             }
+            // Jejak audit kalau ada baris yang kena diskon produk — supaya harga yang
+            // berbeda dari katalog punya penjelasan yang bisa dibaca nanti.
+            const barisDiskon = itemDetails.filter(it => it.diskon_produk);
+            if (barisDiskon.length) {
+                const rincian = barisDiskon.map(it => `${it.product_name} ${it.color}`
+                    + (it.variant_type && it.variant_type !== 'null' ? ' ' + it.variant_type : '')
+                    + `: Rp ${Number(it.harga_katalog_asli).toLocaleString('id-ID')} -> Rp ${Number(it.base_price).toLocaleString('id-ID')}`
+                    + (it.diskon_produk.label ? ` (${it.diskon_produk.label})` : '')).join('; ');
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
+                     VALUES ($1,'edit',NULL,$2,$3)`,
+                    [newOrderId, `Diskon produk terpakai — ${rincian}`, authUser?.username || 'system']);
+            }
+
             // Tahan stoknya selama order ini menunggu pembayaran, supaya pembeli
             // lain tidak ikut memesan potongan yang sama. Order gratis (total 0)
             // dilewati: stoknya dipotong betulan beberapa baris di bawah, jadi
@@ -7926,10 +8106,10 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
         // ── Harga: mirror resolusi di POST /api/orders ────────────────────────────
         // price_by_type[variant] ?? price, lalu + harga bordir per pcs (harga item di DB
         // memang sudah termasuk bordir). Item bonus tetap Rp 0 apa pun produknya.
-        const priceByType = safeJSON(product.price_by_type, null);
-        const catalogPrice = (priceByType && toVariant && toVariant !== 'null' && priceByType[toVariant] != null)
-            ? Number(priceByType[toVariant])
-            : Number(product.price || 0);
+        // Harga katalog SUDAH termasuk diskon produk (per warna & variant).
+        // Tanpa ini, mengedit varian sebuah baris diam-diam mengembalikan harganya
+        // ke harga penuh walau produknya sedang didiskon.
+        const catalogPrice = (await hargaKatalogAktif(product, toVariant, toColor)).harga;
         const namaPrice = item.bordir_nama ? Number(item.bordir_nama_price ?? 20000) : 0;
         const logoPrice = item.bordir_logo ? Number(item.bordir_logo_price ?? 30000) : 0;
         const newPrice = item.is_bonus ? 0 : (catalogPrice + namaPrice + logoPrice);
@@ -8180,9 +8360,10 @@ app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res
         }
 
         // ── Harga & COGS: resolusi sama dengan PUT .../items/:itemId ───────────
-        const priceByType = safeJSON(product.price_by_type, null);
-        const catalogPrice = (priceByType && toVariant !== 'null' && priceByType[toVariant] != null)
-            ? Number(priceByType[toVariant]) : Number(product.price || 0);
+        // Harga katalog SUDAH termasuk diskon produk (per warna & variant) —
+        // lewat hargaKatalogAktif, satu-satunya tempat aturannya ditulis.
+        const hargaKatalog = await hargaKatalogAktif(product, toVariant, toColor);
+        const catalogPrice = hargaKatalog.harga;
         // Harga khusus (admin-only, aturan sama dengan baris katalog di Kasir):
         // menimpa harga katalog untuk kesepakatan tertentu. Bordir TETAP ditambahkan
         // di atasnya — harga item di DB memang selalu sudah termasuk bordir.

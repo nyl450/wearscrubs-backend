@@ -8,6 +8,56 @@ var WS_API = (window.location.hostname === 'localhost' || window.location.hostna
     ? 'http://localhost:3000'
     : 'https://wearscrubs-backend-production.up.railway.app';  // ← ganti dengan URL Railway Anda
 
+// ── DISKON PRODUK ───────────────────────────────────────────────────────────
+// Kembaran PERSIS `diskonProdukUntuk` di server.js. Server tetap yang berkuasa:
+// harga yang ditagih selalu dihitung ulang di sana. Yang di sini hanya supaya
+// pembeli melihat angka yang sama dengan yang nanti ditagihkan.
+// Kalau aturan di server berubah, UBAH JUGA DI SINI dan di dashboard.html.
+function wsDiskonUntuk(baris, color, variantType, hargaDasar) {
+    const warna = String(color || '').trim();
+    const varian = String(variantType || 'null').trim();
+    let terbaik = null;
+    for (const d of (baris || [])) {
+        if (d.is_active === false) continue;
+        const cs = Array.isArray(d.colors) ? d.colors : [];
+        const vs = Array.isArray(d.variants) ? d.variants : [];
+        if (cs.length && !cs.includes(warna)) continue;
+        if (vs.length && !vs.includes(varian)) continue;
+        const nilai = Number(d.value || 0);
+        if (nilai <= 0) continue;
+        const potong = d.kind === 'rp'
+            ? Math.min(nilai, Number(hargaDasar || 0))
+            : Math.round(Number(hargaDasar || 0) * nilai / 100);
+        if (potong <= 0) continue;
+        if (!terbaik || potong > terbaik.potongan) terbaik = { potongan: potong, label: d.label || null };
+    }
+    if (!terbaik) return { potongan: 0, harga: Number(hargaDasar || 0) };
+    return { potongan: terbaik.potongan, harga: Number(hargaDasar || 0) - terbaik.potongan, label: terbaik.label };
+}
+function wsRp(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+
+// Harga TERMURAH yang mungkin setelah diskon, untuk kartu katalog (satu kartu
+// mewakili banyak warna & variant). Mengembalikan null kalau produk ini tidak
+// sedang didiskon sama sekali.
+function wsHargaKartu(p) {
+    if (!Array.isArray(p.discounts) || !p.discounts.length) return null;
+    const dasarList = (p.price_by_type && Object.keys(p.price_by_type).length)
+        ? Object.entries(p.price_by_type).map(([v, h]) => ({ v, h: Number(h) }))
+        : [{ v: 'null', h: Number(p.price) || 0 }];
+    const warnaList = Array.isArray(p.colors) && p.colors.length ? p.colors : [''];
+    let termurah = null, adaPotongan = false;
+    for (const { v, h } of dasarList) {
+        for (const c of warnaList) {
+            const r = wsDiskonUntuk(p.discounts, c, v, h);
+            if (r.potongan > 0) adaPotongan = true;
+            if (termurah === null || r.harga < termurah) termurah = r.harga;
+        }
+    }
+    if (!adaPotongan) return null;
+    const dasarTermurah = Math.min(...dasarList.map(x => x.h));
+    return { dasar: dasarTermurah, harga: termurah };
+}
+
 const COLOR_META = {
     // Warna aksesoris (Formie) — id sama dengan palet dashboard
     'hitam':        { label: 'Hitam',        hex: '#111111' },
@@ -329,7 +379,16 @@ const Catalog = {
                 <div class="p-4 flex-1 flex flex-col gap-2">
                     <div onclick="window.location.href='product.html?id=${p.id}'" class="cursor-pointer">
                         <h3 class="text-sm font-bold text-gray-900 dark:text-white leading-snug hover:underline">${p.name}</h3>
-                        <p class="text-sm font-bold text-gray-800 dark:text-white/80 mt-0.5">${p.price_formatted}</p>
+                        ${(() => {
+                            const d = wsHargaKartu(p);
+                            if (!d) return `<p class="text-sm font-bold text-gray-800 dark:text-white/80 mt-0.5">${p.price_formatted}</p>`;
+                            // Harga coret + harga diskon. "mulai" dipakai karena satu kartu
+                            // mewakili beberapa warna/variant yang diskonnya bisa berbeda.
+                            return `<p class="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+                                <span class="text-xs text-gray-400 dark:text-white/35 line-through">${wsRp(d.dasar)}</span>
+                                <span class="text-sm font-bold text-red-600 dark:text-red-400">mulai ${wsRp(d.harga)}</span>
+                            </p>`;
+                        })()}
                         ${capsDesc}${gownDesc}
                     </div>
                     ${typesHTML}
