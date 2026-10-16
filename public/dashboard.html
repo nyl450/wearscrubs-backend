@@ -975,8 +975,14 @@
                 <input type="text" id="wa-customer-name" placeholder="Dr. Budi Santoso" />
               </div>
               <div>
-                <label class="wa-field-label">Nomor WhatsApp <span class="text-red-400">*</span></label>
+                <label class="wa-field-label">Nomor WhatsApp <span id="wa-phone-req" class="text-red-400">*</span></label>
                 <input type="text" id="wa-customer-phone" placeholder="08xxxxxxxxxx" />
+                <!-- Penjualan tatap muka (event/walk-in/collab) boleh tanpa nomor:
+                     di lapangan ada pembeli yang tidak mau memberikannya, dan
+                     penjualannya tetap harus bisa tercatat. -->
+                <p id="wa-phone-opsional" class="hidden text-[11px] text-amber-300/70 mt-1">
+                    Boleh dikosongkan untuk penjualan tatap muka. Tanpa nomor, pesanan ini tidak bisa dikirimi notifikasi WhatsApp dan tidak tergabung ke riwayat pembeli.
+                </p>
               </div>
               <div>
                 <label class="wa-field-label">Kota Pengiriman <span class="text-red-400">*</span></label>
@@ -1016,6 +1022,17 @@
                 <label class="wa-field-label">Ongkos Kirim (Rp)</label>
                 <input type="number" id="wa-shipping-cost" placeholder="0" min="0" oninput="waUpdateTotal()" />
               </div>
+              <!-- Barang diambil dulu, bayar belakangan (16 Okt 2026).
+                   Dipisah dari metode pembayaran karena ini bukan CARA bayar,
+                   melainkan URUTAN: barangnya pindah tangan lebih dulu. -->
+              <label id="wa-diambil-wrap" class="flex items-start gap-2.5 p-3 rounded-xl border border-amber-400/25 bg-amber-500/5 cursor-pointer">
+                <input type="checkbox" id="wa-barang-diambil" class="mt-0.5 accent-amber-500" onchange="waOnDiambilChange()" />
+                <span class="min-w-0">
+                    <span class="block text-[13px] font-bold text-amber-200">Barang diambil dulu, bayar belakangan</span>
+                    <span class="block text-[11px] text-white/45 mt-0.5">Stok langsung dipotong sekarang karena barangnya dibawa pulang. Saat pembayaran dikonfirmasi, pesanan <b>langsung selesai</b> — tidak lewat Kemas &amp; Kirim. Ongkir dinolkan.</span>
+                </span>
+              </label>
+
               <div>
                 <label class="wa-field-label">Metode Pembayaran</label>
                 <select id="wa-payment-method">
@@ -12845,6 +12862,34 @@ function waOnSourceChange() {
         const r = document.getElementById('wa-receipt-no'); if (r) r.value = '';
         const v = document.getElementById('wa-voucher-no'); if (v) v.value = '';
     }
+    waSyncWajibHP();
+}
+
+// Penjualan TATAP MUKA boleh tanpa nomor HP (James, 16 Okt 2026: di event ada
+// dokter yang tidak mau memberikan nomornya, dan tanpa ini penjualannya sama
+// sekali tidak bisa dicatat). Order WhatsApp & website tetap wajib — nomor itu
+// satu-satunya cara menghubungi pembelinya. Daftar ini kembaran SUMBER_TANPA_HP
+// di server.js; kalau menambah sumber, ubah KEDUANYA.
+const WA_SUMBER_TANPA_HP = ['event_offline', 'offline', 'collaboration_event'];
+function waBolehTanpaHP() {
+    return WA_SUMBER_TANPA_HP.includes(document.getElementById('wa-order-source')?.value);
+}
+function waSyncWajibHP() {
+    const boleh = waBolehTanpaHP();
+    document.getElementById('wa-phone-req')?.classList.toggle('hidden', boleh);
+    document.getElementById('wa-phone-opsional')?.classList.toggle('hidden', !boleh);
+}
+
+// Barang diambil dulu: ongkir & kurir tidak relevan lagi (barangnya sudah di
+// tangan pembeli), jadi field-nya dinolkan & dikunci supaya tidak ada angka
+// sisa dari isian sebelumnya yang ikut tersimpan.
+function waOnDiambilChange() {
+    const on = !!document.getElementById('wa-barang-diambil')?.checked;
+    const ongkir = document.getElementById('wa-shipping-cost');
+    const kurir  = document.getElementById('wa-shipping-courier');
+    if (on) { if (ongkir) ongkir.value = 0; if (kurir) kurir.value = ''; }
+    [ongkir, kurir].forEach(el => { if (el) { el.disabled = on; el.classList.toggle('opacity-40', on); } });
+    if (typeof waUpdateTotal === 'function') waUpdateTotal();
 }
 
 // Label opsi variant di dropdown: nama enak dibaca + harga per variant (kalau ada),
@@ -13199,6 +13244,10 @@ function waResetForm() {
             const t = new Date();
             dateEl.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
         }
+        // Barang-diambil-dulu WAJIB dilepas: kalau tertinggal, pesanan berikutnya
+        // ikut memotong stok di muka tanpa admin menyadarinya.
+        const bd = document.getElementById('wa-barang-diambil');
+        if (bd) { bd.checked = false; if (typeof waOnDiambilChange === 'function') waOnDiambilChange(); }
         // Reset diskon umum + DP.
         const fd = document.getElementById('wa-form-discount'); if (fd) fd.value = '';
         // Kotak "Manual…" TIDAK ikut kosong hanya dengan menyetel select-nya:
@@ -15481,8 +15530,14 @@ async function kasirCartSubmit() {
     // Catatan Invoice (customer-facing, muncul di PDF invoice). Terpisah dari `notes`
     // internal. Sempat kelewat di jalur cart → catatan hilang saat order dibuat.
     const invoiceNotes    = (document.getElementById('wa-invoice-notes')?.value || '').trim() || null;
-    if (!customerName || !customerPhone || !customerAddress || !shippingCity) {
+    const bolehTanpaHP = WA_SUMBER_TANPA_HP.includes(orderSource);
+    if (!customerName || !customerAddress || !shippingCity || (!customerPhone && !bolehTanpaHP)) {
         alert('Lengkapi data pelanggan (Nama, HP, Alamat, Kota) terlebih dahulu.'); return;
+    }
+    if (!customerPhone && bolehTanpaHP) {
+        // Dikonfirmasi sekali, bukan dilewatkan diam-diam: tanpa nomor, pembeli ini
+        // tidak akan pernah bisa dihubungi lagi dari sistem.
+        if (!confirm('Pesanan ini tidak punya nomor WhatsApp.\n\nPembeli tidak bisa dikirimi notifikasi dan pesanannya tidak akan tergabung ke riwayat pembeli. Lanjutkan?')) return;
     }
     if (orderSource === 'collaboration_event' && !billingTo) {
         alert('Collaboration Event: isi dulu "Ditagihkan Ke / Bill To".'); return;
@@ -15562,7 +15617,10 @@ async function kasirCartSubmit() {
                 invoice_date: invoiceDate || null, items: allItems,
                 embroidery_details: allEmb.length ? allEmb : null,
                 discount_percent: 0, discount_amount_custom: totalDiscountAmount,
-                discount_label_custom: discountLabelCustom, dp_amount: dpAmount }),
+                discount_label_custom: discountLabelCustom, dp_amount: dpAmount,
+                // Barang sudah dibawa pulang: server memotong stoknya saat ini juga
+                // dan memaksa kurir "ambil langsung" supaya alur Kemas & Kirim lewat.
+                picked_up: !!document.getElementById('wa-barang-diambil')?.checked }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal membuat order');

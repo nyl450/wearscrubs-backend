@@ -808,6 +808,28 @@ async function initDB() {
 
     // ── Migrate: tracking_number for shipment ─────────────────────────────────
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`).catch(() => {});
+
+    // ── BARANG DIAMBIL DULU, BAYAR BELAKANGAN (16 Okt 2026) ───────────────────
+    // Kasus lapangan: kerabat/kenalan mengambil barangnya di tempat, uangnya
+    // menyusul. Barangnya BENAR-BENAR keluar dari rak saat itu juga, jadi stoknya
+    // dipotong saat penyerahan — bukan saat pembayaran dikonfirmasi.
+    //
+    // ⚠️ Ini satu-satunya pengecualian invarian "lunas ⇒ potong stok". Aturannya
+    // tetap: stok dipotong TEPAT SEKALI per pesanan, saat barangnya fisik keluar.
+    // Untuk pesanan biasa itu saat konfirmasi bayar; untuk pesanan ini saat
+    // diserahkan. Karena itu confirm-payment MELEWATI pemotongan kalau kolom ini
+    // terisi, dan pembatalan MENGEMBALIKAN stok walaupun belum dibayar.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ`).catch(() => {});
+
+    // ── Kapan pesanan dikirim (16 Okt 2026) ───────────────────────────────────
+    // Dipakai penyelesaian otomatis 1x24 jam setelah resi diisi. Dulu tidak ada
+    // penanda waktunya sama sekali: `updated_at` ikut berubah setiap kali apa pun
+    // di pesanan itu disentuh, jadi tidak bisa dipakai menghitung umur pengiriman.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`).catch(() => {});
+    // Backfill sekali untuk pesanan yang sudah terlanjur dikirim sebelum kolom ini
+    // ada — pakai updated_at sebagai perkiraan terbaik yang tersedia.
+    await dbRun(`UPDATE orders SET shipped_at = updated_at
+                  WHERE order_status = 'shipped' AND shipped_at IS NULL`).catch(() => {});
     // ── Migrate: track which admin performed each order photo step ─────────────
     await dbRun(`ALTER TABLE order_photos ADD COLUMN IF NOT EXISTS performed_by TEXT`);
     // Photo optional for some steps (bordir-done, pack): step record saved w/o image → allow NULL.
@@ -4673,7 +4695,21 @@ app.post('/api/orders', async (req, res) => {
         const custPhoneDigits = (customer_phone || '').replace(/\D/g, '');
         if (!custNameTrim) return res.status(400).json({ error: 'Nama pelanggan wajib diisi' });
         if (!custAddrTrim) return res.status(400).json({ error: 'Alamat pelanggan wajib diisi' });
-        if (custPhoneDigits.length < 9 || custPhoneDigits.length > 15 || !/^(0|62|8)/.test(custPhoneDigits))
+        // Nomor HP BOLEH kosong untuk penjualan tatap muka yang diinput admin.
+        // Kasus nyata (James, 16 Okt 2026): di event ada dokter yang tidak mau
+        // memberikan nomornya, dan tanpa ini penjualannya sama sekali tidak bisa
+        // dicatat — yang jauh lebih merugikan daripada kehilangan satu nomor.
+        //
+        // Dibatasi ke sumber TATAP MUKA saja: di situ memang tidak ada tindak
+        // lanjut WhatsApp. Order website & WhatsApp TETAP wajib bernomor — nomor
+        // itulah satu-satunya cara menghubungi pembelinya.
+        // Kalau diisi, formatnya tetap diperiksa: nomor asal-asalan lebih buruk
+        // daripada kosong, karena terlihat seperti nomor yang benar.
+        const SUMBER_TANPA_HP = ['event_offline', 'offline', 'collaboration_event'];
+        const bolehTanpaHP = isAdmin && SUMBER_TANPA_HP.includes(String(order_source || '').trim());
+        if (!custPhoneDigits && !bolehTanpaHP)
+            return res.status(400).json({ error: 'Nomor WhatsApp wajib diisi' });
+        if (custPhoneDigits && (custPhoneDigits.length < 9 || custPhoneDigits.length > 15 || !/^(0|62|8)/.test(custPhoneDigits)))
             return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (gunakan format 08xxx / 62xxx)' });
 
         // ── GUARD DUPLIKAT (public only) ──────────────────────────────────────
@@ -4848,6 +4884,21 @@ app.post('/api/orders', async (req, res) => {
                : ADMIN_SOURCES.includes(order_source) ? order_source : 'whatsapp')
             : 'website';
 
+        // ── Barang diambil dulu, bayar belakangan (admin-only) ────────────────
+        // Dipakai untuk penjualan tatap muka ke kenalan: barangnya dibawa pulang
+        // sekarang, uangnya menyusul. Saat pembayaran dikonfirmasi, pesanan
+        // LANGSUNG selesai — tidak lewat Kemas & Kirim, karena barangnya memang
+        // sudah di tangan pembeli.
+        const barangDiambil = isAdmin && (req.body.picked_up === true || req.body.picked_up === 'true');
+        if (barangDiambil) {
+            // Tidak masuk akal menyerahkan barang yang belum ada. Pre-Order dan
+            // custom dijahit dulu, jadi dua-duanya ditolak di sini daripada
+            // menghasilkan pesanan yang isinya saling bertentangan.
+            const adaBelumAda = (items || []).some(it => it.is_po === true || it.is_custom_size === true || it.is_custom_product === true);
+            if (adaBelumAda) return res.status(400).json({
+                error: 'Barang diambil dulu tidak bisa dipakai untuk Pre-Order atau barang custom — barangnya belum ada untuk diserahkan.' });
+        }
+
         // payment_method: restrict to a known set (or empty) — block arbitrary injected text.
         // Public checkout kirim semantic value ('bank_transfer'/'qris'); admin form
         // dashboard pakai value lama (BCA/Mandiri/QRIS/Bonus-Free) — keduanya diterima.
@@ -4942,6 +4993,7 @@ app.post('/api/orders', async (req, res) => {
         const discountLabel = discountAmount === 0 ? null : (discountAmountCustom !== null
             ? (req.body.discount_label_custom || 'Diskon per produk') || null
             : (safeDiscountPct === 5 ? 'Diskon 5%' : safeDiscountPct === 30 ? 'Consignment 30%' : null));
+        if (barangDiambil) shippingCost = 0;
         const total = productTotal - discountAmount + shippingCost;
 
         // DP / uang muka (admin-only). Total tetap penuh; DP hanya info pembayaran bertahap.
@@ -4958,7 +5010,11 @@ app.post('/api/orders', async (req, res) => {
             else if (cityInfo.zone !== 1 && weightKg > 10) autoCourier = 'Lion Cargo (ongkir dikonfirmasi admin)';
             else autoCourier = cityInfo.zone === 1 ? 'JNE / J&T Reguler' : 'J&T Reguler / Lion Parcel';
         }
-        const courier = (req_shipping_courier && req_shipping_courier.trim()) ? sanitizeCourier(req_shipping_courier) : autoCourier;
+        // Barang yang sudah diambil tidak akan dikirim ke mana-mana: kurirnya
+        // dipaksa "ambil langsung" supaya alur Kemas & Kirim otomatis dilewati
+        // (aturan yang sama dipakai penjualan walk-in), dan ongkirnya nol.
+        const courier = barangDiambil ? PICKUP_COURIER
+            : (req_shipping_courier && req_shipping_courier.trim()) ? sanitizeCourier(req_shipping_courier) : autoCourier;
 
         // Detect bordir flags from items for order-level tracking
         const hasBordirLogo = itemDetails.some(i => i.bordir_logo);
@@ -5062,12 +5118,55 @@ app.post('/api/orders', async (req, res) => {
                 );
             }
 
+            // ── BARANG DIAMBIL DULU ───────────────────────────────────────────
+            // Barangnya keluar dari rak SEKARANG, jadi stoknya dipotong sekarang —
+            // bukan ditahan. Menahannya saja tidak cukup: tahanan itu kedaluwarsa
+            // sendiri setelah 72 jam, dan sesudahnya sistem akan mengira barang yang
+            // sudah dibawa pulang masih ada di rak.
+            if (barangDiambil) {
+                const perVarian = new Map();
+                for (const it of itemDetails) {
+                    if (!holdBarisMenahan(it)) continue;   // PO/custom tidak punya barang fisik
+                    const vt = it.variant_type || 'null';
+                    const k = `${it.product_id}|${it.size}|${it.color}|${vt}`;
+                    if (!perVarian.has(k)) perVarian.set(k, { product_id: it.product_id, size: it.size,
+                        color: it.color, variant_type: vt, quantity: 0 });
+                    perVarian.get(k).quantity += Number(it.quantity || 0);
+                }
+                for (const v of perVarian.values()) {
+                    const invRes = await client.query(
+                        'SELECT stock FROM inventory WHERE product_id=$1 AND size=$2 AND color=$3 AND variant_type=$4 FOR UPDATE',
+                        [v.product_id, v.size, v.color, v.variant_type]);
+                    const stockBefore = invRes.rows[0] ? parseInt(invRes.rows[0].stock) : 0;
+                    if (stockBefore < v.quantity) {
+                        const e = new Error(`Stok tidak cukup untuk diserahkan: ${v.color}/${v.variant_type}/${v.size} tersisa ${stockBefore}, dibutuhkan ${v.quantity}.`);
+                        e.statusCode = 409; throw e;
+                    }
+                    await client.query(
+                        'UPDATE inventory SET stock = stock - $1::int WHERE product_id=$2 AND size=$3 AND color=$4 AND variant_type=$5',
+                        [v.quantity, v.product_id, v.size, v.color, v.variant_type]);
+                    await client.query(
+                        `INSERT INTO stock_movements
+                         (product_id, size, color, variant_type, movement_type, quantity_change, quantity_before, quantity_after, note, order_id, admin_user)
+                         VALUES ($1,$2,$3,$4,'order_out',$5,$6,$7,$8,$9,$10)`,
+                        [v.product_id, v.size, v.color, v.variant_type, -v.quantity, stockBefore,
+                         stockBefore - v.quantity, `Barang diambil dulu ${orderCode}`, newOrderId,
+                         authUser?.username || 'admin']);
+                }
+                await client.query(`UPDATE orders SET picked_up_at = NOW() WHERE id = $1`, [newOrderId]);
+                await client.query(
+                    `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
+                     VALUES ($1,'edit',NULL,$2,$3)`,
+                    [newOrderId, 'Barang diserahkan di muka (bayar belakangan) — stok sudah dipotong saat ini.',
+                     authUser?.username || 'admin']);
+            }
             // Tahan stoknya selama order ini menunggu pembayaran, supaya pembeli
             // lain tidak ikut memesan potongan yang sama. Order gratis (total 0)
             // dilewati: stoknya dipotong betulan beberapa baris di bawah, jadi
             // menahannya lagi berarti menghitung barang yang sama dua kali.
             // Temporary Order juga tidak menahan — stoknya sudah keluar (test_out).
-            if (!(isAdmin && total === 0) && safeOrderSource !== 'test_size') {
+            // Barang yang sudah diambil juga tidak ditahan: stoknya sudah dipotong.
+            if (!(isAdmin && total === 0) && safeOrderSource !== 'test_size' && !barangDiambil) {
                 await pasangTahanan(client, newOrderId, itemDetails, safeOrderSource);
             }
 
@@ -5091,7 +5190,10 @@ app.post('/api/orders', async (req, res) => {
                 // lock + hard check anti-oversell, log order_out. Bonus IKUT dipotong
                 // (barang tetap keluar gudang meski gratis).
                 const freeVariantTotals = new Map();
-                for (const it of itemDetails) {
+                // Barang diambil dulu sudah memotong stok di blok sebelumnya.
+                // Tanpa penjagaan ini, pesanan gratis YANG SEKALIGUS diambil dulu
+                // akan memotong barang yang sama dua kali.
+                for (const it of (barangDiambil ? [] : itemDetails)) {
                     if (it.is_custom_size || it.is_po || it.is_custom_product) continue;
                     const vt = it.variant_type || 'null';
                     const k = `${it.product_id}|${it.size}|${it.color}|${vt}`;
@@ -5333,11 +5435,15 @@ app.put('/api/orders/:id/confirm-payment', requireMenu('orders','edit'), upload.
             // hanya finalize status: tagihan diterima, transisi ke pending_return atau done.
             // Skip stock deduction + skip aggregation di bawah.
             const isTrialOrder = order.order_source === 'test_size';
+            // Barang diambil dulu: stoknya SUDAH dipotong saat diserahkan (lihat
+            // picked_up_at di POST /api/orders). Memotongnya lagi di sini berarti
+            // satu barang hilang dua kali dari sistem.
+            const sudahDiambil = !!order.picked_up_at;
 
             // Aggregate per physical variant first — bordir splits (plain + nama + logo)
             // share one inventory row, so summing avoids missing the true total demand.
             const variantTotals = new Map();
-            if (!isTrialOrder) {
+            if (!isTrialOrder && !sudahDiambil) {
                 for (const it of items) {
                     // Custom-size lines have no inventory row → never deduct (and skip the
                     // hard stock check below, which would otherwise throw a false 409).
@@ -5722,12 +5828,12 @@ app.put('/api/orders/:id/ship', requireMenu('orders','edit'), upload.single('shi
             }
             if (courierOverride) {
                 await client.query(
-                    `UPDATE orders SET order_status = 'shipped', tracking_number = $1, shipping_courier = $2, updated_at = NOW() WHERE id = $3`,
+                    `UPDATE orders SET order_status = 'shipped', tracking_number = $1, shipping_courier = $2, shipped_at = NOW(), updated_at = NOW() WHERE id = $3`,
                     [tracking, courierOverride, order.id]
                 );
             } else {
                 await client.query(
-                    `UPDATE orders SET order_status = 'shipped', tracking_number = $1, updated_at = NOW() WHERE id = $2`,
+                    `UPDATE orders SET order_status = 'shipped', tracking_number = $1, shipped_at = NOW(), updated_at = NOW() WHERE id = $2`,
                     [tracking, order.id]
                 );
             }
@@ -5811,7 +5917,10 @@ app.put('/api/orders/:id/cancel', requireAuth(['admin']), upload.single('refund_
         // Trial: stock dipotong di test_sent (sebelum payment), jadi restore dipicu oleh
         // isTrialOrder, BUKAN payment_status. Movement type 'test_return' utk audit clarity.
         await withTransaction(async (client) => {
-            const shouldRestoreStock = isTrialOrder || order.payment_status === 'paid';
+            // Barang diambil dulu: stok sudah keluar saat diserahkan walaupun belum
+            // dibayar. Kalau pesanannya batal, barangnya kembali ke rak — tanpa baris
+            // ini, stoknya hilang selamanya dari sistem.
+            const shouldRestoreStock = isTrialOrder || order.payment_status === 'paid' || !!order.picked_up_at;
             if (shouldRestoreStock) {
                 const itemsRes = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
                 for (const item of itemsRes.rows) {
