@@ -821,6 +821,14 @@ async function initDB() {
     // terisi, dan pembatalan MENGEMBALIKAN stok walaupun belum dibayar.
     await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ`).catch(() => {});
 
+    // ── Email pelanggan (16 Okt 2026) ─────────────────────────────────────────
+    // Selalu OPSIONAL. Dipakai sebagai jalur kontak kedua untuk penjualan tatap
+    // muka yang pembelinya tidak mau memberikan nomor HP.
+    // ⚠️ Email BUKAN kunci identitas: Data Client tetap mengelompokkan pembeli
+    // berdasarkan nomor HP (customers.phone UNIQUE NOT NULL). Email yang terisi
+    // di sini hanya disalin ke baris client kalau barisnya memang sudah ada.
+    await dbRun(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT`).catch(() => {});
+
     // ── Kapan pesanan dikirim (16 Okt 2026) ───────────────────────────────────
     // Dipakai penyelesaian otomatis 1x24 jam setelah resi diisi. Dulu tidak ada
     // penanda waktunya sama sekali: `updated_at` ikut berubah setiap kali apa pun
@@ -1696,7 +1704,24 @@ const _key = (s) => _cleanStr(s).toLowerCase();
 
 // Idempoten: aman dipanggil berulang untuk pesanan yang sama.
 // Tidak pernah melempar — kegagalan direktori tidak boleh menggagalkan pesanan.
-async function upsertClientDirectory({ phone, name, address, city }) {
+// Satu tempat aturan email supaya tiga jalur (buat pesanan, edit pesanan,
+// direktori client) tidak pernah menerima bentuk yang berbeda.
+// Mengembalikan { ok, value, error }. Kosong = sah (email memang opsional).
+// Sumber pesanan TATAP MUKA — di situ nomor HP boleh dikosongkan karena memang
+// tidak ada tindak lanjut WhatsApp. Dipakai saat membuat DAN mengedit pesanan;
+// kembarannya WA_SUMBER_TANPA_HP di public/dashboard.html.
+const SUMBER_TANPA_HP = ['event_offline', 'offline', 'collaboration_event'];
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+function bacaEmail(raw) {
+    const v = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!v) return { ok: true, value: null };
+    if (v.length > 160) return { ok: false, error: 'Email terlalu panjang (maksimal 160 karakter)' };
+    if (!EMAIL_RE.test(v)) return { ok: false, error: 'Format email tidak valid' };
+    return { ok: true, value: v };
+}
+
+async function upsertClientDirectory({ phone, name, address, city, email }) {
     try {
         const canon = normPhone(phone);
         if (canon.length < 9 || canon.length > 15 || !/^0\d+$/.test(canon)) return { skipped: 'hp tidak valid' };
@@ -1704,7 +1729,7 @@ async function upsertClientDirectory({ phone, name, address, city }) {
         if (!nm) return { skipped: 'nama kosong' };
 
         let created = false, addressCreated = false;
-        let c = await dbGet('SELECT id, full_name, password_hash FROM customers WHERE phone = $1', [canon]);
+        let c = await dbGet('SELECT id, full_name, password_hash, email FROM customers WHERE phone = $1', [canon]);
         if (!c) {
             const r = await dbRun(
                 'INSERT INTO customers (phone, password_hash, full_name) VALUES ($1, NULL, $2) RETURNING id',
@@ -1716,6 +1741,17 @@ async function upsertClientDirectory({ phone, name, address, city }) {
             // Belum jadi akun → pakai nama terbaru supaya daftar client tidak basi.
             // Kalau SUDAH punya akun, nama itu milik customer — jangan ditimpa admin.
             await dbRun('UPDATE customers SET full_name = $1, updated_at = NOW() WHERE id = $2', [nm, c.id]);
+        }
+
+        // Email dari pesanan hanya MENGISI yang masih kosong, tidak pernah menimpa.
+        // Email yang sudah ada di baris client bisa jadi diisi customer sendiri lewat
+        // akunnya; salah ketik admin di satu pesanan tidak boleh menghapusnya.
+        const em = bacaEmail(email);
+        if (em.ok && em.value) {
+            await dbRun(
+                `UPDATE customers SET email = $1, updated_at = NOW()
+                  WHERE id = $2 AND coalesce(trim(email), '') = ''`,
+                [em.value, c.id]);
         }
 
         // Tautkan pesanan bernomor sama ke baris ini. Tanpa langkah ini, Data Client
@@ -1760,7 +1796,7 @@ async function upsertClientDirectory({ phone, name, address, city }) {
 app.post('/api/admin/clients/backfill', requireAuth(['admin']), async (req, res) => {
     try {
         const rows = await dbAll(
-            `SELECT customer_phone, customer_name, customer_address, shipping_city
+            `SELECT customer_phone, customer_name, customer_address, shipping_city, customer_email
                FROM orders
               WHERE coalesce(trim(customer_phone), '') <> ''
               ORDER BY created_at ASC, id ASC`
@@ -1769,7 +1805,8 @@ app.post('/api/admin/clients/backfill', requireAuth(['admin']), async (req, res)
         for (const o of rows) {
             const r = await upsertClientDirectory({
                 phone: o.customer_phone, name: o.customer_name,
-                address: o.customer_address, city: o.shipping_city
+                address: o.customer_address, city: o.shipping_city,
+                email: o.customer_email
             });
             if (r.skipped || r.error) { skipped++; continue; }
             if (r.created) customersCreated++;
@@ -4655,7 +4692,7 @@ app.get('/api/orders/:id', requireAuth(), async (req, res) => {
 app.post('/api/orders', async (req, res) => {
     try {
         const {
-            customer_name, customer_phone, customer_address, items, notes,
+            customer_name, customer_phone, customer_address, customer_email, items, notes,
             shipping_city, shipping_cost, embroidery_details,
             shipping_courier: req_shipping_courier,
             shipping_weight_kg,
@@ -4705,12 +4742,17 @@ app.post('/api/orders', async (req, res) => {
         // itulah satu-satunya cara menghubungi pembelinya.
         // Kalau diisi, formatnya tetap diperiksa: nomor asal-asalan lebih buruk
         // daripada kosong, karena terlihat seperti nomor yang benar.
-        const SUMBER_TANPA_HP = ['event_offline', 'offline', 'collaboration_event'];
         const bolehTanpaHP = isAdmin && SUMBER_TANPA_HP.includes(String(order_source || '').trim());
         if (!custPhoneDigits && !bolehTanpaHP)
             return res.status(400).json({ error: 'Nomor WhatsApp wajib diisi' });
         if (custPhoneDigits && (custPhoneDigits.length < 9 || custPhoneDigits.length > 15 || !/^(0|62|8)/.test(custPhoneDigits)))
             return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (gunakan format 08xxx / 62xxx)' });
+        // Email selalu opsional, tapi kalau diisi formatnya diperiksa — alamat yang
+        // salah ketik lebih buruk daripada kosong, karena terlihat seperti jalur
+        // kontak yang bisa dipakai padahal tidak.
+        const emailCek = bacaEmail(customer_email);
+        if (!emailCek.ok) return res.status(400).json({ error: emailCek.error });
+        const safeEmail = emailCek.value;
 
         // ── GUARD DUPLIKAT (public only) ──────────────────────────────────────
         // Kasus nyata (Lisan gigih prakoso, 1 Agu): client bikin order, tak jadi
@@ -5078,13 +5120,13 @@ app.post('/api/orders', async (req, res) => {
             }
 
             const orderResult = await client.query(
-                `INSERT INTO orders (order_code, customer_name, customer_phone, customer_address,
+                `INSERT INTO orders (order_code, customer_name, customer_phone, customer_email, customer_address,
                   shipping_city, shipping_courier, shipping_weight_kg, shipping_cost, total_amount,
                   embroidery_details, has_bordir_logo, has_bordir_nama, bordir_status, notes, order_source,
                   payment_method, discount_percent, discount_amount, discount_label, bordir_logo_requested, billing_to, invoice_date, dp_amount, invoice_notes,
                   partner_id, receipt_no, voucher_no)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING id`,
-                [orderCode, customer_name, customer_phone, customer_address,
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING id`,
+                [orderCode, customer_name, customer_phone, safeEmail, customer_address,
                  shipping_city || '', courier, weightKg, shippingCost, total,
                  embDetailsStored ? JSON.stringify(embDetailsStored) : null,
                  hasBordirLogo, hasBordirNama,
@@ -5282,7 +5324,7 @@ app.post('/api/orders', async (req, res) => {
         // segar tanpa perlu backfill ulang. Dipanggil setelah pesanan COMMIT dan tidak
         // pernah melempar — gagal mencatat kontak tidak boleh menggagalkan pesanan.
         await upsertClientDirectory({
-            phone: customer_phone, name: customer_name,
+            phone: customer_phone, name: customer_name, email: safeEmail,
             address: customer_address, city: shipping_city
         });
 
@@ -6167,7 +6209,7 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             return res.status(400).json({ error: 'Pesanan ini tidak bisa diedit (sudah dibatalkan/dikirim/selesai)' });
 
         const {
-            customer_name, customer_phone, customer_address,
+            customer_name, customer_phone, customer_email, customer_address,
             shipping_city, shipping_courier, shipping_weight_kg,
             shipping_cost, payment_method,
             order_source, billing_to, receipt_no, voucher_no, notes, invoice_notes, invoice_date
@@ -6183,12 +6225,26 @@ app.put('/api/orders/:id/edit', requireMenu('orders','edit'), upload.none(), asy
             if (!v) return res.status(400).json({ error: 'Nama tidak boleh kosong' });
             setClauses.push(`customer_name = $${idx++}`); params.push(v);
         }
-        // Customer phone — format Indonesia (08xxx/62xxx/8xxx), 9–15 digit
+        // Customer phone — format Indonesia (08xxx/62xxx/8xxx), 9–15 digit.
+        // BOLEH dikosongkan untuk penjualan tatap muka, aturan yang sama dengan
+        // POST /api/orders. Tanpa ini, pesanan event yang sengaja dibuat tanpa
+        // nomor jadi MUSTAHIL diedit sama sekali — modalnya selalu mengirim field
+        // ini, jadi penyuntingan apa pun ditolak karena nomornya kosong.
         if (customer_phone !== undefined) {
             const digits = String(customer_phone).replace(/\D/g, '');
-            if (digits.length < 9 || digits.length > 15 || !/^(0|62|8)/.test(digits))
+            const sumberKini = order_source !== undefined ? String(order_source).trim() : String(order.order_source || '');
+            const bolehKosong = SUMBER_TANPA_HP.includes(sumberKini);
+            if (!digits && !bolehKosong)
+                return res.status(400).json({ error: 'Nomor WhatsApp wajib diisi' });
+            if (digits && (digits.length < 9 || digits.length > 15 || !/^(0|62|8)/.test(digits)))
                 return res.status(400).json({ error: 'Nomor WhatsApp tidak valid (gunakan format 08xxx / 62xxx)' });
             setClauses.push(`customer_phone = $${idx++}`); params.push(String(customer_phone).trim());
+        }
+        // Customer email — selalu opsional; kosong berarti menghapus isian lama.
+        if (customer_email !== undefined) {
+            const cek = bacaEmail(customer_email);
+            if (!cek.ok) return res.status(400).json({ error: cek.error });
+            setClauses.push(`customer_email = $${idx++}`); params.push(cek.value);
         }
         // Customer address — required if provided
         if (customer_address !== undefined) {

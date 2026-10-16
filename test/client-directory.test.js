@@ -99,6 +99,21 @@ async function run() {
     check('tidak ada alamat baru', many(`SELECT * FROM customer_addresses`).length === sebelum.a, sebelum.a);
     check('laporan menyebut 0 baru', r.body.customers_created === 0 && r.body.addresses_created === 0, r.body);
 
+    group('4b. Email dari pesanan MENGISI yang kosong, tapi tidak pernah menimpa');
+    seed();
+    none(`UPDATE orders SET customer_email = 'ira@klinik.com' WHERE id = 3`);
+    await importNow();
+    const ira = one(`SELECT id, email FROM customers WHERE phone = '08159431994'`);
+    check('email ikut tersalin ke baris client', ira.email === 'ira@klinik.com', ira);
+    // Email yang sudah ada bisa jadi diisi customer sendiri lewat akunnya —
+    // salah ketik admin di satu pesanan tidak boleh menghapusnya.
+    none(`UPDATE orders SET customer_email = 'salah-ketik@lain.com' WHERE id = 4`);
+    await importNow();
+    check('impor ulang TIDAK menimpa email yang sudah ada',
+        one(`SELECT email FROM customers WHERE phone = '08159431994'`).email === 'ira@klinik.com');
+    check('pembeli lain yang tanpa email tetap kosong, bukan diisi karangan',
+        one(`SELECT email FROM customers WHERE phone = '087781936679'`).email === null);
+
     group('5. Autofill Kasir: cari pakai nama, nama penerima lama, atau nomor');
     let s = await cari('Trijani');
     check('cari nama akun ketemu', s.body.length > 0 && s.body[0].phone === '087781936679', s.body);

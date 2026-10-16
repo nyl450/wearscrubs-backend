@@ -985,6 +985,11 @@
                 </p>
               </div>
               <div>
+                <label class="wa-field-label">Email <span class="text-white/30 font-normal">(opsional)</span></label>
+                <input type="email" id="wa-customer-email" placeholder="nama@klinik.com" autocomplete="off" />
+                <p class="text-[11px] text-white/30 mt-1">Jalur kontak cadangan — berguna untuk pembeli yang tidak mau memberikan nomor HP.</p>
+              </div>
+              <div>
                 <label class="wa-field-label">Kota Pengiriman <span class="text-red-400">*</span></label>
                 <select id="wa-shipping-city" onchange="waOnCityChange()"><option value="">-- Pilih Kota --</option></select>
                 <!-- Daftar ongkir hanya memuat 380-an kota; kota/desa lain diketik
@@ -2363,6 +2368,10 @@
       <div>
         <label class="text-[11px] text-white/60 mb-1 block">Nomor WhatsApp <span class="text-red-400">*</span></label>
         <input type="tel" id="edit-customer-phone" placeholder="08xxx atau 62xxx" />
+      </div>
+      <div>
+        <label class="text-[11px] text-white/60 mb-1 block">Email <span class="text-white/30">(opsional)</span></label>
+        <input type="email" id="edit-customer-email" placeholder="nama@klinik.com" autocomplete="off" />
       </div>
       <div>
         <label class="text-[11px] text-white/60 mb-1 block">Alamat <span class="text-red-400">*</span></label>
@@ -8320,11 +8329,20 @@ async function viewOrder(id) {
             </div>
             <div class="bg-white/5 rounded-xl p-3">
                 <p class="text-white/40 text-xs mb-1">WhatsApp</p>
-                <a href="${waLink}" target="_blank" class="font-bold text-green-400 hover:text-green-300 flex items-center gap-1.5">
-                    <i class="fa-brands fa-whatsapp"></i> ${esc(o.customer_phone)}
-                </a>
-                ${isAdmin ? `<button onclick="waResendOrderMessage(${o.id})" class="mt-2 w-full text-xs px-3 py-1.5 rounded-lg bg-green-600/90 hover:bg-green-500 text-white font-bold transition flex items-center justify-center gap-1.5" title="Kirim ulang pesan konfirmasi + instruksi pembayaran ke WA customer"><i class="fa-brands fa-whatsapp"></i> Kirim Konfirmasi WA</button>` : ''}
+                ${(o.customer_phone || '').trim()
+                    ? `<a href="${waLink}" target="_blank" class="font-bold text-green-400 hover:text-green-300 flex items-center gap-1.5">
+                        <i class="fa-brands fa-whatsapp"></i> ${esc(o.customer_phone)}
+                       </a>
+                       ${isAdmin ? `<button onclick="waResendOrderMessage(${o.id})" class="mt-2 w-full text-xs px-3 py-1.5 rounded-lg bg-green-600/90 hover:bg-green-500 text-white font-bold transition flex items-center justify-center gap-1.5" title="Kirim ulang pesan konfirmasi + instruksi pembayaran ke WA customer"><i class="fa-brands fa-whatsapp"></i> Kirim Konfirmasi WA</button>` : ''}`
+                    // Pesanan tatap muka boleh tanpa nomor. Tanpa cabang ini, tautan
+                    // wa.me-nya kosong dan tombol "Kirim Konfirmasi WA" tetap ditawarkan
+                    // padahal tidak ada tujuannya.
+                    : `<p class="text-white/30 text-[13px] italic">tidak diberikan</p>`}
             </div>
+            ${(o.customer_email || '').trim() ? `<div class="bg-white/5 rounded-xl p-3">
+                <p class="text-white/40 text-xs mb-1">Email</p>
+                <a href="mailto:${escAttr(o.customer_email)}" class="font-bold text-cyan-300 hover:text-cyan-200 break-all">${esc(o.customer_email)}</a>
+            </div>` : ''}
             <div class="col-span-2 bg-white/5 rounded-xl p-3">
                 <p class="text-white/40 text-xs mb-1">Alamat</p>
                 <p>${esc(o.customer_address)}</p>
@@ -8620,6 +8638,8 @@ function openEditOrderModal() {
     document.getElementById('edit-order-code').textContent = o.order_code;
     document.getElementById('edit-customer-name').value = o.customer_name || '';
     document.getElementById('edit-customer-phone').value = o.customer_phone || '';
+    const emEl = document.getElementById('edit-customer-email');
+    if (emEl) emEl.value = o.customer_email || '';
     document.getElementById('edit-customer-address').value = o.customer_address || '';
     document.getElementById('edit-shipping-courier').value = o.shipping_courier || '';
     document.getElementById('edit-shipping-weight').value = o.shipping_weight_kg || 1;
@@ -8696,6 +8716,7 @@ async function submitEditOrder() {
         const payload = {
             customer_name:       document.getElementById('edit-customer-name').value.trim(),
             customer_phone:      document.getElementById('edit-customer-phone').value.trim(),
+            customer_email:      (document.getElementById('edit-customer-email')?.value || '').trim(),
             customer_address:    document.getElementById('edit-customer-address').value.trim(),
             shipping_city:       document.getElementById('edit-shipping-city').value,
             shipping_courier:    document.getElementById('edit-shipping-courier').value,
@@ -13225,7 +13246,7 @@ function waResetForm() {
     // Best-effort field/UI clears — guarded so a single missing element can't block the
     // fresh-item rebuild below.
     try {
-        ['wa-customer-name','wa-customer-phone','wa-customer-address','wa-shipping-cost',
+        ['wa-customer-name','wa-customer-phone','wa-customer-email','wa-customer-address','wa-shipping-cost',
          'wa-payment-method','wa-notes','wa-invoice-notes','wa-shipping-city','wa-shipping-city-manual','wa-shipping-courier']
             .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         if (typeof waOnCityChange === 'function') waOnCityChange();
@@ -15608,6 +15629,7 @@ async function kasirCartSubmit() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ws_admin_token') },
             body: JSON.stringify({ customer_name: customerName, customer_phone: customerPhone,
+                customer_email: (document.getElementById('wa-customer-email')?.value || '').trim(),
                 customer_address: customerAddress, shipping_city: shippingCity, shipping_cost: shippingCost,
                 shipping_courier: shippingCourier, shipping_weight_kg: shippingWeight, notes,
                 invoice_notes: invoiceNotes,

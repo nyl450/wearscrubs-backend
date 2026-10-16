@@ -188,6 +188,49 @@ async function run() {
     check('waktunya masuk akal (beberapa detik terakhir)',
         Math.abs(Date.now() - new Date(o.shipped_at).getTime()) < 60000, o.shipped_at);
 
+    group('D. Email pelanggan — opsional, tapi diperiksa kalau diisi');
+    seed();
+    let e = await req('POST', '/api/orders', pesanan({ customer_email: '  Drg.Siti@Klinik.COM  ' }));
+    check('diterima', e.status === 201 || e.status === 200, e.body);
+    check('disimpan rapi: dipangkas & huruf kecil',
+        one(`SELECT customer_email FROM orders WHERE id = ${terakhir()}`).customer_email === 'drg.siti@klinik.com',
+        one(`SELECT customer_email FROM orders WHERE id = ${terakhir()}`).customer_email);
+    e = await req('POST', '/api/orders', pesanan({ customer_email: '' }));
+    check('boleh kosong', e.status === 201 || e.status === 200, e.body);
+    check('kosong disimpan NULL, bukan string kosong',
+        one(`SELECT customer_email FROM orders WHERE id = ${terakhir()}`).customer_email === null);
+    for (const salah of ['bukan-email', 'a@b', 'a b@c.com']) {
+        const y = await req('POST', '/api/orders', pesanan({ customer_email: salah }));
+        check(`"${salah}" ditolak 400 (alamat salah ketik lebih buruk dari kosong)`,
+            y.status === 400, { salah, status: y.status, body: y.body });
+    }
+
+    group('E. Email bisa diubah lewat Edit Pesanan — termasuk dihapus');
+    seed();
+    e = await req('POST', '/api/orders', pesanan({ customer_email: 'lama@klinik.com' }));
+    const idE = terakhir();
+    e = await req('PUT', `/api/orders/${idE}/edit`, { customer_email: 'baru@klinik.com' }, ADMIN);
+    check('perubahan diterima', e.status === 200, e.body);
+    check('tersimpan', one(`SELECT customer_email FROM orders WHERE id = ${idE}`).customer_email === 'baru@klinik.com');
+    e = await req('PUT', `/api/orders/${idE}/edit`, { customer_email: '' }, ADMIN);
+    check('dikosongkan = dihapus', e.status === 200
+        && one(`SELECT customer_email FROM orders WHERE id = ${idE}`).customer_email === null, e.body);
+    e = await req('PUT', `/api/orders/${idE}/edit`, { customer_email: 'ngawur' }, ADMIN);
+    check('format tetap diperiksa saat edit', e.status === 400, e.body);
+
+    group('F. Pesanan tanpa nomor HP TETAP bisa diedit (jebakan yang baru terbuka)');
+    seed();
+    e = await req('POST', '/api/orders', pesanan({ customer_phone: '', order_source: 'offline' }));
+    const idF = terakhir();
+    // Modal Edit Pesanan SELALU mengirim customer_phone, jadi tanpa kelonggaran
+    // yang sama seperti saat membuat, pesanan ini mustahil disunting sama sekali.
+    e = await req('PUT', `/api/orders/${idF}/edit`, { customer_phone: '', customer_name: 'Dokter Event' }, ADMIN);
+    check('bisa diedit walau nomornya kosong', e.status === 200, { status: e.status, body: e.body });
+    check('namanya tersimpan', ordir(idF).order_code && one(`SELECT customer_name FROM orders WHERE id = ${idF}`).customer_name === 'Dokter Event');
+    // Sumber WhatsApp tetap wajib bernomor, juga saat diedit.
+    e = await req('PUT', `/api/orders/${idF}/edit`, { customer_phone: '', order_source: 'whatsapp' }, ADMIN);
+    check('pindah ke sumber WhatsApp tanpa nomor: ditolak 400', e.status === 400, { status: e.status, body: e.body });
+
     await new Promise(w => setTimeout(w, 250));
     finish();
 }
