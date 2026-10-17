@@ -275,41 +275,46 @@
 
                 <!-- Bordir Section — hanya untuk Atasan Scrub (tops) -->
                 <div id="bordir-section" class="hidden space-y-2 pt-1">
-                    <div class="border border-purple-200 dark:border-purple-500/30 rounded-xl p-4 bg-purple-50/50 dark:bg-purple-900/10">
-                        <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-purple-700 dark:text-purple-300 mb-3 flex items-center gap-2">
+                    <!-- Panel sengaja NETRAL (abu/hitam), bukan ungu/biru: di halaman
+                         produk satu-satunya warna yang boleh menarik mata adalah harga
+                         promo. Aksen ungu & biru di sini bersaing dengannya dan membuat
+                         bagian opsional terlihat lebih penting dari harganya sendiri.
+                         Pembeda hierarkinya kini ketebalan huruf, bukan warna. -->
+                    <div class="border border-gray-200 dark:border-white/10 rounded-xl p-4 bg-gray-50/70 dark:bg-white/5">
+                        <p class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-needle text-[12px]"></i> <span data-id="Bordir (Opsional)" data-en="Embroidery (Optional)">Bordir (Opsional)</span>
                         </p>
                         <div class="space-y-2.5">
                             <label class="flex items-center justify-between cursor-pointer group">
                                 <div class="flex items-center gap-3">
-                                    <input type="checkbox" id="bordir-nama-cb" class="w-4 h-4 accent-purple-600 cursor-pointer"
+                                    <input type="checkbox" id="bordir-nama-cb" class="w-4 h-4 accent-gray-900 dark:accent-white cursor-pointer"
                                         onchange="updateBordirPrice()">
                                     <div>
-                                        <span class="text-sm font-medium text-gray-800 dark:text-white" data-id="Bordir Nama" data-en="Name Embroidery">Bordir Nama</span>
+                                        <span class="text-sm font-semibold text-gray-900 dark:text-white" data-id="Bordir Nama" data-en="Name Embroidery">Bordir Nama</span>
                                         <p class="text-[10px] text-gray-500 dark:text-white/40" data-id="Nama yang Anda pilih disulam di baju" data-en="Your chosen name will be embroidered on the garment">Nama yang Anda pilih disulam di baju</p>
                                     </div>
                                 </div>
-                                <span class="text-xs font-bold text-purple-700 dark:text-purple-300">+Rp 20.000</span>
+                                <span class="text-xs font-bold text-gray-900 dark:text-white">+Rp 20.000</span>
                             </label>
                             <label class="flex items-center justify-between cursor-pointer group">
                                 <div class="flex items-center gap-3">
-                                    <input type="checkbox" id="bordir-logo-cb" class="w-4 h-4 accent-blue-600 cursor-pointer"
+                                    <input type="checkbox" id="bordir-logo-cb" class="w-4 h-4 accent-gray-900 dark:accent-white cursor-pointer"
                                         onchange="updateBordirPrice()">
                                     <div>
-                                        <span class="text-sm font-medium text-gray-800 dark:text-white" data-id="Bordir Logo" data-en="Logo Embroidery">Bordir Logo</span>
+                                        <span class="text-sm font-semibold text-gray-900 dark:text-white" data-id="Bordir Logo" data-en="Logo Embroidery">Bordir Logo</span>
                                         <p class="text-[10px] text-gray-500 dark:text-white/40" data-id="Logo instansi/RS disulam di baju" data-en="Your hospital/institution logo embroidered on the garment">Logo instansi/RS disulam di baju</p>
                                     </div>
                                 </div>
-                                <span class="text-xs font-bold text-blue-700 dark:text-blue-300">+Rp 30.000</span>
+                                <span class="text-xs font-bold text-gray-900 dark:text-white">+Rp 30.000</span>
                             </label>
                         </div>
-                        <div id="bordir-price-info" class="hidden mt-3 pt-3 border-t border-purple-200 dark:border-purple-500/20 text-xs text-purple-700 dark:text-purple-300 font-medium">
+                        <div id="bordir-price-info" class="hidden mt-3 pt-3 border-t border-gray-200 dark:border-white/10 text-xs text-gray-700 dark:text-white/70 font-semibold">
                             <span data-id="Detail &amp; nama bordir diisi saat checkout" data-en="Embroidery details filled in at checkout">Detail &amp; nama bordir diisi saat checkout</span>
                         </div>
                         <!-- Estimasi selalu tampil di bordir section -->
-                        <div class="mt-3 pt-3 border-t border-purple-200 dark:border-purple-500/15 flex items-center gap-2 text-[10px] text-gray-500 dark:text-white/30">
-                            <i class="fa-regular fa-clock text-purple-400"></i>
-                            <span data-id="Estimasi proses bordir: ±1 minggu setelah konfirmasi pembayaran" data-en="Embroidery processing time: ±1 week after payment confirmation">Estimasi proses bordir: <strong class="text-purple-600 dark:text-purple-300">±1 minggu</strong> setelah konfirmasi pembayaran</span>
+                        <div class="mt-3 pt-3 border-t border-gray-200 dark:border-white/10 flex items-center gap-2 text-[10px] text-gray-500 dark:text-white/40">
+                            <i class="fa-regular fa-clock text-gray-400 dark:text-white/40"></i>
+                            <span data-id="Estimasi proses bordir: ±1 minggu setelah konfirmasi pembayaran" data-en="Embroidery processing time: ±1 week after payment confirmation">Estimasi proses bordir: <strong class="font-bold text-gray-900 dark:text-white">±1 minggu</strong> setelah konfirmasi pembayaran</span>
                         </div>
                     </div>
                 </div>
