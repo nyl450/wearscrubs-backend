@@ -46,7 +46,8 @@ const { boot, none } = require('./_bootstrap');
                         payment_status, order_status, shipping_cost, shipping_courier, order_source) VALUES
       (950, 'WS-20260928-0950', 'Dina', '08119990001', 'Jl. Uji', 580000, 'pending', 'waiting_payment', 0, 'J&T', 'website');
     INSERT INTO order_items (id, order_id, product_id, size, color, variant_type, quantity, price) VALUES
-      (950, 950, 1, 'M', 'charcoal-grey', 'pendek', 2, 290000);
+      (950, 950, 1, 'M', 'charcoal-grey', 'pendek', 2, 290000),
+      (951, 950, 1, 'S', 'charcoal-grey', 'pendek', 1, 290000);
     `);
     none(`INSERT INTO stock_holds (order_id, product_id, size, color, variant_type, quantity, expires_at)
           VALUES (950, 1, 'M', 'charcoal-grey', 'pendek', 2, '${new Date(Date.now() + 20 * 3600 * 1000).toISOString()}')`);

@@ -661,6 +661,16 @@ async function initDB() {
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_custom_size BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_po BOOLEAN DEFAULT FALSE`);
     await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS po_fulfilled BOOLEAN DEFAULT FALSE`);
+    // Barang SUDAH DIAMBIL per baris (17 Okt 2026). Kasus lapangan: di event
+    // pembeli ambil 1 dari 3 potong, sisanya dikirim. Pesanannya tetap satu dan
+    // tetap lewat alur normal — ini MURNI penanda supaya baris yang sudah
+    // berpindah tangan tidak ikut masuk paket saat sisanya dikemas.
+    // SENGAJA tidak menyentuh stok: stok pesanan ini dipotong sekali saat
+    // pembayaran dikonfirmasi, seperti pesanan lain. Barang yang dibawa pulang
+    // dari event sudah tercatat lewat prosedur stok event (potong saat berangkat,
+    // kembalikan semua saat pulang), jadi memotongnya lagi di sini = dobel.
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMP DEFAULT NULL`);
+    await dbRun(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS picked_up_by TEXT DEFAULT NULL`);
     // Custom Product (8 Jun): fully off-catalog item (name + category + variant + color
     // + size + price all admin-supplied). product_id is NULL — name/category live on
     // the order_items row itself. Stock is never touched; pack-guard treats it like
@@ -8599,6 +8609,56 @@ app.put('/api/orders/:id/items/:itemId/fulfill-po', requireMenu('orders','edit')
         await dbRun('UPDATE order_items SET po_fulfilled = TRUE WHERE id = $1', [item.id]);
         await dbRun('UPDATE orders SET updated_at = NOW() WHERE id = $1', [order.id]);
         res.json({ message: 'Item custom ditandai siap — pesanan sekarang bisa dikemas' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// PUT /api/orders/:id/items/:itemId/picked-up — tandai SATU baris sudah diambil.
+//
+// Latar (James, 17 Okt 2026): di event pembeli beli 3 potong, 1 langsung dibawa
+// pulang, 2 sisanya dikirim. Sebelumnya tidak ada tempat mencatat itu, jadi saat
+// paket dikemas beberapa hari kemudian baju yang sudah dibawa pulang berisiko
+// ikut masuk — atau sebaliknya, admin ragu dan menahan kiriman.
+//
+// Ini BERBEDA dari orders.picked_up_at (seluruh pesanan dibawa pulang, melewati
+// Kemas & Kirim, stok dipotong saat itu juga). Di sini pesanannya tetap berjalan
+// NORMAL: tetap dikemas, tetap dikirim, tetap dipotong stok sekali saat
+// pembayaran dikonfirmasi. Yang berubah hanya informasi — baris ini tidak perlu
+// ikut dimasukkan ke paket.
+//
+// Tidak menyentuh stok. Alasannya di komentar migrasi kolomnya: memotong lagi di
+// sini berarti dobel dengan potongan saat konfirmasi bayar.
+app.put('/api/orders/:id/items/:itemId/picked-up', requireMenu('orders','edit'), upload.none(), async (req, res) => {
+    try {
+        const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+        if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+        if (order.order_status === 'cancelled')
+            return res.status(400).json({ error: 'Pesanan sudah dibatalkan' });
+        // Temporary Order punya alur keluar-masuk barangnya sendiri (kept vs
+        // returned). Menumpuk penanda kedua di atasnya cuma bikin ambigu.
+        if (order.order_source === 'test_size')
+            return res.status(400).json({ error: 'Temporary Order punya alur sendiri untuk barang keluar/kembali.' });
+
+        const item = await dbGet('SELECT * FROM order_items WHERE id = $1 AND order_id = $2', [req.params.itemId, order.id]);
+        if (!item) return res.status(404).json({ error: 'Item tidak ditemukan di pesanan ini' });
+
+        // Default TRUE supaya pemanggil yang hanya mau menandai tidak perlu kirim body.
+        const raw = req.body ? req.body.picked_up : undefined;
+        const diambil = !(raw === false || raw === 'false' || raw === 0 || raw === '0');
+
+        if (diambil) {
+            await dbRun('UPDATE order_items SET picked_up_at = NOW(), picked_up_by = $1 WHERE id = $2',
+                [req.user?.username || null, item.id]);
+        } else {
+            await dbRun('UPDATE order_items SET picked_up_at = NULL, picked_up_by = NULL WHERE id = $1', [item.id]);
+        }
+        await dbRun('UPDATE orders SET updated_at = NOW() WHERE id = $1', [order.id]);
+        res.json({
+            picked_up: diambil,
+            message: diambil
+                ? 'Item ditandai SUDAH DIAMBIL — jangan ikut dimasukkan ke paket.'
+                : 'Tanda "sudah diambil" dilepas — item ini ikut dikirim seperti biasa.'
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
