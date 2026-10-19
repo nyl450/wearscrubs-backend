@@ -114,6 +114,27 @@ async function run() {
     r = await req('PUT', `/api/orders/${id1}/pack`, {}, ADMIN);
     check('masih bisa dikemas seperti biasa', r.status === 200, { status: r.status, body: r.body });
 
+    // Sesudah paket berangkat, tandanya sudah tidak menolong siapa pun: gunanya
+    // memperingatkan yang MENGEMAS. Membiarkan tombolnya hidup di pesanan yang
+    // sudah selesai cuma bikin admin ragu (James, 19 Okt 2026).
+    const itemL = baris(id1).find(x => x.size === 'L');
+    r = await req('PUT', `/api/orders/${id1}/ship`, { tracking_number: 'JX123' }, ADMIN);
+    check('pesanan dikirim', r.status === 200, { status: r.status, body: r.body });
+    r = await req('PUT', `/api/orders/${id1}/items/${itemL.id}/picked-up`, { picked_up: true }, ADMIN);
+    check('sudah DIKIRIM: menandai ditolak 400', r.status === 400, { status: r.status, body: r.body });
+    check('dan memang tidak jadi tertandai',
+        baris(id1).find(x => x.size === 'L').picked_up_at === null, baris(id1));
+
+    none(`UPDATE orders SET order_status = 'done' WHERE id = ${id1}`);
+    r = await req('PUT', `/api/orders/${id1}/items/${itemL.id}/picked-up`, { picked_up: true }, ADMIN);
+    check('sudah SELESAI: menandai ditolak 400', r.status === 400, { status: r.status, body: r.body });
+    // Yang SUDAH ditandai tetap tersimpan sebagai riwayat — hanya tombolnya yang hilang.
+    const itemM1 = baris(id1).find(x => x.size === 'M');
+    check('badge lama tetap ada di pesanan yang sudah selesai', itemM1.picked_up_at !== null, itemM1);
+    r = await req('PUT', `/api/orders/${id1}/items/${itemM1.id}/picked-up`, { picked_up: false }, ADMIN);
+    check('melepas tanda pun ditolak di pesanan selesai', r.status === 400, { status: r.status, body: r.body });
+    check('tandanya tidak hilang', baris(id1).find(x => x.size === 'M').picked_up_at !== null, baris(id1));
+
     group('C. Tandanya bisa dilepas lagi (salah tandai itu wajar)');
     seed();
     r = await req('POST', '/api/orders', pesanan());

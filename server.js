@@ -8632,8 +8632,12 @@ app.put('/api/orders/:id/items/:itemId/picked-up', requireMenu('orders','edit'),
     try {
         const order = await dbGet('SELECT * FROM orders WHERE id = $1', [req.params.id]);
         if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
-        if (order.order_status === 'cancelled')
-            return res.status(400).json({ error: 'Pesanan sudah dibatalkan' });
+        // Tandanya hanya berguna SEBELUM paket berangkat — gunanya memperingatkan
+        // yang mengemas. Sesudah dikirim/selesai barangnya sudah di tangan
+        // pembeli, jadi menandai apa pun di situ tidak mengubah keputusan siapa
+        // pun; tombolnya cuma bikin ragu (James, 19 Okt 2026, WS-WA-20261013-7205).
+        if (['shipped', 'done', 'cancelled'].includes(order.order_status))
+            return res.status(400).json({ error: 'Pesanan sudah dikirim/selesai/batal — tanda "sudah diambil" tidak bisa diubah lagi.' });
         // Temporary Order punya alur keluar-masuk barangnya sendiri (kept vs
         // returned). Menumpuk penanda kedua di atasnya cuma bikin ambigu.
         if (order.order_source === 'test_size')

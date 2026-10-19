@@ -8125,7 +8125,11 @@ async function viewOrder(id) {
         // "Barang sudah diambil" per baris — syaratnya sama longgarnya dengan server:
         // boleh ditandai kapan saja selama pesanan masih hidup, termasuk setelah
         // dibayar atau dikemas, karena penandanya informasi, bukan uang atau stok.
-        const canMarkPicked = o.order_status !== 'cancelled'
+        // Tandanya hanya berguna SEBELUM paket berangkat — yang dibantu adalah
+        // orang yang mengemas. Sesudah dikirim/selesai barangnya sudah di tangan
+        // pembeli, jadi tombolnya disembunyikan (badge yang sudah ada TETAP
+        // tampil sebagai riwayat). Batasnya sama dengan server.
+        const canMarkPicked = !['shipped', 'done', 'cancelled'].includes(o.order_status)
             && o.order_source !== 'test_size'
             && (typeof canEdit !== 'function' || canEdit('orders'));
         // Item trial yang DIKEMBALIKAN tidak ditagih → jangan ditaruh di daftar
