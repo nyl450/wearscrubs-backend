@@ -2336,6 +2336,93 @@ async function lepasTahanan(client, orderId, alasan) {
     return dbRun(q, params);
 }
 
+// ── PRE-ORDER SEBAGIAN ───────────────────────────────────────────────────────
+// Dulu baris Pre-Order selalu UTUH: pesan 8 padahal stok 2 → kedelapannya
+// menunggu, dan 2 pcs yang ada di rak tidak dikunci untuk siapa pun. Dua
+// akibatnya nyata: invoice tidak bisa menjawab pertanyaan paling wajar pembeli
+// ("yang mana yang belum ada?"), dan 2 pcs itu bisa terjual ke orang lain
+// sementara pesanan ini tetap menunggu stok penuh.
+//
+// Sekarang barisnya DIPECAH saat pesanan dibuat: sebanyak yang tersedia jadi
+// baris biasa (ikut menahan stok), sisanya jadi baris Pre-Order. Angkanya
+// membeku dengan sendirinya karena tersimpan sebagai qty baris — bukan dihitung
+// ulang dari stok hari ini, yang sudah berbeda saat invoice dicetak ulang.
+//
+// Yang TIDAK dipecah: custom size & custom product (tidak punya baris stok) dan
+// varian yang stoknya nol (tidak ada yang bisa dipisah). Baris TANPA bordir
+// didahulukan mengambil stok supaya baris bordir sebisa mungkin tidak terbelah —
+// membelahnya menambah satu baris lagi dengan label bordir yang sama di invoice.
+// Aturan pendahuluan ini sengaja sama dengan `konversiKekuranganKePO`, yang
+// melakukan pembelahan serupa saat konfirmasi bayar.
+//
+// Total qty, harga, dan COGS pesanan TIDAK berubah: COGS dibagi per unit dan
+// sisanya ditinggal di baris pertama supaya penjumlahannya tetap persis.
+// Mengembalikan jumlah baris yang disentuh.
+async function pecahPreOrderSebagian(baris) {
+    const bisaDipecah = (it) => it.is_po === true && !it.is_custom_size && !it.is_custom_product && it.product_id;
+    const kandidat = baris.filter(bisaDipecah);
+    if (!kandidat.length) return 0;
+
+    const varian = [];
+    const terlihat = new Set();
+    for (const it of kandidat) {
+        const k = holdKey(it);
+        if (!terlihat.has(k)) { terlihat.add(k); varian.push(it); }
+    }
+    const tahanan = await tahananVarian(varian);
+
+    // Jatah yang boleh dipakai per varian: stok fisik − tahanan pesanan lain −
+    // yang sudah diklaim baris NON-PO di pesanan ini (baris itu akan menahan).
+    const sisa = new Map();
+    for (const v of varian) {
+        const k = holdKey(v);
+        const inv = await dbGet(
+            'SELECT stock FROM inventory WHERE product_id = $1 AND size = $2 AND color = $3 AND variant_type = $4',
+            [v.product_id, v.size, v.color, v.variant_type || 'null']);
+        const diklaimBarisLain = baris
+            .filter(it => !bisaDipecah(it) && holdBarisMenahan(it) && holdKey(it) === k)
+            .reduce((n, it) => n + Number(it.quantity || 0), 0);
+        sisa.set(k, Math.max(0, (inv ? Number(inv.stock) : 0) - (tahanan.get(k) || 0) - diklaimBarisLain));
+    }
+
+    let disentuh = 0;
+    const urut = [...kandidat].sort((a, b) =>
+        ((a.bordir_nama || a.bordir_logo) ? 1 : 0) - ((b.bordir_nama || b.bordir_logo) ? 1 : 0));
+    for (const it of urut) {
+        const k = holdKey(it);
+        const tersedia = sisa.get(k) || 0;
+        if (tersedia <= 0) continue;
+        const qty = Number(it.quantity || 0);
+        if (qty <= 0) continue;
+        if (tersedia >= qty) {
+            // Stoknya cukup untuk seluruh baris ini. SENGAJA tidak melepas tanda
+            // Pre-Order-nya: admin yang memasangnya, dan dia bisa punya alasan
+            // yang tidak diketahui sistem (barang di rak sudah dijanjikan ke
+            // orang lain, dsb). Yang dilakukan di sini hanya memecah kekurangan,
+            // bukan membatalkan keputusan admin. Jatahnya tetap dipakai supaya
+            // baris lain pada varian yang sama tidak ikut mengakui stok ini.
+            sisa.set(k, tersedia - qty);
+            continue;
+        }
+        const kurang = qty - tersedia;
+        const perUnitCogs = Math.round(Number(it.total_cogs || 0) / qty);
+        const cogsPO = perUnitCogs * kurang;
+        const barisPO = { ...it, quantity: kurang, total_cogs: cogsPO, is_po: true };
+        it.quantity = tersedia;
+        // Sisa pembagian ditinggal di baris ini, bukan dihitung ulang, supaya
+        // jumlahnya tetap persis. Saat ini selalu nol (total_cogs dibentuk dari
+        // per-unit x qty), jadi uji-mutasi tidak bisa membedakannya — ini jaring
+        // pengaman kalau fungsi ini kelak dipakai untuk baris yang COGS-nya
+        // sudah pernah dibelah.
+        it.total_cogs = Number(it.total_cogs || 0) - cogsPO;
+        it.is_po = false;
+        baris.splice(baris.indexOf(it) + 1, 0, barisPO);
+        sisa.set(k, 0);
+        disentuh++;
+    }
+    return disentuh;
+}
+
 const DISC_CONSIGNMENT_PCT = 30;
 // Tahap potongan = angka persen (10, 30) ATAU nominal { rp: 20000 } — Kasir
 // (17 Sep) bisa memberi diskon pelanggan nominal, ditulis "Diskon Rp 20.000".
@@ -5092,6 +5179,12 @@ app.post('/api/orders', async (req, res) => {
                 diskon_produk: diskonProdukDipakai, harga_katalog_asli: catalogPriceAsli });
             productTotal += unitPrice * item.quantity;
         }
+
+        // Baris Pre-Order yang stoknya ada SEBAGIAN dibelah di sini — sesudah
+        // harga & COGS selesai dihitung (jadi tidak ada yang perlu dihitung ulang)
+        // dan sebelum baris-barisnya disimpan serta ditahan. productTotal tidak
+        // ikut berubah: jumlah pcs dan harga satuannya sama persis.
+        await pecahPreOrderSebagian(itemDetails);
 
         // order_source: only admin may set a non-website channel. Public is always
         // 'website' — prevents a public caller from suppressing the admin "new order"
