@@ -2358,10 +2358,21 @@ async function lepasTahanan(client, orderId, alasan) {
 // Total qty, harga, dan COGS pesanan TIDAK berubah: COGS dibagi per unit dan
 // sisanya ditinggal di baris pertama supaya penjumlahannya tetap persis.
 // Mengembalikan jumlah baris yang disentuh.
-async function pecahPreOrderSebagian(baris) {
-    const bisaDipecah = (it) => it.is_po === true && !it.is_custom_size && !it.is_custom_product && it.product_id;
-    const kandidat = baris.filter(bisaDipecah);
-    if (!kandidat.length) return 0;
+// Baris yang boleh dibelah. `po_fulfilled` SENGAJA ikut dikecualikan: baris PO
+// yang sudah terpenuhi stoknya SUDAH DIPOTONG dari inventory, jadi membelah atau
+// melepas tandanya berarti menghitung barang yang sama dua kali.
+const poBisaDipecah = (it) => it.is_po === true && !it.po_fulfilled
+    && !it.is_custom_size && !it.is_custom_product && !it.is_test_returned && it.product_id;
+
+// Jatah stok yang boleh dipakai untuk membelah, per varian:
+// stok fisik − tahanan pesanan LAIN − yang sudah diklaim baris non-PO di pesanan
+// ini (baris itu memang akan menahan). `abaikanOrderId` dipakai saat pesanannya
+// sudah tersimpan: tahanan miliknya sendiri bukan saingan, karena sebentar lagi
+// disusun ulang.
+async function jatahPecahPo(baris, abaikanOrderId = null) {
+    const jatah = new Map();
+    const kandidat = baris.filter(poBisaDipecah);
+    if (!kandidat.length) return jatah;
 
     const varian = [];
     const terlihat = new Set();
@@ -2369,58 +2380,103 @@ async function pecahPreOrderSebagian(baris) {
         const k = holdKey(it);
         if (!terlihat.has(k)) { terlihat.add(k); varian.push(it); }
     }
-    const tahanan = await tahananVarian(varian);
+    const tahanan = await tahananVarian(varian, abaikanOrderId);
 
-    // Jatah yang boleh dipakai per varian: stok fisik − tahanan pesanan lain −
-    // yang sudah diklaim baris NON-PO di pesanan ini (baris itu akan menahan).
-    const sisa = new Map();
     for (const v of varian) {
         const k = holdKey(v);
         const inv = await dbGet(
             'SELECT stock FROM inventory WHERE product_id = $1 AND size = $2 AND color = $3 AND variant_type = $4',
             [v.product_id, v.size, v.color, v.variant_type || 'null']);
         const diklaimBarisLain = baris
-            .filter(it => !bisaDipecah(it) && holdBarisMenahan(it) && holdKey(it) === k)
+            .filter(it => !poBisaDipecah(it) && holdBarisMenahan(it) && holdKey(it) === k)
             .reduce((n, it) => n + Number(it.quantity || 0), 0);
-        sisa.set(k, Math.max(0, (inv ? Number(inv.stock) : 0) - (tahanan.get(k) || 0) - diklaimBarisLain));
+        jatah.set(k, Math.max(0, (inv ? Number(inv.stock) : 0) - (tahanan.get(k) || 0) - diklaimBarisLain));
     }
+    return jatah;
+}
 
-    let disentuh = 0;
-    const urut = [...kandidat].sort((a, b) =>
+// Rencana pembelahan — murni, tanpa menyentuh apa pun. Mengembalikan
+// [{ it, tetap, kurang }] hanya untuk baris yang benar-benar perlu dibelah.
+//
+// Baris TANPA bordir didahulukan mengambil stok supaya baris bordir sebisa
+// mungkin tidak terbelah — membelahnya menambah satu baris lagi dengan label
+// bordir yang sama di invoice. Aturan pendahuluan ini sengaja sama dengan
+// `konversiKekuranganKePO`, yang membelah serupa saat konfirmasi bayar.
+//
+// Baris yang stoknya CUKUP tidak disentuh sama sekali: admin yang memasang tanda
+// Pre-Order dan dia bisa punya alasan yang tidak diketahui sistem. Jatahnya tetap
+// dianggap terpakai supaya baris lain pada varian yang sama tidak ikut
+// mengakui stok itu.
+function rencanaPecahPo(baris, jatah) {
+    const rencana = [];
+    const urut = baris.filter(poBisaDipecah).sort((a, b) =>
         ((a.bordir_nama || a.bordir_logo) ? 1 : 0) - ((b.bordir_nama || b.bordir_logo) ? 1 : 0));
     for (const it of urut) {
         const k = holdKey(it);
-        const tersedia = sisa.get(k) || 0;
-        if (tersedia <= 0) continue;
+        const tersedia = jatah.get(k) || 0;
         const qty = Number(it.quantity || 0);
-        if (qty <= 0) continue;
-        if (tersedia >= qty) {
-            // Stoknya cukup untuk seluruh baris ini. SENGAJA tidak melepas tanda
-            // Pre-Order-nya: admin yang memasangnya, dan dia bisa punya alasan
-            // yang tidak diketahui sistem (barang di rak sudah dijanjikan ke
-            // orang lain, dsb). Yang dilakukan di sini hanya memecah kekurangan,
-            // bukan membatalkan keputusan admin. Jatahnya tetap dipakai supaya
-            // baris lain pada varian yang sama tidak ikut mengakui stok ini.
-            sisa.set(k, tersedia - qty);
-            continue;
-        }
-        const kurang = qty - tersedia;
-        const perUnitCogs = Math.round(Number(it.total_cogs || 0) / qty);
-        const cogsPO = perUnitCogs * kurang;
+        if (tersedia <= 0 || qty <= 0) continue;
+        if (tersedia >= qty) { jatah.set(k, tersedia - qty); continue; }
+        rencana.push({ it, tetap: tersedia, kurang: qty - tersedia });
+        jatah.set(k, 0);
+    }
+    return rencana;
+}
+
+// COGS dibagi per unit; sisa pembagian ditinggal di baris asal supaya
+// penjumlahannya tetap persis sama seperti sebelum dibelah.
+function belahCogs(it, kurang) {
+    const qty = Number(it.quantity || 0) || 1;
+    const perUnit = Math.round(Number(it.total_cogs || 0) / qty);
+    const cogsPO = perUnit * kurang;
+    return { cogsPO, cogsTetap: Number(it.total_cogs || 0) - cogsPO };
+}
+
+// ── (1) Saat pesanan DIBUAT ─────────────────────────────────────────────────
+// Bekerja pada daftar objek yang belum tersimpan. Barisnya disisipkan tepat di
+// bawah baris asalnya supaya urutan tampilannya tetap masuk akal.
+async function pecahPreOrderSebagian(baris) {
+    const jatah = await jatahPecahPo(baris);
+    const rencana = rencanaPecahPo(baris, jatah);
+    for (const { it, tetap, kurang } of rencana) {
+        const { cogsPO, cogsTetap } = belahCogs(it, kurang);
         const barisPO = { ...it, quantity: kurang, total_cogs: cogsPO, is_po: true };
-        it.quantity = tersedia;
-        // Sisa pembagian ditinggal di baris ini, bukan dihitung ulang, supaya
-        // jumlahnya tetap persis. Saat ini selalu nol (total_cogs dibentuk dari
-        // per-unit x qty), jadi uji-mutasi tidak bisa membedakannya — ini jaring
-        // pengaman kalau fungsi ini kelak dipakai untuk baris yang COGS-nya
-        // sudah pernah dibelah.
-        it.total_cogs = Number(it.total_cogs || 0) - cogsPO;
+        it.quantity = tetap;
+        it.total_cogs = cogsTetap;
         it.is_po = false;
         baris.splice(baris.indexOf(it) + 1, 0, barisPO);
-        sisa.set(k, 0);
-        disentuh++;
     }
-    return disentuh;
+    return rencana.length;
+}
+
+// ── (2) Saat pesanan yang SUDAH TERSIMPAN diubah ────────────────────────────
+// Dipakai sesudah Edit Item dan Tambah Item. Tanpa ini, mengganti produk dari
+// detail pesanan menandai SELURUH baris jadi Pre-Order — dan saat konfirmasi
+// bayar tidak ada yang dipotong sama sekali, karena baris PO hanya dipenuhi
+// bila stoknya cukup untuk seluruh baris (kasus WS-WA-20261019-5442: stok 2,
+// dipesan 8, nol terpotong).
+//
+// WAJIB dipanggil SEBELUM tahanan disusun ulang, supaya baris hasil belahan
+// ikut terhitung. Hanya untuk pesanan yang belum dibayar — sesudah dibayar
+// stoknya sudah berpindah dan pembelahan di sini akan menghitung ganda.
+// Mengembalikan jumlah baris yang dibelah.
+async function pecahPoSebagianTersimpan(client, orderId) {
+    const baris = (await client.query('SELECT * FROM order_items WHERE order_id = $1 ORDER BY id', [orderId])).rows;
+    const jatah = await jatahPecahPo(baris, orderId);
+    const rencana = rencanaPecahPo(baris, jatah);
+    for (const { it, tetap, kurang } of rencana) {
+        const { cogsPO, cogsTetap } = belahCogs(it, kurang);
+        await client.query(
+            'UPDATE order_items SET quantity = $1, total_cogs = $2, is_po = FALSE, po_fulfilled = FALSE WHERE id = $3',
+            [tetap, cogsTetap, it.id]);
+        const salinan = { ...it, quantity: kurang, total_cogs: cogsPO, is_po: true, po_fulfilled: false };
+        delete salinan.id;
+        const kolom = Object.keys(salinan);
+        await client.query(
+            `INSERT INTO order_items (${kolom.join(', ')}) VALUES (${kolom.map((_, i) => '$' + (i + 1)).join(', ')})`,
+            kolom.map(c => salinan[c]));
+    }
+    return rencana.length;
 }
 
 const DISC_CONSIGNMENT_PCT = 30;
@@ -8342,6 +8398,11 @@ app.put('/api/orders/:id/items/:itemId', requireMenu('orders','edit'), upload.no
             const expLama = await client.query(
                 `SELECT MIN(expires_at) AS exp FROM stock_holds WHERE order_id = $1 AND released_at IS NULL`,
                 [order.id]);
+            // Baris Pre-Order yang stoknya ADA SEBAGIAN dibelah di sini, sebelum
+            // tahanan disusun ulang, supaya bagian yang stoknya ada ikut terkunci.
+            // Tanpa ini, mengganti produk dari detail pesanan menandai seluruh
+            // baris jadi Pre-Order dan konfirmasi bayar tidak memotong apa pun.
+            await pecahPoSebagianTersimpan(client, order.id);
             await lepasTahanan(client, order.id, 'item diubah');
             const isiBaru = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
             await pasangTahanan(client, order.id, isiBaru.rows, order.order_source,
@@ -8549,6 +8610,7 @@ app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res
             + ` · total ${order.total_amount} -> ${newTotal}`;
 
         let newItemId = null;
+        let dibelah = 0;
         await withTransaction(async (client) => {
             const ins = await client.query(
                 `INSERT INTO order_items (order_id, product_id, size, color, variant_type, quantity, price,
@@ -8579,19 +8641,22 @@ app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res
                 `INSERT INTO order_photos (order_id, step, photo_url, note, performed_by)
                  VALUES ($1,'edit',NULL,$2,$3)`, [order.id, catatan, actor]);
 
+            // Baris Pre-Order yang stoknya ADA SEBAGIAN dibelah dulu, supaya bagian
+            // yang stoknya ada ikut terkunci dan bukan menunggu stok penuh.
+            dibelah = await pecahPoSebagianTersimpan(client, order.id);
+
             // Barang yang baru ditambahkan ikut DITAHAN selama pesanan menunggu
             // bayar — tanpa ini, barangnya masih terlihat bebas untuk pembeli lain.
-            // Batas waktunya mengikuti tahanan pesanan ini yang sudah ada; menambah
-            // item bukan alasan memperpanjang.
-            if (!isPO) {
-                const expLama = await client.query(
-                    `SELECT MIN(expires_at) AS exp FROM stock_holds WHERE order_id = $1 AND released_at IS NULL`,
-                    [order.id]);
-                await pasangTahanan(client, order.id,
-                    [{ product_id: product.id, size: toSize, color: toColor, variant_type: toVariant, quantity: toQty }],
-                    order.order_source,
-                    expLama.rows[0] && expLama.rows[0].exp ? new Date(expLama.rows[0].exp) : null);
-            }
+            // Tahanan disusun ulang dari isi pesanan TERKINI (bukan cuma baris baru)
+            // supaya baris hasil belahan ikut terhitung. Batas waktunya mengikuti
+            // tahanan yang sudah ada; menambah item bukan alasan memperpanjang.
+            const expLama = await client.query(
+                `SELECT MIN(expires_at) AS exp FROM stock_holds WHERE order_id = $1 AND released_at IS NULL`,
+                [order.id]);
+            await lepasTahanan(client, order.id, 'item ditambah');
+            const isiBaru = await client.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+            await pasangTahanan(client, order.id, isiBaru.rows, order.order_source,
+                expLama.rows[0] && expLama.rows[0].exp ? new Date(expLama.rows[0].exp) : null);
         });
 
         res.json({
@@ -8602,7 +8667,9 @@ app.post('/api/orders/:id/items', requireMenu('orders', 'edit'), async (req, res
             discount_amount: newDisc,
             is_po: isPO,
             notes: [
-                isPO ? `Stok ${product.name} ${toColor} ${toSize} tersisa ${tersedia} (butuh ${toQty}) — baris ini ditandai Pre-Order.` : null,
+                isPO ? (dibelah > 0
+                    ? `Stok ${product.name} ${toColor} ${toSize} tersisa ${tersedia} (butuh ${toQty}) — ${tersedia} pcs dikunci sekarang, ${toQty - tersedia} pcs jadi Pre-Order.`
+                    : `Stok ${product.name} ${toColor} ${toSize} tersisa ${tersedia} (butuh ${toQty}) — baris ini ditandai Pre-Order.`) : null,
                 // Ongkir SENGAJA tidak dihitung ulang: nominalnya sudah dikutip ke
                 // customer. Barang bertambah hampir selalu menambah berat.
                 `Ongkir Rp ${Number(order.shipping_cost || 0).toLocaleString('id-ID')} TIDAK ikut dihitung ulang — cek lewat Edit Pesanan kalau beratnya jadi beda.`,

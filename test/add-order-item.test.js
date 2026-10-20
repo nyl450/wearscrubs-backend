@@ -152,11 +152,21 @@ async function run() {
     r = await tambah(380, { ...MINNA, quantity: 2 });
     check('diterima 200', r.status === 200, r.body);
     check('ditandai Pre-Order (tersedia 1, diminta 2)', r.body.is_po === true, r.body);
-    check('barisnya memang is_po', barisBaru(r).is_po === true, barisBaru(r));
     check('alasannya disebut ke admin',
         (r.body.notes || []).some(n => /tersisa 1.*butuh 2|Pre-Order/i.test(n)), r.body.notes);
-    check('baris PO TIDAK ikut menahan stok (barangnya memang belum ada)',
-        tahanan(380).filter(x => x.size === 'M').length === 0, tahanan(380));
+    // 20 Okt: barisnya DIBELAH — 1 pcs yang tersedia dikunci sekarang, 1 pcs
+    // sisanya jadi Pre-Order. Dulu kedua pcs menunggu dan 1 pcs di rak dibiarkan
+    // bebas, sehingga konfirmasi bayar tidak memotong apa pun.
+    const barisM = many(`SELECT * FROM order_items WHERE order_id = 380 AND size = 'M' AND color = 'charcoal-grey' AND variant_type = 'panjang' ORDER BY id`);
+    check('baris M jadi dua: 1 pcs siap + 1 pcs Pre-Order',
+        barisM.length === 2
+        && barisM.filter(x => !x.is_po).reduce((n, x) => n + x.quantity, 0) === 1
+        && barisM.filter(x => x.is_po).reduce((n, x) => n + x.quantity, 0) === 1,
+        barisM.map(x => ({ q: x.quantity, po: x.is_po })));
+    check('jumlah pcs tetap 2', barisM.reduce((n, x) => n + x.quantity, 0) === 2, barisM.map(x => x.quantity));
+    check('yang ditahan HANYA 1 pcs — bagian Pre-Order tidak menahan apa pun',
+        tahanan(380).filter(x => x.size === 'M').reduce((n, x) => n + Number(x.quantity), 0) === 1,
+        tahanan(380));
 
     group('5. Diskon nominal DIPERTAHANKAN, tidak dihitung ulang');
     seed();

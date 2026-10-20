@@ -37,7 +37,7 @@ const terakhir = () => Number(one(`SELECT id FROM orders ORDER BY id DESC LIMIT 
 const baris = (id) => many(`SELECT id, size, quantity, price, is_po, total_cogs, bordir_nama, is_custom_size, is_custom_product
                               FROM order_items WHERE order_id = ${id} ORDER BY id`);
 const ordir = (id) => one(`SELECT total_amount, discount_amount FROM orders WHERE id = ${id}`);
-const tahanan = (id) => many(`SELECT size, quantity FROM stock_holds WHERE order_id = ${id} AND released_at IS NULL ORDER BY size`);
+const tahanan = (id) => many(`SELECT product_id, size, quantity FROM stock_holds WHERE order_id = ${id} AND released_at IS NULL ORDER BY size`);
 const stok = (size = 'M') => Number(one(
     `SELECT stock FROM inventory WHERE product_id=1 AND size='${size}' AND color='black' AND variant_type='pendek'`).stock);
 
@@ -247,6 +247,120 @@ async function run() {
     check('terpecah 2 + 1', b.length === 2 && jml(b, r => r.quantity) === 3, b.map(x => x.quantity));
     check('jumlah COGS persis 3 x 33.333 — tidak ada rupiah yang menguap saat dibagi',
         jml(b, r => r.total_cogs) === 99999, b.map(x => x.total_cogs));
+
+    // ── Jalur UBAH dari detail pesanan ─────────────────────────────────────
+    // Kasus asli James (WS-WA-20261019-5442): item diganti Ally → Alex lewat
+    // detail pesanan, lalu dibayar — dan tidak ada stok yang terpotong sama
+    // sekali, karena seluruh baris ditandai Pre-Order.
+    const seedDua = (stokAlex, stokAlly) => {
+        seed(stokAlex);
+        none(`INSERT INTO products (id, sku, name, category, price, cogs_default, is_active) VALUES
+                (2, 'ALY', 'Ally', 'tops', 300000, 100000, TRUE);
+              INSERT INTO inventory (product_id, size, color, variant_type, stock, stock_reject) VALUES
+                (2, 'M', 'black', 'pendek', ${stokAlly}, 0);`);
+    };
+
+    group('J. Ganti produk dari detail pesanan: stok yang ada ikut terkunci');
+    seedDua(3, 10);
+    r = await req('POST', '/api/orders', pesanan([
+        { product_id: 2, size: 'M', color: 'black', variant_type: 'pendek', quantity: 5 },
+    ]));
+    check('pesanan Ally dibuat', r.status === 201 || r.status === 200, { status: r.status, body: r.body });
+    const idJ = terakhir();
+    const totalSebelum = Number(ordir(idJ).total_amount);
+    const itemJ = baris(idJ)[0];
+    check('Ally menahan 5 pcs', tahanan(idJ).length === 1 && tahanan(idJ)[0].quantity === 5, tahanan(idJ));
+
+    r = await req('PUT', `/api/orders/${idJ}/items/${itemJ.id}`,
+        { product_id: 1, color: 'black', variant_type: 'pendek', size: 'M', quantity: 5 }, ADMIN);
+    check('penggantian diterima', r.status === 200, { status: r.status, body: r.body });
+    b = baris(idJ);
+    check('jadi dua baris: 3 pcs siap + 2 pcs Pre-Order',
+        b.length === 2
+        && nonPo(b).reduce((n, x) => n + x.quantity, 0) === 3
+        && po(b).reduce((n, x) => n + x.quantity, 0) === 2,
+        b.map(x => ({ q: x.quantity, po: x.is_po })));
+    check('jumlah pcs tetap 5', jml(b, x => x.quantity) === 5, b.map(x => x.quantity));
+    check('total tagihan tidak bergeser', Number(ordir(idJ).total_amount) === totalSebelum,
+        { sebelum: totalSebelum, sesudah: ordir(idJ).total_amount });
+    check('jumlah COGS tetap 5 x 100.000', jml(b, x => x.total_cogs) === 500000, b.map(x => x.total_cogs));
+    check('tahanan pindah ke Alex, 3 pcs saja',
+        tahanan(idJ).length === 1 && tahanan(idJ)[0].quantity === 3, tahanan(idJ));
+    check('tahanan Ally sudah dilepas',
+        many(`SELECT id FROM stock_holds WHERE order_id = ${idJ} AND product_id = 2 AND released_at IS NULL`).length === 0);
+
+    group('K. Dan saat dibayar, 3 pcs itu BENAR-BENAR keluar dari rak');
+    none(`UPDATE orders SET payment_method = 'Bonus/Free' WHERE id = ${idJ}`);
+    const stokSebelumBayar = stok();
+    r = await req('PUT', `/api/orders/${idJ}/confirm-payment`, {}, ADMIN);
+    check('konfirmasi bayar diterima', r.status === 200, r.body);
+    check('stok Alex turun 3 — dulu NOL yang terpotong', stok() === stokSebelumBayar - 3,
+        { sebelum: stokSebelumBayar, sesudah: stok() });
+    b = baris(idJ);
+    check('2 pcs sisanya tetap menunggu stok',
+        po(b).filter(x => !x.po_fulfilled).reduce((n, x) => n + x.quantity, 0) === 2, b);
+
+    group('L. Baris Pre-Order yang SUDAH terpenuhi tidak boleh ikut dibelah');
+    // Baris PO yang po_fulfilled = TRUE stoknya SUDAH dipotong. Membelah atau
+    // melepas tandanya berarti menghitung barang yang sama dua kali.
+    seedDua(10, 10);
+    r = await req('POST', '/api/orders', pesanan([
+        { ...V, quantity: 6, is_po: true },
+        { product_id: 2, size: 'M', color: 'black', variant_type: 'pendek', quantity: 1 },
+    ]));
+    check('pesanan dibuat', r.status === 201 || r.status === 200, { status: r.status, body: r.body });
+    const idL = terakhir();
+    const poL = baris(idL).find(x => x.is_po);
+    none(`UPDATE order_items SET po_fulfilled = TRUE WHERE id = ${poL.id}`);
+    // Stok dikecilkan supaya kalau penjaganya hilang, barisnya PASTI terbelah.
+    none(`UPDATE inventory SET stock = 2 WHERE product_id = 1 AND size = 'M' AND color = 'black' AND variant_type = 'pendek'`);
+    const allyL = baris(idL).find(x => !x.is_po);
+    r = await req('PUT', `/api/orders/${idL}/items/${allyL.id}`, { quantity: 2 }, ADMIN);
+    check('edit baris LAIN diterima', r.status === 200, { status: r.status, body: r.body });
+    const poSesudah = many(`SELECT * FROM order_items WHERE order_id = ${idL} AND product_id = 1 ORDER BY id`);
+    check('baris PO yang sudah terpenuhi tidak tersentuh',
+        poSesudah.length === 1 && poSesudah[0].quantity === 6
+        && poSesudah[0].is_po === true && poSesudah[0].po_fulfilled === true,
+        poSesudah.map(x => ({ q: x.quantity, po: x.is_po, f: x.po_fulfilled })));
+    check('dan tidak ikut menahan stok (stoknya sudah dipotong)',
+        tahanan(idL).every(t => t.size !== 'M' || Number(t.quantity) !== 6), tahanan(idL));
+
+    group('M. Tahanan milik pesanan ini sendiri bukan saingan');
+    // Pesanan menahan 2 pcs Alex lewat baris biasanya. Saat isinya diubah, tahanan
+    // itu akan disusun ulang — jadi ia TIDAK boleh ikut dihitung sebagai stok yang
+    // sudah diambil orang lain. Kalau ikut dihitung, barangnya terpotong dua kali
+    // dari jatah (sekali sebagai tahanan, sekali sebagai klaim baris) dan bagian
+    // yang bisa dikunci jadi lebih kecil dari yang seharusnya.
+    seedDua(2, 10);
+    r = await req('POST', '/api/orders', pesanan([
+        { ...V, quantity: 2 },
+        { ...V, quantity: 6, is_po: true },
+    ]));
+    check('pesanan dibuat', r.status === 201 || r.status === 200, { status: r.status, body: r.body });
+    const idM = terakhir();
+    check('saat dibuat baris PO belum bisa dipecah (stok habis diklaim baris biasa)',
+        baris(idM).length === 2 && po(baris(idM))[0].quantity === 6, baris(idM));
+    check('yang ditahan 2 pcs', tahanan(idM).reduce((n, t) => n + Number(t.quantity), 0) === 2, tahanan(idM));
+
+    // Stok datang: 2 → 7. Lalu pesanan disentuh lewat Tambah Item.
+    none(`UPDATE inventory SET stock = 7 WHERE product_id = 1 AND size = 'M' AND color = 'black' AND variant_type = 'pendek'`);
+    r = await req('POST', `/api/orders/${idM}/items`,
+        { product_id: 2, color: 'black', variant_type: 'pendek', size: 'M', quantity: 1 }, ADMIN);
+    check('tambah item diterima', r.status === 200, { status: r.status, body: r.body });
+    const alexM = many(`SELECT * FROM order_items WHERE order_id = ${idM} AND product_id = 1 ORDER BY id`);
+    check('Alex siap 7 pcs (2 lama + 5 hasil belahan), bukan 5',
+        alexM.filter(x => !x.is_po).reduce((n, x) => n + x.quantity, 0) === 7,
+        alexM.map(x => ({ q: x.quantity, po: x.is_po })));
+    check('sisanya 1 pcs Pre-Order, bukan 3',
+        alexM.filter(x => x.is_po).reduce((n, x) => n + x.quantity, 0) === 1,
+        alexM.map(x => ({ q: x.quantity, po: x.is_po })));
+    check('jumlah pcs Alex tetap 8', alexM.reduce((n, x) => n + x.quantity, 0) === 8, alexM.map(x => x.quantity));
+    check('tahanan Alex jadi 7 pcs',
+        tahanan(idM).filter(t => Number(t.product_id) === 1).reduce((n, t) => n + Number(t.quantity), 0) === 7,
+        tahanan(idM));
+    check('Ally yang baru ditambahkan ikut ditahan 1 pcs',
+        tahanan(idM).filter(t => Number(t.product_id) === 2).reduce((n, t) => n + Number(t.quantity), 0) === 1,
+        tahanan(idM));
 
     await new Promise(w => setTimeout(w, 250));
     finish();

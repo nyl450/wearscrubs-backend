@@ -93,11 +93,16 @@ async function run() {
     check('ada catatan ongkir', !!r.body.shipping_note, r.body);
 
     seed();
-    console.log('\n4. Qty 2 -> 9 (stok 5) harus jadi Pre-Order');
+    console.log('\n4. Qty 2 -> 9 (stok 5): 5 pcs dikunci, 4 pcs Pre-Order');
+    // 20 Okt: dulu kesembilan pcs menunggu dan 5 pcs di rak dibiarkan bebas —
+    // akibatnya konfirmasi bayar tidak memotong apa pun (kasus WS-WA-20261019-5442).
     r = await editItem(999, 501, { quantity: 9 });
-    it = one('SELECT * FROM order_items WHERE id = 501');
     check('status 200', r.status === 200, r);
-    check('ditandai PO', it.is_po === true, it.is_po);
+    let brs = many(`SELECT * FROM order_items WHERE order_id = 999 AND size = 'M' AND variant_type = 'pendek' ORDER BY id`);
+    check('barisnya jadi dua', brs.length === 2, brs.map(x => ({ q: x.quantity, po: x.is_po })));
+    check('5 pcs siap (bukan PO)', brs.filter(x => !x.is_po).reduce((n, x) => n + x.quantity, 0) === 5, brs);
+    check('4 pcs Pre-Order', brs.filter(x => x.is_po).reduce((n, x) => n + x.quantity, 0) === 4, brs);
+    check('jumlah pcs tetap 9', brs.reduce((n, x) => n + x.quantity, 0) === 9, brs.map(x => x.quantity));
     check('ada peringatan PO', !!r.body.po_note, r.body.po_note);
 
     // 5 — guard
@@ -157,17 +162,26 @@ async function run() {
         JSON.stringify(jejak) === JSON.stringify(['jogger/L:-1', 'panjang/L:-2']), jejak);
     check('order jadi paid', one(`SELECT payment_status FROM orders WHERE id=999`).payment_status === 'paid', one(`SELECT payment_status FROM orders WHERE id=999`));
 
-    console.log('\n7. Baris yang jadi PO tidak dipotong saat bayar');
+    console.log('\n7. Saat bayar: bagian yang ada DIPOTONG, sisanya tetap Pre-Order');
     seed();
     none(`UPDATE orders SET payment_method = 'Bonus/Free', has_bordir_nama = FALSE WHERE id = 999`);
     none(`UPDATE order_items SET bordir_nama = FALSE, bordir_nama_price = NULL, price = 245000 WHERE id = 501`);
     await editItem(999, 501, { quantity: 9 });
-    const b2 = one(`SELECT stock FROM inventory WHERE product_id=1 AND variant_type='pendek' AND size='M'`).stock;
+    const b2 = Number(one(`SELECT stock FROM inventory WHERE product_id=1 AND variant_type='pendek' AND size='M'`).stock);
     const pay2 = await api('PUT', '/api/orders/999/confirm-payment');
     const pay2body = pay2.body;
-    const a2 = one(`SELECT stock FROM inventory WHERE product_id=1 AND variant_type='pendek' AND size='M'`).stock;
+    const a2 = Number(one(`SELECT stock FROM inventory WHERE product_id=1 AND variant_type='pendek' AND size='M'`).stock);
     check('bayar sukses', pay2.status === 200, pay2body);
-    check('stok tidak dipotong untuk baris PO', a2 === b2, { before: b2, after: a2 });
+    // Inilah inti perbaikan 20 Okt: yang 5 pcs benar-benar keluar dari rak.
+    check('5 pcs yang tersedia dipotong', a2 === b2 - 5, { before: b2, after: a2 });
+    brs = many(`SELECT * FROM order_items WHERE order_id = 999 AND size = 'M' AND variant_type = 'pendek' ORDER BY id`);
+    check('4 pcs sisanya tetap menunggu stok',
+        brs.filter(x => x.is_po && !x.po_fulfilled).reduce((n, x) => n + x.quantity, 0) === 4, brs);
+    check('tercatat sebagai barang keluar 5 pcs untuk varian ini',
+        many(`SELECT quantity_change FROM stock_movements
+               WHERE movement_type = 'order_out' AND product_id = 1 AND size = 'M' AND variant_type = 'pendek'`)
+            .reduce((n, m) => n + Number(m.quantity_change), 0) === -5,
+        many(`SELECT movement_type, size, variant_type, quantity_change FROM stock_movements`));
 
     finish();
 }
