@@ -32,6 +32,19 @@ const jwt = require('jsonwebtoken');
 const { boot, one, many, none, check, group, finish } = require('./_bootstrap');
 
 const PORT = 4734;
+// Batas waktu tahanan dihitung RELATIF terhadap hari ini, bukan ditulis mati.
+// Dulu tertulis '2026-10-20' dan '2026-11-30' — yang pertama kedaluwarsa pada
+// 21 Okt 2026 dan diam-diam mengubah hasil tes (tahanan pesanan lain dianggap
+// sudah lepas), yang kedua akan menyusul akhir November.
+// Dibulatkan ke jam 09:00 UTC supaya nilainya tetap khas: asersi "batas waktu
+// tidak diperpanjang" butuh angka yang jelas BUKAN "sekarang + 72 jam".
+function hariLagi(n) {
+    const d = new Date(Date.now() + n * 86400000);
+    d.setUTCHours(9, 0, 0, 0);
+    return d.toISOString();
+}
+const EXP_JAUH  = hariLagi(40);   // tahanan pesanan ini — jauh dari +72 jam
+const EXP_DEKAT = hariLagi(2);    // tahanan pesanan LAIN — masih aktif saat tes jalan
 const BASE = `http://localhost:${PORT}`;
 const SECRET = 'harness_secret';
 const ADMIN = jwt.sign({ id: 1, username: 'harness', role: 'admin' }, SECRET, { expiresIn: '1h' });
@@ -85,7 +98,7 @@ function seed() {
     INSERT INTO stock_holds (order_id, product_id, size, color, variant_type, quantity, expires_at) VALUES
       -- Batas waktu sengaja jauh dari "sekarang + 72 jam": kalau dekat, asersi
       -- "tidak diperpanjang" bisa lolos secara kebetulan.
-      (380, 25, 'S', 'charcoal-grey', 'panjang', 1, '2026-11-30T09:00:00Z');
+      (380, 25, 'S', 'charcoal-grey', 'panjang', 1, '${EXP_JAUH}');
     `);
 }
 
@@ -137,7 +150,7 @@ async function run() {
     const tBaru = t.find(x => x.size === 'M');
     check('tahanan baru 1 pcs size M', tBaru && Number(tBaru.quantity) === 1, t);
     check('batas waktunya ikut tahanan lama PERSIS, tidak diperpanjang',
-        tBaru && new Date(tBaru.expires_at).toISOString() === '2026-11-30T09:00:00.000Z',
+        tBaru && new Date(tBaru.expires_at).toISOString() === EXP_JAUH,
         tBaru && tBaru.expires_at);
 
     group('4. Pre-Order dihitung dari KETERSEDIAAN, bukan stok mentah');
@@ -148,7 +161,7 @@ async function run() {
              payment_status, order_status, shipping_cost, shipping_courier, order_source) VALUES
           (390, 'WS-WA-390', 'Pembeli Lain', '0899', '-', 100000, 'pending', 'waiting_payment', 0, 'J&T', 'whatsapp');
           INSERT INTO stock_holds (order_id, product_id, size, color, variant_type, quantity, expires_at) VALUES
-          (390, 25, 'M', 'charcoal-grey', 'panjang', 4, '2026-10-20T09:00:00Z');`);
+          (390, 25, 'M', 'charcoal-grey', 'panjang', 4, '${EXP_DEKAT}');`);
     r = await tambah(380, { ...MINNA, quantity: 2 });
     check('diterima 200', r.status === 200, r.body);
     check('ditandai Pre-Order (tersedia 1, diminta 2)', r.body.is_po === true, r.body);

@@ -1134,9 +1134,22 @@ async function initDB() {
     // Dijalankan tiap boot: ENABLE ROW LEVEL SECURITY bersifat idempotent, dan
     // ini menjaga database BARU (mis. kalau project di-restore/di-clone) tidak
     // lahir tanpa RLS seperti yang sempat terjadi.
-    for (const t of ['event_partners', 'partner_invoices', 'partner_invoice_orders']) {
-        await dbRun(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});
-    }
+    //
+    // 21 Okt 2026: daftar tabelnya dulu ditulis tangan, dan karena itu
+    // `stock_holds` (dibuat 28 Sep) lahir TANPA RLS — Supabase menandainya
+    // CRITICAL. Sekarang semua tabel di skema public yang RLS-nya mati
+    // dikunci otomatis tiap boot, jadi tabel baru tidak bisa lolos lagi hanya
+    // karena lupa ditambahkan ke daftar. Di pg-mem (tes) katalog ini tidak ada
+    // → gagal diam-diam, sama seperti sebelumnya.
+    try {
+        const tanpaRls = await dbAll(
+            `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND rowsecurity = FALSE`);
+        for (const { tablename } of tanpaRls) {
+            if (!/^[a-z_][a-z0-9_]*$/.test(tablename)) continue;   // nama tabel masuk ke SQL apa adanya
+            await dbRun(`ALTER TABLE public.${tablename} ENABLE ROW LEVEL SECURITY`).catch(() => {});
+            console.log(`[RLS] dikunci otomatis: ${tablename}`);
+        }
+    } catch (e) { /* pg-mem / katalog tidak tersedia */ }
 
     // ── Seed default admin ────────────────────────────────────────────────────
     // Production: REQUIRE ADMIN_INITIAL_PASSWORD env var (min 12 chars).
